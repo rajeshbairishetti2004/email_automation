@@ -7,8 +7,8 @@ require_once 'env_loader.php';
 
 session_start();
 
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin123';
+define('ADMIN_USER', $_ENV['ADMIN_USERNAME'] ?? 'admin');
+define('ADMIN_PASS', $_ENV['ADMIN_PASSWORD'] ?? 'admin123');
 
 function checkAuth() {
     if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {

@@ -27,11 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
     $closingText   = $_POST['closing_text']   ?? $DEFAULT_CLOSING;
     $rationaleText = $_POST['rationale_text'] ?? $DEFAULT_RATIONALE;
 
-    $uploadDir = __DIR__ . '/uploads';
-    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+    // Get upload configuration from environment variables
+    $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
+    $maxFileSize = $_ENV['UPLOAD_MAX_SIZE'] ?? (10 * 1024 * 1024); // Default 10MB
+    $allowedExt = explode(',', $_ENV['ALLOWED_EXTENSIONS'] ?? 'xlsx,xls,pdf');
 
-    $allowedExt = ['xlsx','xls','pdf'];
-    $maxFileSize = 10 * 1024 * 1024; // 10MB
+    // Ensure upload directory exists
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
 
     $pvFiles  = [];
     $aaFiles  = [];
@@ -49,7 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
             $size = $_FILES['client_files']['size'][$i];
             if ($size > $maxFileSize) {
-                $fileErrors[] = "File too large (max 10MB): " . htmlspecialchars($name);
+                $maxSizeMB = round($maxFileSize / (1024 * 1024), 1);
+                $fileErrors[] = "File too large (max {$maxSizeMB}MB): " . htmlspecialchars($name);
                 continue;
             }
 
@@ -57,7 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             $ext    = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
             if (!in_array($ext, $allowedExt, true)) {
-                $fileErrors[] = "Unsupported file type: " . htmlspecialchars($name);
+                $allowedExtList = implode(', ', $allowedExt);
+                $fileErrors[] = "Unsupported file type. Allowed: {$allowedExtList} - " . htmlspecialchars($name);
                 continue;
             }
 
@@ -383,7 +389,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             document.querySelectorAll('.edit-btn').forEach(function(btn) {
                 btn.addEventListener('click', function () {
                     const block = btn.closest('.editable-block');
-                    const span  = block.querySelector('.editable-text');
+                    const span = block.querySelector('.editable-text');
                     const clientReport = btn.closest('.client-report');
                     const clientId = clientReport ? clientReport.getAttribute('data-client-id') : null;
                     const field = span ? span.getAttribute('data-field') : null;
@@ -401,6 +407,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                         if (clientId && field) {
                             const value = span.innerText.trim();
 
+                            // Fixed fetch call - proper syntax
                             fetch('upload.php', {
                                 method: 'POST',
                                 headers: {
@@ -416,7 +423,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                             .then(response => response.json())
                             .then(data => {
                                 if (!data.success) {
-                                    alert('Save failed: ' . (data.error || 'Unknown error'));
+                                    alert('Save failed: ' + (data.error || 'Unknown error'));
                                 } else {
                                     showToast('Saved ' + field + ' for client #' + clientId);
                                 }

@@ -8,6 +8,7 @@ require_once 'login.php';
 require_once 'db_config.php';
 require_once 'email_handler.php';
 require_once 'renderers.php';
+require_once 'env_loader.php'; // Add this line to load environment variables
 
 requireAuth();
 

@@ -5,10 +5,11 @@
 
 require_once 'env_loader.php';
 
-const DB_HOST = 'localhost';
-const DB_NAME = 'client_reports';
-const DB_USER = 'root';
-const DB_PASS = ''; // your password
+// Get database credentials from environment variables
+define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
+define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_reports');
+define('DB_USER', $_ENV['DB_USER'] ?? 'root');
+define('DB_PASS', $_ENV['DB_PASS'] ?? '');
 
 function getPdo(): PDO {
     static $pdo = null;
@@ -16,6 +17,8 @@ function getPdo(): PDO {
         $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
         ]);
     }
     return $pdo;
@@ -149,5 +152,40 @@ function filterClientArrayForTarget(array $dataset, ?string $targetName): array 
     }
 
     return $dataset;
+}
+
+/* ---------- DATABASE VALIDATION ---------- */
+
+function validateDatabaseConnection(): bool {
+    try {
+        $pdo = getPdo();
+        $pdo->query('SELECT 1');
+        return true;
+    } catch (PDOException $e) {
+        error_log("Database connection failed: " . $e->getMessage());
+        return false;
+    }
+}
+
+/* ---------- ENVIRONMENT CHECK ---------- */
+
+function checkDatabaseEnvironment(): array {
+    $errors = [];
+    
+    if (empty(DB_HOST)) {
+        $errors[] = 'DB_HOST is not set in environment variables';
+    }
+    
+    if (empty(DB_NAME)) {
+        $errors[] = 'DB_NAME is not set in environment variables';
+    }
+    
+    if (empty(DB_USER)) {
+        $errors[] = 'DB_USER is not set in environment variables';
+    }
+    
+    // DB_PASS can be empty if no password is set
+    
+    return $errors;
 }
 ?>
