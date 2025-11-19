@@ -1,0 +1,83 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# PHP / Composer
+/vendor/
+/composer.phar
+# Uncomment if you don't want to commit lockfile for apps (optional)
+# /composer.lock
+
+# Environment files
+.env
+.env.*.local
+!.env.example
+
+# Logs and runtime files
+*.log
+logs/
+*.cache
+tmp/
+temp/
+
+# Node (if using frontend tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# Dist/build output
+/dist/
+/build/
+/public/build/
+/public/dist/
+
+# Common web uploads / storage (uncomment if your project uses these)
+# /storage/
+# /public/uploads/
+# /uploads/
+
+# Database dumps and local DBs
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# Test / coverage
+coverage/
+.phpunit.result.cache
+/.phpunit.cache
+/.nyc_output/
+
+# OS-specific and misc
+*.pem
+*.key
+*.crt
+*.env.backup
+
+# Composer & PHPStorm caches
+vendor/
+.idea/
+
+# Windows thumbnail cache
+Thumbs.db
+
+# macOS
+.DS_Store
+
+# Exclude any personal / local config files
+.env.local
+local.php
+local.*.php
+
+/uploads
+
+# Backup files created by scripts/tools
+*.bak
+*.orig
+*.backup

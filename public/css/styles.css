@@ -1,0 +1,312 @@
+/* -----------------------------
+   GLOBAL STYLE (Matches Python project)
+-------------------------------- */
+body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #F8FFFE 0%, #E3F2FD 100%);
+    margin: 0;
+    padding: 20px;
+    color: #2C3E50;
+}
+
+/* Card Container */
+.card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    margin-bottom: 20px;
+}
+
+/* Headers */
+.card-title {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    color: #0288D1;
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+}
+
+h1, h2, h3 {
+    font-family: 'Poppins', sans-serif;
+    color: #0288D1;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 12px;
+}
+
+th {
+    background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
+    color: #ffffff;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    text-align: left;
+}
+
+td {
+    padding: 12px;
+    border-bottom: 1px solid #F1F3F4;
+    font-size: 14px;
+}
+
+tr:hover td {
+    background: #F8FFFE;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+/* Dropdown in schemes */
+.action-dropdown {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px solid #E3F2FD;
+    background: white;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #2C3E50;
+}
+
+.action-dropdown:focus {
+    border-color: #4FC3F7;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.2);
+}
+
+.action-dropdown:hover {
+    border-color: #29B6F6;
+}
+
+/* Highlight text */
+.highlight {
+    color: #0288D1;
+    font-weight: bold;
+}
+
+/* Navigation buttons */
+.nav-bar {
+    margin-bottom: 20px;
+}
+
+.nav-button {
+    display: inline-block;
+    margin-right: 10px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(41, 182, 246, 0.3);
+}
+
+.nav-button:hover {
+    background: linear-gradient(135deg, #29B6F6 0%, #0288D1 100%);
+    box-shadow: 0 4px 12px rgba(41, 182, 246, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Status badges */
+.status-on {
+    background-color: #4CAF50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.status-off {
+    background-color: #F44336;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+/* Editable blocks */
+.editable-block {
+    position: relative;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #F8FFFE;
+    border-radius: 8px;
+    border-left: 4px solid #4FC3F7;
+}
+
+.editable-text[contenteditable="true"] {
+    outline: 2px dashed #4FC3F7;
+    background: #E3F2FD;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.edit-btn {
+    padding: 6px 12px;
+    background: #0288D1;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.edit-btn:hover {
+    background: #0277BD;
+    transform: scale(1.05);
+}
+
+/* Flash messages */
+.flash-success {
+    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
+    border-left: 4px solid #4CAF50;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    color: #2E7D32;
+    font-weight: 500;
+}
+
+.flash-error {
+    background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
+    border-left: 4px solid #F44336;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    color: #C62828;
+    font-weight: 500;
+}
+
+/* Toast notification */
+.toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #424242 0%, #212121 100%);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toast.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+    }
+    
+    .nav-bar,
+    .edit-btn,
+    .toast,
+    .flash {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        page-break-inside: avoid;
+    }
+}
+
+/* ✅ STEP 1: Large textarea styling */
+.large-textarea {
+    width: 100%;
+    min-height: 160px;
+    padding: 14px;
+    border-radius: 10px;
+    border: 2px solid #E3F2FD;
+    background: #ffffff;
+    font-size: 15px;
+    line-height: 1.6;
+    font-family: 'Inter', sans-serif;
+    resize: vertical;
+    transition: all 0.2s ease;
+    color: #2C3E50;
+}
+
+.large-textarea:focus {
+    border-color: #4FC3F7;
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.2);
+    outline: none;
+    background: #FAFFFE;
+}
+
+.large-textarea:hover {
+    border-color: #29B6F6;
+}
+
+.large-textarea::placeholder {
+    color: #90A4AE;
+    font-style: italic;
+}
+
+/* ✅ STEP 2: Scheme input styling */
+.scheme-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid #E3F2FD;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    background: #ffffff;
+    transition: all 0.2s ease;
+    color: #2C3E50;
+    cursor: text;
+}
+
+.scheme-input:focus {
+    border-color: #4FC3F7;
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.2);
+    outline: none;
+}
+
+.scheme-input::placeholder {
+    color: #90A4AE;
+    font-style: italic;
+}
+
+/* ✅ Primary Save Button - Perfect Match */
+.btn-primary {
+    background: linear-gradient(135deg, #0288D1 0%, #29B6F6 100%);
+    color: #ffffff;
+    padding: 12px 26px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 12px rgba(41, 182, 246, 0.35);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #0277BD 0%, #0288D1 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(41, 182, 246, 0.45);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
