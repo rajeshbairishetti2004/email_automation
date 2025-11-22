@@ -1,8 +1,6 @@
 <?php
 // db_config.php
-// - Database configuration and connection
-// - Common helper functions
-
+// ... (All functions remain the same as the final version in the previous response) ...
 require_once 'env_loader.php';
 
 // Get database credentials from environment variables
@@ -23,9 +21,7 @@ function getPdo(): PDO {
     }
     return $pdo;
 }
-
-/* ---------- DATABASE HELPER FUNCTIONS (Centralized) ---------- */
-
+// ... (All other database and helper functions: getDefaultRelationshipManager, getEmailContacts, saveNewEmailContact, deleteEmailContacts, etc.) ...
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
     // Fetch RM set as default (is_default = 1)
@@ -113,6 +109,85 @@ function addNewTemplate(string $name, string $section_type, string $content): ?i
         ':content' => $content,
     ]);
     return (int)$pdo->lastInsertId();
+}
+
+
+/* ---------- EMAIL CONTACT FUNCTIONS (For Dropdowns Persistence) ---------- */
+
+/**
+ * Fetches email addresses for a specific list type and client (if applicable).
+ * @param string $list_type 'RM', 'CLIENT', or 'CC'.
+ * @param int|null $clientId Client ID for client-specific emails, NULL for shared RM/CC lists.
+ * @return array Array of email strings.
+ */
+function getEmailContacts(string $list_type, ?int $clientId = null): array {
+    $pdo = getPdo();
+    
+    $params = [':list_type' => $list_type];
+    $sql = "SELECT email_address FROM email_contacts WHERE list_type = :list_type";
+
+    if ($list_type === 'CLIENT') {
+         $sql .= " AND client_id = :client_id";
+         $params[':client_id'] = $clientId;
+    } else {
+        $sql .= " AND client_id IS NULL"; 
+    }
+    
+    $stmt = $pdo->prepare($sql . " ORDER BY email_address ASC");
+    $stmt->execute($params);
+    
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Adds a new email contact to the database.
+ */
+function saveNewEmailContact(string $email, string $list_type, ?int $clientId = null): bool {
+    $pdo = getPdo();
+    
+    $stmt = $pdo->prepare("
+        INSERT IGNORE INTO email_contacts (email_address, list_type, client_id)
+        VALUES (:email, :list_type, :client_id)
+    ");
+    
+    $params = [
+        ':email' => $email,
+        ':list_type' => $list_type,
+        ':client_id' => ($list_type === 'CLIENT') ? $clientId : null
+    ];
+    
+    return $stmt->execute($params);
+}
+
+/**
+ * Deletes one or more email contacts from the database.
+ * @param array $emailsToDelete Array of email strings to delete.
+ * @param string $list_type The list type to restrict deletion.
+ * @param int|null $clientId Client ID (optional, but recommended for 'CLIENT' type).
+ * @return int Number of rows deleted.
+ */
+function deleteEmailContacts(array $emailsToDelete, string $list_type, ?int $clientId = null): int {
+    if (empty($emailsToDelete)) return 0;
+    
+    $pdo = getPdo();
+    // Create placeholders for the IN clause (e.g., ?, ?, ?)
+    $placeholders = implode(',', array_fill(0, count($emailsToDelete), '?'));
+    
+    $sql = "DELETE FROM email_contacts WHERE email_address IN ({$placeholders}) AND list_type = ?";
+    
+    $params = $emailsToDelete;
+    $params[] = $list_type;
+
+    if ($list_type === 'CLIENT') {
+        $sql .= " AND client_id = ?";
+        $params[] = $clientId;
+    } else {
+        $sql .= " AND client_id IS NULL";
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->rowCount();
 }
 
 

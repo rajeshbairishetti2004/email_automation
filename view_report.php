@@ -375,7 +375,7 @@ if ($introTextStored !== '') {
 
 // Add closing
 if ($closingTextStored !== '') {
-    $clientMessageParts[] = $closingTextStored;
+    $clientMessageParts[] = $closingTextParts[] = $closingTextStored;
 } else {
     $clientMessageParts[] = "We are very keen to have a portfolio discussion meeting with you to discuss the portfolio. Please let us know at your convenience.";
 }
@@ -397,6 +397,10 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     
     <style>
         /* Global CSS included here for convenience and external files */
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 30px; /* Increased margin for borders */ 
+        }
         .report-table {
             width: 70%;
             margin: 0 auto 20px 0;
@@ -495,6 +499,55 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             display: block;
             margin-bottom: 5px;
         }
+        /* File List Display */
+        #file-list-display {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 12px;
+            color: #555;
+            vertical-align: top; /* Align with input */
+            margin-top: 5px; /* Adjust alignment with input button */
+        }
+        .file-name-item {
+            display: block;
+            margin-bottom: 2px;
+            font-weight: 600;
+        }
+        /* Email Fields Layout */
+        .email-fields-container {
+            /* FIX 2: Ensure fields stack vertically */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .email-field-group {
+            width: 100%; /* Ensure it takes full vertical space */
+        }
+        .email-field-group label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 2px;
+        }
+        .email-field-group input {
+            padding: 4px 8px; 
+            font-size: 13px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        /* FIX 1: NEW: Horizontal Layout for Email/Attachments */
+        .email-attachment-wrapper {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            align-items: flex-start;
+        }
+        .email-recipients-section,
+        .file-attachments-section {
+            flex: 1 1 48%; /* Ensures a balanced 50/50 split with a gap */
+            padding: 0; /* Remove internal padding here, added it to the fields/wrapper */
+        }
     </style>
 </head>
 <body>
@@ -524,31 +577,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <?php endif; ?>
 
 <div style="margin-bottom: 20px;">
-    <form method="post" enctype="multipart/form-data" style="display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-        <input type="hidden" name="send_email" value="1">
-        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-
-        <input type="email" name="recipient_email" multiple
-               required
-               placeholder="Enter one or more emails, separated by commas"
-               style="padding: 4px 8px; font-size: 13px; width: 350px;">
-
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <label for="attachments" style="font-size: 12px; color: #666; cursor: pointer;">
-                📎 Attach Files (Multiple):
-            </label>
-            <input type="file" 
-                   name="attachments[]" 
-                   id="attachments"
-                   accept=".pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                   multiple
-                   style="font-size: 12px;">
-        </div>
-
-        <button type="submit" class="nav-button" style="padding: 4px 10px;">
-            Send Report by Email
-        </button>
-    </form>
+    <?php require_once 'send_email.php'; ?>
 </div>
 
 <h1>Client Report</h1>
@@ -563,9 +592,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         
         <h3>1. Current Situation</h3>
         <table class="report-table">
-            <tr><th colspan="2">Current Situation</th></tr>
+            <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
             <tr>
-                <td>Total Amount as of <?php echo htmlspecialchars($asOn); ?></td>
+                <td>Total Amount </td>
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
             <tr>
@@ -709,15 +738,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
     </form>
 
-    <?php if ($annexures): ?>
-        <h3>Annexures</h3>
-        <ul>
-            <?php foreach ($annexures as $ax): ?>
-                <li><?php echo htmlspecialchars($ax['line_text']); ?></li>
-            <?php endforeach; ?>
-        </ul>
-    <?php endif; ?>
-
 </div>
 
 <div id="toast" class="toast"></div>
@@ -788,6 +808,22 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         
         return messageParts.join('\n\n');
     }
+
+    // --- FILE NAME DISPLAY LOGIC (NEW) ---
+    document.getElementById('attachments').addEventListener('change', function(e) {
+        const fileListDisplay = document.getElementById('file-list-display');
+        fileListDisplay.innerHTML = ''; // Clear previous files
+
+        if (this.files.length > 0) {
+            Array.from(this.files).forEach(file => {
+                const fileNameSpan = document.createElement('span');
+                fileNameSpan.className = 'file-name-item';
+                fileNameSpan.textContent = file.name;
+                fileListDisplay.appendChild(fileNameSpan);
+            });
+        }
+    });
+
 
     // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
     document.addEventListener('DOMContentLoaded', function() {
@@ -965,7 +1001,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 const value = textarea.value.trim();
 
                 if (clientId && field) {
-                    fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                    fetch('view_report.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
@@ -1015,7 +1051,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            showToast('Action step saved');
+                            showToast('Saved ' + field);
+                        } else {
+                            alert('Save failed: ' + (data.error || 'Unknown error'));
                         }
                     })
                     .catch(err => console.error(err));
@@ -1060,4 +1098,4 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 </script>
 
 </body>
-</html> 
+</html>

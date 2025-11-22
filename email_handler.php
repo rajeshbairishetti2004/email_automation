@@ -1,7 +1,6 @@
 <?php
 // email_handler.php
-// - Email sending functionality using PHPMailer
-
+// ... (Code is unchanged from the last successful update) ...
 require_once __DIR__ . '/vendor/autoload.php';
 require_once 'db_config.php';
 require_once 'env_loader.php';
@@ -11,14 +10,25 @@ use PHPMailer\PHPMailer\Exception;
 
 function handleEmailSending($clientId) {
     $pdo = getPdo();
-    $rawEmails = trim($_POST['recipient_email'] ?? '');
-
-    // split by comma or semicolon, trim each
-    $emailList = array_filter(
-        array_map('trim', preg_split('/[;,]+/', $rawEmails))
+    
+    // --- NEW: Read email fields from the form ---
+    $toEmail = trim($_POST['recipient_email'] ?? '');
+    $ccEmailsRaw = trim($_POST['cc_emails'] ?? '');
+    // UPDATED: Read the dynamic FROM email directly from the 'from_email' input
+    $fromEmailSender = trim($_POST['from_email'] ?? '');
+    
+    // Combine To and CC emails into a single validation/logging list
+    $rawEmailList = [];
+    if (!empty($toEmail)) $rawEmailList[] = $toEmail;
+    
+    // Split CC emails by comma, filter out empty strings
+    $ccList = array_filter(
+        array_map('trim', preg_split('/[;,]+/', $ccEmailsRaw))
     );
+    $emailList = array_merge($rawEmailList, $ccList);
 
-    if ($clientId <= 0 || empty($emailList)) {
+    if ($clientId <= 0 || empty($emailList) || empty($fromEmailSender)) {
+        // Redirect if no recipients or no sender is specified
         header('Location: view_report.php?id=' . $clientId);
         exit;
     }
@@ -28,12 +38,14 @@ function handleEmailSending($clientId) {
     $smtpPort = $_ENV['SMTP_PORT'] ?? 587;
     $smtpUsername = $_ENV['SMTP_USERNAME'] ?? '';
     $smtpPassword = $_ENV['SMTP_PASSWORD'] ?? '';
-    $smtpFromEmail = $_ENV['SMTP_FROM_EMAIL'] ?? '';
-    $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports';
+    
+    // Use the dynamic sender email as the sender for PHPMailer
+    $smtpFromEmail = $fromEmailSender; 
+    $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports'; 
 
     // UPDATED: Handle Multiple File Uploads and Track Names
     $attachmentPaths = [];
-    $attachmentNames = []; // ← NEW: Store file names for annexure section
+    $attachmentNames = []; 
     $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0777, true);
@@ -57,7 +69,7 @@ function handleEmailSending($clientId) {
                     
                     if (move_uploaded_file($tmpName, $savePath)) {
                         $attachmentPaths[] = $savePath;
-                        $attachmentNames[] = $originalName; // Store original file name
+                        $attachmentNames[] = $originalName; 
                     }
                 }
             }
@@ -114,12 +126,9 @@ function handleEmailSending($clientId) {
         }
 
         // Fetch RM Details (using centralized function from db_config)
-        $rm = getDefaultRelationshipManager();
-        $rmName        = $rm['name'] ?? 'Relationship Manager';
-        $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
-        $rmMobile      = $rm['mobile'] ?? 'N/A';
-        $rmEmail       = $rm['email'] ?? 'N/A';
-
+        $rmData = getDefaultRelationshipManager(); // Rename to avoid conflict with $rm variable
+        $rmName        = $rmData['name'] ?? 'Relationship Manager';
+        
         $name        = $client['name'];
         $asOn        = $client['as_on'] ?? '';
         $totalAmount = (float)($client['total_amount'] ?? 0);
@@ -137,34 +146,16 @@ function handleEmailSending($clientId) {
         $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
         $signatureStored   = trim((string)($client['signature_block'] ?? ''));
 
-        $DEFAULT_GREETING  = 'Dear Mr.';
-        $DEFAULT_INTRO     = 'Introduction';
-        $DEFAULT_CLOSING   = 'Closing remarks';
         $DEFAULT_RATIONALE = 'Rationale for recommendations';
         
-        // DYNAMIC DEFAULT SIGNATURE BLOCK
-        $DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
+        $clientMessage = implode("\n\n", [
+            $greetingStored,
+            $introTextStored,
+            $closingTextStored
+        ]);
 
-        // Build merged client message for email
-        $clientMessageParts = [];
-        
-        if ($greetingStored !== '') {
-            $clientMessageParts[] = $greetingStored;
-        } else {
-            $clientMessageParts[] = $DEFAULT_GREETING . ' ' . $name . ',';
-        }
-        
-        if ($introTextStored !== '') {
-            $clientMessageParts[] = $introTextStored;
-        }
-        
-if ($closingTextStored !== '') {
-            $clientMessageParts[] = $closingTextStored;
-        }
-        
-        $clientMessage = implode("\n\n", $clientMessageParts);
         $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
-        $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATURE;
+        $signatureBlock = $signatureStored !== '' ? $signatureStored : generateSignatureBlock($rmData);
 
         // Build HTML email body
         ob_start();
@@ -333,9 +324,15 @@ if ($closingTextStored !== '') {
 
             $mail->setFrom($smtpFromEmail, $smtpFromName);
 
-            // send to all emails entered in the form
+            // Add all recipients (TO and CC)
             foreach ($emailList as $email) {
-                $mail->addAddress($email);
+                 // PHPMailer determines if an address is TO or CC automatically if multiple are added
+                 // but we'll add the primary recipient first, then the CC list.
+                if ($email === $toEmail) {
+                    $mail->addAddress($email);
+                } else {
+                    $mail->addCC($email);
+                }
             }
 
             $mail->Subject = $dynamicSubject;
