@@ -13,10 +13,10 @@ require_once 'env_loader.php';
 requireAuth();
 
 /* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
-$DEFAULT_GREETING  = 'Dear Mr.';
-$DEFAULT_INTRO     = "Introduction";
-$DEFAULT_CLOSING   = "Closing remarks";
-$DEFAULT_RATIONALE = "Rationale for recommendations";
+$DEFAULT_GREETING  = $_POST['greeting']       ?? 'Dear Mr.';
+$DEFAULT_INTRO     = $_POST['intro_text']     ?? 'Introduction';
+$DEFAULT_CLOSING   = $_POST['closing_text']   ?? 'Closing remarks';
+$DEFAULT_RATIONALE = $_POST['rationale_text'] ?? 'Rationale for recommendations';
 
 /* ---------- HANDLE FILE UPLOAD AND PROCESSING ---------- */
 
@@ -183,263 +183,152 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
         ");
 
         $savedCount = 0;
+        $firstClientId = 0; // Track the first client ID for redirect
 
-        ?>
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Client Goal & Portfolio Summary</title>
-            
-            <!-- Modern Fonts -->
-            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-            
-            <!-- Modern Styling -->
-            <link rel="stylesheet" href="public/css/styles.css">
-            
-            <style>
-                /* Additional specific styles */
-                .report-table {
-                    width: 70%;
-                    margin: 0 auto 20px 0;
-                }
-                .report-table.small {
-                    width: 40%;
-                }
-                
-                .client-report {
-                    page-break-after: always;
-                }
-                
-                /* ✅ Ensure textareas are always editable */
-                .large-textarea {
-                    cursor: text;
-                }
-                
-                .large-textarea[readonly] {
-                    background: #f9f9f9;
-                    cursor: not-allowed;
-                }
-            </style>
-        </head>
-        <body>
-
-        <div class="nav-bar">
-            <a href="upload.php" class="nav-button">Upload New Files</a>
-            <a href="view_saved_reports.php" class="nav-button">View Saved Reports</a>
-            <button onclick="window.print()" class="nav-button" type="button">Print</button>
-        </div>
-
-        <?php if ($fileErrors): ?>
-            <div class="flash flash-error">
-                <?php foreach ($fileErrors as $err) {
-                    echo htmlspecialchars($err) . '<br>';
-                } ?>
-            </div>
-        <?php endif; ?>
-
-        <?php
         if (!$allClientReports) {
-            echo "<div class='flash flash-error'>No client data could be extracted. Please check that the correct files were uploaded.</div>";
-        } else {
-            foreach ($allClientReports as $client => $data) {
-                if (!empty($validSet) && !isset($validSet[$data['name']])) continue;
+            ?>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>No Data</title>
+                <link rel="stylesheet" href="public/css/styles.css">
+                <style>body { font-family: Arial, sans-serif; margin: 20px; }</style>
+            </head>
+            <body>
+            <div class='flash flash-error'>No client data could be extracted. Please check that the correct files were uploaded.</div>
+            <a href="upload.php" class="nav-button">Back to Upload</a>
+            </body>
+            </html>
+            <?php
+            exit;
+        }
 
-                $name       = $data['name'];
-                $asOn       = $data['as_on'] ?? '';
-                $allocation = $data['allocation'] ?? [];
-                $schemes    = $data['schemes'] ?? [];
-                $goals      = $data['goals'] ?? [];
+        foreach ($allClientReports as $client => $data) {
+            if (!empty($validSet) && !isset($validSet[$data['name']])) continue;
 
-                $totals  = $data['current']['totals'] ?? [
-                    'purchase'      => 0,
-                    'current'       => 0,
-                    'profit'        => 0,
-                    'cagr_weighted' => 0,
-                    'xirr_weighted' => 0
-                ];
-                $summary = $data['current']['summary'] ?? null;
+            $name       = $data['name'];
+            $asOn       = $data['as_on'] ?? '';
+            $allocation = $data['allocation'] ?? [];
+            $schemes    = $data['schemes'] ?? [];
+            $goals      = $data['goals'] ?? [];
 
-                $totalAmount = $totals['current'];
-                $profit      = $summary['profit'] ?? $totals['profit'];
-                $cagr        = $totals['cagr_weighted'];
-                $xirr        = $summary['xirr'] ?? $totals['xirr_weighted'];
+            $totals  = $data['current']['totals'] ?? [
+                'purchase'      => 0,
+                'current'       => 0,
+                'profit'        => 0,
+                'cagr_weighted' => 0,
+                'xirr_weighted' => 0
+            ];
+            $summary = $data['current']['summary'] ?? null;
 
-                $totalSip         = 0;
-                $totalGoalCurrent = 0;
-                $totalGoalTarget  = 0;
-                foreach ($goals as $g) {
-                    $totalSip         += $g['running_sip']   ?? 0;
-                    $totalGoalCurrent += $g['current_value'] ?? 0;
-                    $totalGoalTarget  += $g['target_amount'] ?? 0;
-                }
+            $totalAmount = $totals['current'];
+            $profit      = $summary['profit'] ?? $totals['profit'];
+            $cagr        = $totals['cagr_weighted'];
+            $xirr        = $summary['xirr'] ?? $totals['xirr_weighted'];
 
-                if ($asOn !== '') {
-                    $annexureLinesForClient = [
-                        "PDF document showing portfolio performance from inception including redeemed schemes reported on : " . $asOn,
-                        "Current portfolio reported on : " . $asOn,
-                        "Goal report reported on : " . $asOn,
-                    ];
-                } else {
-                    $annexureLinesForClient = [];
-                }
-
-                // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
-                if ($asOn !== '') {
-                    $delStmt = $pdo->prepare("DELETE FROM clients WHERE name = :name AND as_on = :as_on");
-                    $delStmt->execute([':name' => $name, ':as_on' => $asOn]);
-                }
-
-                // ----- SAVE MASTER ROW -----
-                $stmtClient->execute([
-                    ':name'               => $name,
-                    ':as_on'              => $asOn,
-                    ':total_amount'       => $totalAmount,
-                    ':profit'             => $profit,
-                    ':cagr'               => $cagr,
-                    ':xirr'               => $xirr,
-                    ':total_goal_current' => $totalGoalCurrent,
-                    ':total_goal_target'  => $totalGoalTarget,
-                    ':total_sip'          => $totalSip,
-                    ':greeting_prefix'    => $greetingBase,
-                    ':intro_text'         => $introText,
-                    ':closing_text'       => $closingText,
-                    ':rationale_text'     => $rationaleText,
-                ]);
-
-                $clientId = (int)$pdo->lastInsertId();
-                $savedCount++;
-
-                // ----- SAVE GOALS -----
-                foreach ($goals as $g) {
-                    $stmtGoal->execute([
-                        ':client_id'      => $clientId,
-                        ':goal'           => $g['goal']          ?? '',
-                        ':goal_date'      => $g['goal_date']     ?? '',
-                        ':current_amount' => $g['current_value'] ?? 0,
-                        ':sip_swp'        => $g['running_sip']   ?? 0,
-                        ':target_amount'  => $g['target_amount'] ?? 0,
-                        ':projected'      => $g['projected']     ?? 0,
-                        ':completion'     => $g['completion']    ?? 0,
-                        ':status'         => $g['status']        ?? '',
-                    ]);
-                }
-
-                // ----- SAVE ALLOCATION -----
-                foreach ($allocation as $asset => $share) {
-                    $stmtAlloc->execute([
-                        ':client_id' => $clientId,
-                        ':asset'     => $asset,
-                        ':share_pct' => $share,
-                    ]);
-                }
-
-                // ----- SAVE SCHEMES -----
-                foreach ($schemes as $s) {
-                    $stmtScheme->execute([
-                        ':client_id'          => $clientId,
-                        ':scheme_name'        => $s['scheme']        ?? '',
-                        ':sip_swp'            => $s['sip_swp']       ?? 0,
-                        ':current_value'      => $s['current_value'] ?? 0,
-                        ':action_step'        => 'Continue',
-                        ':recommended_scheme' => null,
-                        ':recommended_amount' => 0,
-                    ]);
-                }
-
-                // ----- SAVE ANNEXURES -----
-                foreach ($annexureLinesForClient as $line) {
-                    $line = trim($line);
-                    if ($line === '') continue;
-                    $stmtAnnex->execute([
-                        ':client_id' => $clientId,
-                        ':line_text' => $line,
-                    ]);
-                }
-
-                echo '<h2>' . htmlspecialchars($name) . '</h2>';
-
-                renderClientReport(
-                    $data,
-                    $greetingBase,
-                    $introText,
-                    $closingText,
-                    $rationaleText,
-                    $annexureLinesForClient,
-                    $clientId
-                );
+            $totalSip         = 0;
+            $totalGoalCurrent = 0;
+            $totalGoalTarget  = 0;
+            foreach ($goals as $g) {
+                $totalSip         += $g['running_sip']   ?? 0;
+                $totalGoalCurrent += $g['current_value'] ?? 0;
+                $totalGoalTarget  += $g['target_amount'] ?? 0;
             }
 
-            if ($savedCount > 0) {
-                echo "<div class='flash flash-success'>Successfully saved reports for {$savedCount} client(s). You can now edit and save each report.</div>";
+            if ($asOn !== '') {
+                $annexureLinesForClient = [
+                    "PDF document showing portfolio performance from inception including redeemed schemes reported on : " . $asOn,
+                    "Current portfolio reported on : " . $asOn,
+                    "Goal report reported on : " . $asOn,
+                ];
+            } else {
+                $annexureLinesForClient = [];
+            }
+
+            // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
+            if ($asOn !== '') {
+                $delStmt = $pdo->prepare("DELETE FROM clients WHERE name = :name AND as_on = :as_on");
+                $delStmt->execute([':name' => $name, ':as_on' => $asOn]);
+            }
+
+            // ----- SAVE MASTER ROW -----
+            $stmtClient->execute([
+                ':name'               => $name,
+                ':as_on'              => $asOn,
+                ':total_amount'       => $totalAmount,
+                ':profit'             => $profit,
+                ':cagr'               => $cagr,
+                ':xirr'               => $xirr,
+                ':total_goal_current' => $totalGoalCurrent,
+                ':total_goal_target'  => $totalGoalTarget,
+                ':total_sip'          => $totalSip,
+                ':greeting_prefix'    => $greetingBase,
+                ':intro_text'         => $introText,
+                ':closing_text'       => $closingText,
+                ':rationale_text'     => $rationaleText,
+            ]);
+
+            $clientId = (int)$pdo->lastInsertId();
+            
+            if ($firstClientId === 0) { // Track the first generated ID
+                $firstClientId = $clientId;
+            }
+
+            $savedCount++;
+
+            // ----- SAVE GOALS -----
+            foreach ($goals as $g) {
+                $stmtGoal->execute([
+                    ':client_id'      => $clientId,
+                    ':goal'           => $g['goal']          ?? '',
+                    ':goal_date'      => $g['goal_date']     ?? '',
+                    ':current_amount' => $g['current_value'] ?? 0,
+                    ':sip_swp'        => $g['running_sip']   ?? 0,
+                    ':target_amount'  => $g['target_amount'] ?? 0,
+                    ':projected'      => $g['projected']     ?? 0,
+                    ':completion'     => $g['completion']    ?? 0,
+                    ':status'         => $g['status']        ?? '',
+                ]);
+            }
+
+            // ----- SAVE ALLOCATION -----
+            foreach ($allocation as $asset => $share) {
+                $stmtAlloc->execute([
+                    ':client_id' => $clientId,
+                    ':asset'     => $asset,
+                    ':share_pct' => $share,
+                ]);
+            }
+
+            // ----- SAVE SCHEMES -----
+            foreach ($schemes as $s) {
+                $stmtScheme->execute([
+                    ':client_id'          => $clientId,
+                    ':scheme_name'        => $s['scheme']        ?? '',
+                    ':sip_swp'            => $s['sip_swp']       ?? 0,
+                    ':current_value'      => $s['current_value'] ?? 0,
+                    ':action_step'        => 'Continue',
+                    ':recommended_scheme' => null,
+                    ':recommended_amount' => 0,
+                ]);
+            }
+
+            // ----- SAVE ANNEXURES -----
+            foreach ($annexureLinesForClient as $line) {
+                $line = trim($line);
+                if ($line === '') continue;
+                $stmtAnnex->execute([
+                    ':client_id' => $clientId,
+                    ':line_text' => $line,
+                ]);
             }
         }
-        ?>
-        <div id="toast" class="toast"></div>
-
-        <script>
-            function showToast(msg) {
-                const toast = document.getElementById('toast');
-                toast.textContent = msg;
-                toast.classList.add('show');
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 2000);
-            }
-
-            document.querySelectorAll('.edit-btn').forEach(function(btn) {
-                btn.addEventListener('click', function () {
-                    const block = btn.closest('.editable-block');
-                    const span = block.querySelector('.editable-text');
-                    const clientReport = btn.closest('.client-report');
-                    const clientId = clientReport ? clientReport.getAttribute('data-client-id') : null;
-                    const field = span ? span.getAttribute('data-field') : null;
-
-                    const editing = span.getAttribute('contenteditable') === 'true';
-
-                    if (!editing) {
-                        span.setAttribute('contenteditable', 'true');
-                        span.focus();
-                        btn.textContent = 'Save';
-                    } else {
-                        span.setAttribute('contenteditable', 'false');
-                        btn.textContent = 'Edit';
-
-                        if (clientId && field) {
-                            const value = span.innerText.trim();
-
-                            // Fixed fetch call - proper syntax
-                            fetch('upload.php', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                                },
-                                body: new URLSearchParams({
-                                    ajax: '1',
-                                    client_id: clientId,
-                                    field: field,
-                                    value: value
-                                })
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (!data.success) {
-                                    alert('Save failed: ' + (data.error || 'Unknown error'));
-                                } else {
-                                    showToast('Saved ' + field + ' for client #' + clientId);
-                                }
-                            })
-                            .catch(err => {
-                                alert('Save error: ' + err);
-                            });
-                        }
-                    }
-                });
-            });
-        </script>
-        </body>
-        </html>
-        <?php
-        exit;
+        
+        // NEW REDIRECT: Redirect to the first generated report for editing
+        if ($firstClientId > 0) {
+            header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
+            exit;
+        }
 
     } catch (Throwable $e) {
         ?>
@@ -482,10 +371,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 <head>
     <title>Upload Client Files</title>
     
-    <!-- Modern Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Modern Styling -->
     <link rel="stylesheet" href="public/css/styles.css">
     
     <style>

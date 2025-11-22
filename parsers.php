@@ -463,5 +463,4 @@ function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $
     }
 
     return $clients;
-}
-?>
+}   

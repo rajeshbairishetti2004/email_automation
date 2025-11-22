@@ -31,7 +31,7 @@ function handleEmailSending($clientId) {
     $smtpFromEmail = $_ENV['SMTP_FROM_EMAIL'] ?? '';
     $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports';
 
-    // ✅ UPDATED: Handle Multiple File Uploads and Track Names
+    // UPDATED: Handle Multiple File Uploads and Track Names
     $attachmentPaths = [];
     $attachmentNames = []; // ← NEW: Store file names for annexure section
     $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
@@ -57,7 +57,7 @@ function handleEmailSending($clientId) {
                     
                     if (move_uploaded_file($tmpName, $savePath)) {
                         $attachmentPaths[] = $savePath;
-                        $attachmentNames[] = $originalName; // ✅ Store original file name
+                        $attachmentNames[] = $originalName; // Store original file name
                     }
                 }
             }
@@ -78,7 +78,7 @@ function handleEmailSending($clientId) {
         $stmt->execute([':id' => $clientId]);
         $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // ✅ UPDATED: Fetch schemes with latest saved data including action_step, recommended_scheme, recommended_amount
+        // UPDATED: Fetch schemes with latest saved data including action_step, recommended_scheme, recommended_amount
         $stmt = $pdo->prepare("SELECT * FROM client_schemes WHERE client_id = :id ORDER BY id ASC");
         $stmt->execute([':id' => $clientId]);
         $schemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -87,12 +87,12 @@ function handleEmailSending($clientId) {
         $stmt->execute([':id' => $clientId]);
         $annexures = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // ✅ Load stored annexures from database (if any)
+        // Load stored annexures from database (if any)
         $stmt = $pdo->prepare("SELECT * FROM client_annexures WHERE client_id = :id ORDER BY id ASC");
         $stmt->execute([':id' => $clientId]);
         $storedAnnexures = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // ✅ Merge uploaded files with stored annexures
+        // Merge uploaded files with stored annexures
         $emailAnnexures = [];
         
         // Add uploaded files to annexure list
@@ -112,6 +112,13 @@ function handleEmailSending($clientId) {
                 ];
             }
         }
+
+        // Fetch RM Details
+        $rm = getDefaultRelationshipManager();
+        $rmName        = $rm['name'] ?? 'Relationship Manager';
+        $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
+        $rmMobile      = $rm['mobile'] ?? 'N/A';
+        $rmEmail       = $rm['email'] ?? 'N/A';
 
         $name        = $client['name'];
         $asOn        = $client['as_on'] ?? '';
@@ -134,9 +141,11 @@ function handleEmailSending($clientId) {
         $DEFAULT_INTRO     = 'Introduction';
         $DEFAULT_CLOSING   = 'Closing remarks';
         $DEFAULT_RATIONALE = 'Rationale for recommendations';
-        $DEFAULT_SIGNATURE = "Regards,\n\nVivek Sharma,\nRelationship Manager,\nFinance Doctor Private Limited.\n\nMobile - 888 4091 666.\nEmail - vivek.sharma@financedoctor.in\nUrl: www.financedoctor.in";
+        
+        // DYNAMIC DEFAULT SIGNATURE BLOCK
+        $DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 
-        // ✅ Build merged client message for email
+        // Build merged client message for email
         $clientMessageParts = [];
         
         if ($greetingStored !== '') {
@@ -163,7 +172,6 @@ function handleEmailSending($clientId) {
         <html>
         <body style="font-family: Arial, sans-serif; font-size: 13px;">
         
-        <!-- ✅ Use merged client message -->
         <?php echo nl2br(htmlspecialchars($clientMessage)); ?>
 
         <h4>1. Current Situation</h4>
@@ -278,7 +286,6 @@ function handleEmailSending($clientId) {
             </ul>
         <?php endif; ?>
 
-        <!-- ✅ Add signature block -->
         <p><?php echo nl2br(htmlspecialchars($signatureBlock)); ?></p>
         </body>
         </html>
@@ -335,7 +342,7 @@ function handleEmailSending($clientId) {
             $mail->isHTML(true);
             $mail->Body = $emailHtml;
 
-            // ✅ Attach All Uploaded Files (Unlimited)
+            // Attach All Uploaded Files (Unlimited)
             foreach ($attachmentPaths as $file) {
                 if (file_exists($file)) {
                     $mail->addAttachment($file, basename($file));
@@ -344,7 +351,7 @@ function handleEmailSending($clientId) {
 
             $mail->send();
             
-            // ✅ Clean up all uploaded files after sending
+            // Clean up all uploaded files after sending
             foreach ($attachmentPaths as $file) {
                 if (file_exists($file)) {
                     @unlink($file);
@@ -354,7 +361,7 @@ function handleEmailSending($clientId) {
             header('Location: view_report.php?id=' . $clientId . '&sent=1');
             exit;
         } catch (Exception $e) {
-            // ✅ Clean up files even if email fails
+            // Clean up files even if email fails
             foreach ($attachmentPaths as $file) {
                 if (file_exists($file)) {
                     @unlink($file);

@@ -24,6 +24,35 @@ function getPdo(): PDO {
     return $pdo;
 }
 
+/* ---------- DATABASE HELPER FUNCTION (Centralized) ---------- */
+
+function getDefaultRelationshipManager() {
+    $pdo = getPdo();
+    // Fetch RM set as default (is_default = 1)
+    $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE is_default = 1 LIMIT 1");
+    $stmt->execute();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+
+function getAllRelationshipManagers() {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT id, name, designation, mobile, email FROM relationship_managers ORDER BY name ASC");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+
+function generateSignatureBlock(array $rm): string {
+    $rmName        = $rm['name'] ?? 'Relationship Manager';
+    $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
+    $rmMobile      = $rm['mobile'] ?? 'N/A';
+    $rmEmail       = $rm['email'] ?? 'N/A';
+
+    return "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
+}
+
+
 /* ---------- GENERIC HELPERS ---------- */
 
 function normalize_label(string $label): string {
@@ -94,7 +123,7 @@ function formatPercent(float $v): string {
     return number_format($v, 2) . '%';
 }
 
-/* ✅ Universal Indian Format Function */
+/* Universal Indian Format Function */
 function formatAmount($value) {
     $num = floatval($value);
 

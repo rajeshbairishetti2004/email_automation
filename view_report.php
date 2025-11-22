@@ -71,6 +71,7 @@ function getNextClientId($clientId) {
     return $stmt->fetchColumn();
 }
 
+
 /* ---------- AJAX SCHEME UPDATE HANDLER ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_POST['ajax_scheme'] === '1') {
@@ -98,8 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
         }
 
         if (isset($_POST['recommended_amount'])) {
+            $amount = (float)$_POST['recommended_amount'];
             $updates[] = 'recommended_amount = :recommended_amount';
-            $params[':recommended_amount'] = (float)$_POST['recommended_amount'];
+            $params[':recommended_amount'] = $amount;
         }
 
         if (!empty($updates)) {
@@ -118,6 +120,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
     exit;
 }
 
+
+
 /* ---------- AJAX EDIT HANDLER ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
@@ -129,25 +133,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
         $field    = $_POST['field'] ?? '';
         $value    = $_POST['value'] ?? '';
 
-        if (!$clientId || !in_array($field, ['greeting','intro','closing','rationale','client_message','signature'], true)) {
-            throw new Exception('Invalid input');
+        if (!$clientId || !in_array($field, ['client_message', 'rationale', 'signature'], true)) {
+            throw new Exception("Invalid input. Client ID: {$clientId}, Field: {$field}");
         }
 
-        // Handle merged client message
+        $sql = '';
+        $params = [':id' => $clientId];
+
+        // Handle merged client message: update three separate columns
         if ($field === 'client_message') {
+            
             // Parse the message to extract parts
             $lines = explode("\n\n", $value);
             
             // First paragraph = greeting
             $greeting = isset($lines[0]) ? trim($lines[0]) : '';
             
-            // Middle paragraphs = intro
-            $introParts = array_slice($lines, 1, -1);
+            // Last paragraph = closing (if more than one line)
+            $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
+            
+            // Middle paragraphs = intro (all lines between greeting and closing)
+            $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
             $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
             
-            // Last paragraph = closing
-            $closing = isset($lines[count($lines) - 1]) && count($lines) > 1 ? trim($lines[count($lines) - 1]) : '';
-            
+            // Fallback for simple message without clear paragraph splits
+            if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
+                $intro = $value;
+                $greeting = $closing = '';
+            }
+
             // Update all three fields
             $sql = "UPDATE clients SET greeting_prefix = :greeting, intro_text = :intro, closing_text = :closing WHERE id = :id";
             $stmt = $pdo->prepare($sql);
@@ -162,16 +176,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
             exit;
         }
 
+        // Handle Rationale and Signature: update a single column
         switch ($field) {
-            case 'greeting':
-                $column = 'greeting_prefix';
-                break;
-            case 'intro':
-                $column = 'intro_text';
-                break;
-            case 'closing':
-                $column = 'closing_text';
-                break;
             case 'rationale':
                 $column = 'rationale_text';
                 break;
@@ -199,6 +205,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
     exit;
 }
 
+// view_report.php (Around line 118, add before existing AJAX handlers)
+
+// ... existing AJAX EDIT HANDLER ...
+
+/* ---------- AJAX RM LOADER HANDLER (NEW) ---------- */
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'load_rm') {
+    header('Content-Type: application/json');
+
+    try {
+        $rmId = (int)($_POST['rm_id'] ?? 0);
+        
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE id = :rm_id");
+        $stmt->execute([':rm_id' => $rmId]);
+        $rm = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$rm) {
+            throw new Exception("Relationship Manager not found.");
+        }
+
+        // Generate the default signature block from the RM's details
+        $newSignature = generateSignatureBlock($rm);
+
+        echo json_encode([
+            'success' => true,
+            'signature_block' => $newSignature,
+            'rm_name' => $rm['name']
+        ]);
+
+    } catch (Throwable $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage(),
+        ]);
+    }
+    exit;
+}
+
+/* ---------- HANDLE "SEND EMAIL" REQUEST ---------- */
+// ... rest of the file continues ...
+
 /* ---------- HANDLE "SEND EMAIL" REQUEST ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_email']) && $_POST['send_email'] == '1') {
@@ -219,12 +267,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
             $rationale = trim($_POST['rationale'] ?? '');
             $signatureBlock = trim($_POST['signature_block'] ?? '');
 
-            // Parse client message into greeting, intro, closing
+            // Parse client message into greeting, intro, closing (using the same logic as AJAX)
             $lines = explode("\n\n", $clientMessage);
             $greeting = isset($lines[0]) ? trim($lines[0]) : '';
-            $introParts = array_slice($lines, 1, -1);
+            $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
+            $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
             $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
-            $closing = isset($lines[count($lines) - 1]) && count($lines) > 1 ? trim($lines[count($lines) - 1]) : '';
+            
+            if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
+                $intro = $clientMessage;
+                $greeting = $closing = '';
+            }
 
             // Update client text fields
             $stmt = $pdo->prepare("
@@ -248,6 +301,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
             // Save scheme recommendations if provided
             if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
                 foreach ($_POST['recommended_scheme'] as $schemeId => $schemeName) {
+                    
+                    // FIX 1: Validate scheme ID is a positive integer
+                    $schemeId = (int)$schemeId;
+                    if ($schemeId <= 0) {
+                        error_log("Skipping scheme save (recommended_scheme): Invalid scheme ID received in POST: " . $schemeId);
+                        continue; 
+                    }
+                    
+                    // FIX 2: Ensure the value is explicitly cast to float
                     $amount = (float)($_POST['recommended_amount'][$schemeId] ?? 0);
                     
                     $stmt = $pdo->prepare("
@@ -259,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
                     $stmt->execute([
                         ':scheme' => trim($schemeName),
                         ':amount' => $amount,
-                        ':id' => (int)$schemeId,
+                        ':id' => $schemeId,
                     ]);
                 }
             }
@@ -267,6 +329,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
             // Save action steps if provided
             if (isset($_POST['action_step']) && is_array($_POST['action_step'])) {
                 foreach ($_POST['action_step'] as $schemeId => $actionStep) {
+                    
+                    // FIX 3: Validate scheme ID is a positive integer
+                    $schemeId = (int)$schemeId;
+                    if ($schemeId <= 0) {
+                        error_log("Skipping action step save: Invalid scheme ID received in POST: " . $schemeId);
+                        continue; 
+                    }
+                    
                     $stmt = $pdo->prepare("
                         UPDATE client_schemes 
                         SET action_step = :action_step
@@ -274,7 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
                     ");
                     $stmt->execute([
                         ':action_step' => $actionStep,
-                        ':id' => (int)$schemeId,
+                        ':id' => $schemeId,
                     ]);
                 }
             }
@@ -282,6 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
             header('Location: view_report.php?id=' . $clientId . '&saved=1');
             exit;
         } catch (Exception $e) {
+            error_log("Report Save Error for client ID " . $clientId . ": " . $e->getMessage());
             header('Location: view_report.php?id=' . $clientId . '&save_error=1');
             exit;
         }
@@ -311,6 +382,9 @@ if (!$client) {
     <?php
     exit;
 }
+
+// Get RM data
+$rm = getDefaultRelationshipManager();
 
 // Get related data
 $goals = getClientGoals($clientId);
@@ -342,7 +416,14 @@ $DEFAULT_GREETING  = 'Dear Mr.';
 $DEFAULT_INTRO     = 'Introduction';
 $DEFAULT_CLOSING   = 'Closing remarks';
 $DEFAULT_RATIONALE = 'Rationale for recommendations';
-$DEFAULT_SIGNATURE = "Regards,\n\nVivek Sharma,\nRelationship Manager,\nFinance Doctor Private Limited.\n\nMobile - 888 4091 666.\nEmail - vivek.sharma@financedoctor.in\nUrl: www.financedoctor.in";
+
+// DYNAMIC DEFAULT SIGNATURE BLOCK
+$rmName        = $rm['name'] ?? 'Relationship Manager';
+$rmDesignation = $rm['designation'] ?? 'Relationship Manager';
+$rmMobile      = $rm['mobile'] ?? 'N/A';
+$rmEmail       = $rm['email'] ?? 'N/A';
+
+$DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 
 // MERGED: Combine greeting, intro, and closing into ONE message
 $clientMessageParts = [];
@@ -379,10 +460,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <head>
     <title>Client Report - <?php echo htmlspecialchars($name); ?></title>
     
-    <!-- Modern Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Modern Styling -->
     <link rel="stylesheet" href="public/css/styles.css">
     
     <style>
@@ -414,17 +493,45 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <button type="button" onclick="window.print()" class="nav-button">Print</button>
 </div>
 
+
 <?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
-    <div class="flash-success">Email sent successfully.</div>
+    <div class="flash-message flash-success">Email sent successfully.</div>
 <?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
-    <div class="flash-error">Failed to send email. Please check SMTP settings.</div>
+    <div class="flash-message flash-error">Failed to send email. Please check SMTP settings.</div>
 <?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
-    <div class="flash-success">✅ Report saved successfully!</div>
+    <div class="flash-message flash-success">✅ Report saved successfully!</div>
+<?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
+    <div class="flash-message flash-success">✅ Report created successfully! You can now edit and save the details.</div>
 <?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
-    <div class="flash-error">❌ Failed to save report. Please try again.</div>
+    <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
 <?php endif; ?>
 
-<!-- Email form for this client -->
+<script>
+    function showToast(msg) {
+        // ... existing showToast function ...
+    }
+
+    // New: Handle disappearing flash messages
+    document.addEventListener('DOMContentLoaded', function() {
+        const flashMessages = document.querySelectorAll('.flash-message');
+        
+        flashMessages.forEach(function(message) {
+            // After 3000ms (3 seconds), start the fade out effect
+            setTimeout(() => {
+                message.style.opacity = '0';
+                message.style.marginTop = '-50px'; // Move it up slightly during fade
+            }, 3000); 
+
+            // After the transition finishes (0.5s), remove the element from the DOM
+            setTimeout(() => {
+                message.remove();
+            }, 3500); 
+        });
+    });
+
+    // ... existing auto-save scripts ...
+</script>
+
 <div style="margin-bottom: 20px;">
     <form method="post" enctype="multipart/form-data" style="display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <input type="hidden" name="send_email" value="1">
@@ -458,11 +565,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
 <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
 
-    <!-- ✅ Wrap everything in a form for batch save -->
     <form method="POST" id="reportForm">
+
+    
         <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
 
-        <!-- ✅ Client Communication textarea -->
         <div class="card">
             <label class="card-title">Client Communication</label>
             <textarea name="client_message"
@@ -611,7 +718,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             <?php endforeach; ?>
         </table>
 
-        <!-- ✅ Rationale -->
         <div class="card" style="margin-top: 20px;">
             <label class="card-title">Rationale</label>
             <textarea name="rationale"
@@ -621,7 +727,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                       placeholder="Write your rationale here..."><?php echo htmlspecialchars($rationaleText); ?></textarea>
         </div>
 
-        <!-- ✅ Signature -->
         <div class="card" style="margin-top: 20px;">
             <label class="card-title">Signature / Closing Note</label>
             <textarea name="signature_block"
@@ -631,7 +736,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                       placeholder="Write your signature block here..."><?php echo htmlspecialchars($signatureBlock); ?></textarea>
         </div>
 
-        <!-- ✅ Save Button -->
         <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
             <button type="submit" name="save_report" class="btn-primary">
                 💾 Save
@@ -663,7 +767,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         }, 2000);
     }
 
-    // ✅ Auto-save textareas on blur
+    // Auto-save textareas on blur
     document.querySelectorAll('.large-textarea').forEach(function(textarea) {
         textarea.addEventListener('blur', function() {
             const clientId = textarea.getAttribute('data-client-id');
@@ -688,7 +792,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     if (data.success) {
                         showToast('Saved ' + field);
                     } else {
-                        alert('Save failed: ' . (data.error || 'Unknown error'));
+                        alert('Save failed: ' + (data.error || 'Unknown error'));
                     }
                 })
                 .catch(err => {
@@ -698,7 +802,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         });
     });
 
-    // ✅ Auto-save dropdowns
+    // Auto-save dropdowns
     document.querySelectorAll('.action-dropdown').forEach(function(select) {
         select.addEventListener('change', function() {
             const schemeId = select.getAttribute('data-scheme-id');
@@ -727,7 +831,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         });
     });
 
-    // ✅ Auto-save scheme inputs (text and number)
+    // Auto-save scheme inputs (text and number)
     document.querySelectorAll('.scheme-input').forEach(function(input) {
         input.addEventListener('blur', function() {
             const schemeId = input.getAttribute('data-scheme-id');
@@ -751,7 +855,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     if (data.success) {
                         showToast('Saved ' + field);
                     } else {
-                        alert('Save failed: ' . (data.error || 'Unknown error'));
+                        alert('Save failed: ' + (data.error || 'Unknown error'));
                     }
                 })
                 .catch(err => {

@@ -4,7 +4,8 @@
 
 function loadEnv($path = '.env') {
     if (!file_exists($path)) {
-        throw new Exception('.env file not found');
+        // For local XAMPP this is fine – just skip if .env missing
+        return;
     }
 
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -16,7 +17,7 @@ function loadEnv($path = '.env') {
 
         // Split name and value
         list($name, $value) = explode('=', $line, 2);
-        $name = trim($name);
+        $name  = trim($name);
         $value = trim($value);
 
         // Remove quotes if present
@@ -26,11 +27,10 @@ function loadEnv($path = '.env') {
 
         // Set environment variable
         putenv("$name=$value");
-        $_ENV[$name] = $value;
+        $_ENV[$name]    = $value;
         $_SERVER[$name] = $value;
     }
 }
 
 // Load environment variables automatically
 loadEnv();
-?>
