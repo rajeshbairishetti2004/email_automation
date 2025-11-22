@@ -24,7 +24,7 @@ function getPdo(): PDO {
     return $pdo;
 }
 
-/* ---------- DATABASE HELPER FUNCTION (Centralized) ---------- */
+/* ---------- DATABASE HELPER FUNCTIONS (Centralized) ---------- */
 
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
@@ -34,14 +34,12 @@ function getDefaultRelationshipManager() {
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-
 function getAllRelationshipManagers() {
     $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT id, name, designation, mobile, email FROM relationship_managers ORDER BY name ASC");
+    $stmt = $pdo->prepare("SELECT id, name, designation, mobile, email, is_default FROM relationship_managers ORDER BY name ASC");
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-
 
 function generateSignatureBlock(array $rm): string {
     $rmName        = $rm['name'] ?? 'Relationship Manager';
@@ -50,6 +48,35 @@ function generateSignatureBlock(array $rm): string {
     $rmEmail       = $rm['email'] ?? 'N/A';
 
     return "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
+}
+
+function getRelationshipManagerCount(): int {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM relationship_managers");
+    $stmt->execute();
+    return (int)$stmt->fetchColumn();
+}
+
+function addNewRelationshipManager(string $name, string $designation, string $mobile, string $email, bool $is_default = false): ?int {
+    $pdo = getPdo();
+    
+    // Ensure all current RMs are set to not default if this new one is default
+    if ($is_default) {
+        $pdo->exec("UPDATE relationship_managers SET is_default = 0");
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO relationship_managers (name, designation, mobile, email, is_default)
+        VALUES (:name, :designation, :mobile, :email, :is_default)
+    ");
+    $stmt->execute([
+        ':name' => $name,
+        ':designation' => $designation,
+        ':mobile' => $mobile,
+        ':email' => $email,
+        ':is_default' => $is_default ? 1 : 0
+    ]);
+    return (int)$pdo->lastInsertId();
 }
 
 

@@ -20,7 +20,7 @@ if ($clientId <= 0) {
     exit;
 }
 
-/* ---------- DATABASE HELPER FUNCTIONS ---------- */
+/* ---------- DATABASE HELPER FUNCTIONS (Existing) ---------- */
 
 function getClientById($clientId) {
     $pdo = getPdo();
@@ -121,8 +121,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
 }
 
 
+/* ---------- AJAX RM LOADER HANDLER (NEW) ---------- */
 
-/* ---------- AJAX EDIT HANDLER ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'load_rm') {
+    header('Content-Type: application/json');
+
+    try {
+        // RM functions are now available via db_config.php
+        $rmId = (int)($_POST['rm_id'] ?? 0);
+        
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE id = :rm_id");
+        $stmt->execute([':rm_id' => $rmId]);
+        $rm = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$rm) {
+            throw new Exception("Relationship Manager not found for ID: " . $rmId);
+        }
+
+        // Generate the default signature block from the RM's details (Function defined in db_config.php)
+        $newSignature = generateSignatureBlock($rm);
+
+        echo json_encode([
+            'success' => true,
+            'signature_block' => $newSignature,
+            'rm_name' => $rm['name']
+        ]);
+
+    } catch (Throwable $e) {
+        error_log("RM Load AJAX Error: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage(),
+        ]);
+    }
+    exit;
+}
+
+
+/* ---------- AJAX DELETE RM HANDLER (NEW) ---------- */
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'delete_rm') {
+    header('Content-Type: application/json');
+
+    try {
+        $rmId = (int)($_POST['rm_id'] ?? 0);
+        
+        if ($rmId <= 0) {
+            throw new Exception("Invalid RM ID for deletion.");
+        }
+        
+        $rmCount = getRelationshipManagerCount();
+        if ($rmCount <= 1) {
+            throw new Exception("Cannot delete: At least one Relationship Manager must remain in the system.");
+        }
+        
+        $pdo = getPdo();
+        
+        // 1. Check if the RM being deleted is the current default
+        $stmtCheck = $pdo->prepare("SELECT is_default FROM relationship_managers WHERE id = :rm_id");
+        $stmtCheck->execute([':rm_id' => $rmId]);
+        $isDefault = $stmtCheck->fetchColumn();
+
+        // 2. Delete the RM
+        $stmtDelete = $pdo->prepare("DELETE FROM relationship_managers WHERE id = :rm_id");
+        $stmtDelete->execute([':rm_id' => $rmId]);
+        
+        // 3. If the deleted RM was the default, set a new default
+        if ($isDefault == 1) {
+            $pdo->exec("UPDATE relationship_managers SET is_default = 1 ORDER BY id ASC LIMIT 1");
+        }
+
+        echo json_encode([
+            'success' => true,
+            'rm_id' => $rmId
+        ]);
+
+    } catch (Throwable $e) {
+        error_log("RM Delete AJAX Error: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage(),
+        ]);
+    }
+    exit;
+}
+
+
+/* ---------- AJAX EDIT HANDLER (For textareas) ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     header('Content-Type: application/json');
@@ -205,47 +291,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
     exit;
 }
 
-// view_report.php (Around line 118, add before existing AJAX handlers)
+/* ---------- HANDLE ADD NEW RM REQUEST (NEW) ---------- */
 
-// ... existing AJAX EDIT HANDLER ...
-
-/* ---------- AJAX RM LOADER HANDLER (NEW) ---------- */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'load_rm') {
-    header('Content-Type: application/json');
-
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_add_rm'])) {
     try {
-        $rmId = (int)($_POST['rm_id'] ?? 0);
+        $name        = trim($_POST['rm_name'] ?? '');
+        $designation = trim($_POST['rm_designation'] ?? 'Relationship Manager');
+        $mobile      = trim($_POST['rm_mobile'] ?? '');
+        $email       = trim($_POST['rm_email'] ?? '');
         
-        $pdo = getPdo();
-        $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE id = :rm_id");
-        $stmt->execute([':rm_id' => $rmId]);
-        $rm = $stmt->fetch(PDO::FETCH_ASSOC);
+        $rmCount = getRelationshipManagerCount();
+        $is_default  = ($rmCount == 0); // Force first RM to be default
 
-        if (!$rm) {
-            throw new Exception("Relationship Manager not found.");
+        if (empty($name) || empty($email) || empty($mobile)) {
+            throw new Exception("Name, Email, and Mobile are required.");
         }
 
-        // Generate the default signature block from the RM's details
-        $newSignature = generateSignatureBlock($rm);
+        $newId = addNewRelationshipManager($name, $designation, $mobile, $email, $is_default);
 
-        echo json_encode([
-            'success' => true,
-            'signature_block' => $newSignature,
-            'rm_name' => $rm['name']
-        ]);
+        // Redirect back to the report view with success message
+        header('Location: view_report.php?id=' . $clientId . '&rm_added=1');
+        exit;
 
-    } catch (Throwable $e) {
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage(),
-        ]);
+    } catch (Exception $e) {
+        header('Location: view_report.php?id=' . $clientId . '&rm_add_error=' . urlencode($e->getMessage()));
+        exit;
     }
-    exit;
 }
-
-/* ---------- HANDLE "SEND EMAIL" REQUEST ---------- */
-// ... rest of the file continues ...
 
 /* ---------- HANDLE "SEND EMAIL" REQUEST ---------- */
 
@@ -386,6 +458,9 @@ if (!$client) {
 // Get RM data
 $rm = getDefaultRelationshipManager();
 
+// Get ALL RMs for the dropdown
+$allRMs = getAllRelationshipManagers();
+
 // Get related data
 $goals = getClientGoals($clientId);
 $allocations = getClientAllocations($clientId);
@@ -477,6 +552,62 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         .client-report {
             page-break-after: always;
         }
+        /* CSS for smooth flash message transition */
+        .flash-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            opacity: 1;
+            transition: opacity 0.5s ease-out, margin-top 0.5s ease-out;
+            margin-top: 0;
+            /* Added for contextual messages */
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .flash-message.flash-success {
+            background: #e6ffe6;
+            border: 1px solid #00b300;
+        }
+        .flash-message.flash-error {
+            background: #ffe6e6;
+            border: 1px solid #b30000;
+        }
+        /* New Button Styling */
+        .rm-action-button {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #007bff;
+            color: white !important;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 13px;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+            line-height: normal;
+        }
+        .rm-action-button:hover {
+            background-color: #0056b3;
+            text-decoration: none;
+        }
+        .delete-rm-btn {
+            color: red !important;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 2px 4px;
+            border: 1px solid #f0f0f0;
+            border-radius: 3px;
+        }
+        .delete-rm-btn:hover {
+            background-color: #ffe6e6;
+            text-decoration: none;
+        }
+        .rm-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px dashed #eee;
+        }
     </style>
 </head>
 <body>
@@ -493,7 +624,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <button type="button" onclick="window.print()" class="nav-button">Print</button>
 </div>
 
-
 <?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
     <div class="flash-message flash-success">Email sent successfully.</div>
 <?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
@@ -505,32 +635,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
     <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
 <?php endif; ?>
-
-<script>
-    function showToast(msg) {
-        // ... existing showToast function ...
-    }
-
-    // New: Handle disappearing flash messages
-    document.addEventListener('DOMContentLoaded', function() {
-        const flashMessages = document.querySelectorAll('.flash-message');
-        
-        flashMessages.forEach(function(message) {
-            // After 3000ms (3 seconds), start the fade out effect
-            setTimeout(() => {
-                message.style.opacity = '0';
-                message.style.marginTop = '-50px'; // Move it up slightly during fade
-            }, 3000); 
-
-            // After the transition finishes (0.5s), remove the element from the DOM
-            setTimeout(() => {
-                message.remove();
-            }, 3500); 
-        });
-    });
-
-    // ... existing auto-save scripts ...
-</script>
 
 <div style="margin-bottom: 20px;">
     <form method="post" enctype="multipart/form-data" style="display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -566,8 +670,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
 
     <form method="POST" id="reportForm">
-
-    
         <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
 
         <div class="card">
@@ -729,11 +831,107 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
         <div class="card" style="margin-top: 20px;">
             <label class="card-title">Signature / Closing Note</label>
-            <textarea name="signature_block"
-                      class="large-textarea" 
-                      data-field="signature" 
-                      data-client-id="<?php echo (int)$clientId; ?>"
-                      placeholder="Write your signature block here..."><?php echo htmlspecialchars($signatureBlock); ?></textarea>
+            
+            <?php if (count($allRMs) === 0): ?>
+                <div class="signature-flash-container">
+                    <div class="flash-message flash-error" style="opacity: 1; margin-top: 5px;">
+                        You must **add a Relationship Manager** before using the dynamic signature feature.
+                    </div>
+                </div>
+                <form method="POST" style="padding: 15px; border: 1px dashed #DDD;">
+                    <input type="hidden" name="action_add_rm" value="1">
+                    <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
+                    <h4 style="margin-top: 0; margin-bottom: 10px;">Add New Relationship Manager</h4>
+                    
+                    <input type="text" name="rm_name" placeholder="Name (e.g., Vivek Sharma)" required style="margin-bottom: 8px;">
+                    <input type="text" name="rm_designation" placeholder="Designation (e.g., Relationship Manager)" value="Relationship Manager" style="margin-bottom: 8px;">
+                    <input type="text" name="rm_mobile" placeholder="Mobile (e.g., 888 4091 666)" required style="margin-bottom: 8px;">
+                    <input type="email" name="rm_email" placeholder="Email (e.g., vivek.sharma@...)" required style="margin-bottom: 15px;">
+                    
+                    <button type="submit" class="rm-action-button" style="width: auto;">
+                        ➕ Add & Set as Default
+                    </button>
+                    <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                        The first RM added will be set as the default automatically.
+                    </p>
+                </form>
+
+            <?php else: ?>
+                <div id="signature_flash_container" class="signature-flash-container">
+                    <?php if (isset($_GET['rm_added'])): ?>
+                        <div class="flash-message flash-success" style="opacity: 1;">✅ Relationship Manager added successfully!</div>
+                    <?php elseif (isset($_GET['rm_add_error'])): ?>
+                        <div class="flash-message flash-error" style="opacity: 1;">❌ Failed to add RM: <?php echo htmlspecialchars($_GET['rm_add_error']); ?></div>
+                    <?php endif; ?>
+                </div>
+
+                <div style="margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap;">
+                    <label for="rm_selector" style="font-size: 14px; font-weight: normal; margin-top: 0; margin-right: 10px;">
+                        Select Default RM:
+                    </label>
+                    <select id="rm_selector" data-client-id="<?php echo (int)$clientId; ?>" style="width: 160px; padding: 5px;">
+                        <option value="0">--- Use Saved Text ---</option>
+                        <?php foreach ($allRMs as $currentRM): ?>
+                            <option value="<?php echo (int)$currentRM['id']; ?>"
+                                    data-name="<?php echo htmlspecialchars($currentRM['name']); ?>">
+                                <?php echo htmlspecialchars($currentRM['name']); ?>
+                                <?php echo ($currentRM['is_default'] == 1) ? ' (Default)' : ''; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <a href="#" id="add_rm_toggle_btn" class="rm-action-button" style="margin-left: 10px;">
+                        + Add New RM
+                    </a>
+                    <a href="#" id="view_rm_list_toggle" class="rm-action-button" style="margin-left: 10px;">
+                        View/Delete RMs
+                    </a>
+                </div>
+                
+                <div id="rm_management_list" style="display: none; padding: 15px; border: 1px dashed #DDD; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; margin-bottom: 10px;">Manage Relationship Managers</h4>
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        <?php foreach ($allRMs as $rmItem): ?>
+                            <li class="rm-list-item" data-rm-id="<?php echo (int)$rmItem['id']; ?>">
+                                <span>
+                                    <strong><?php echo htmlspecialchars($rmItem['name']); ?></strong>
+                                    (<?php echo htmlspecialchars($rmItem['designation']); ?>)
+                                    <?php echo ($rmItem['is_default'] == 1) ? ' <span style="color: green; font-weight: 600;">(Default)</span>' : ''; ?>
+                                </span>
+                                <a href="#" 
+                                   class="delete-rm-btn" 
+                                   data-rm-id="<?php echo (int)$rmItem['id']; ?>" 
+                                   data-rm-name="<?php echo htmlspecialchars($rmItem['name']); ?>" 
+                                   title="Delete this Relationship Manager">
+                                    [Delete]
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+
+                <div id="add_rm_container" style="display: none; padding: 15px; border: 1px dashed #DDD; margin-bottom: 15px;">
+                    <form method="POST">
+                        <input type="hidden" name="action_add_rm" value="1">
+                        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
+                        <h4 style="margin-top: 0; margin-bottom: 10px;">Add New Relationship Manager</h4>
+                        
+                        <input type="text" name="rm_name" placeholder="Name (Required)" required style="margin-bottom: 8px;">
+                        <input type="text" name="rm_designation" placeholder="Designation" value="Relationship Manager" style="margin-bottom: 8px;">
+                        <input type="text" name="rm_mobile" placeholder="Mobile (Required)" required style="margin-bottom: 8px;">
+                        <input type="email" name="rm_email" placeholder="Email (Required)" required style="margin-bottom: 15px;">
+                        <button type="submit" class="rm-action-button" style="width: auto;">
+                            ➕ Add RM
+                        </button>
+                    </form>
+                </div>
+
+                <textarea name="signature_block"
+                        class="large-textarea" 
+                        data-field="signature" 
+                        data-client-id="<?php echo (int)$clientId; ?>"
+                        id="signature_textarea"
+                        placeholder="Write your signature block here..."><?php echo htmlspecialchars($signatureBlock); ?></textarea>
+            <?php endif; ?>
         </div>
 
         <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
@@ -758,6 +956,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <div id="toast" class="toast"></div>
 
 <script>
+    // Note: The showToast function is for general use, while showContextualFlash is for specific blocks.
     function showToast(msg) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
@@ -766,6 +965,129 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             toast.classList.remove('show');
         }, 2000);
     }
+
+    // Function to display a contextual flash message
+    function showContextualFlash(type, message, containerId = 'signature_flash_container') {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        // Clear existing messages in the container
+        container.innerHTML = '';
+        
+        const div = document.createElement('div');
+        div.className = `flash-message flash-${type}`;
+        div.style.opacity = '1';
+        div.textContent = message;
+        
+        container.appendChild(div);
+
+        // Set the timer for disappearance
+        setTimeout(() => {
+            div.style.opacity = '0';
+            div.style.marginTop = '-50px'; 
+        }, 3000); 
+        setTimeout(() => {
+            div.remove();
+        }, 3500); 
+    }
+
+    // New: Handle disappearing top page flash messages
+    document.addEventListener('DOMContentLoaded', function() {
+        const flashMessages = document.querySelectorAll('.flash-message');
+        
+        flashMessages.forEach(function(message) {
+            // Only handle top-level messages (those not inside the signature card)
+            if (message.closest('.card')) {
+                // Handle contextual messages inside the card (like rm_added message)
+                const container = message.closest('.signature-flash-container');
+                if (container) {
+                     setTimeout(() => {
+                        message.style.opacity = '0';
+                        message.style.marginTop = '-50px'; 
+                    }, 3000); 
+                    setTimeout(() => {
+                        message.remove();
+                    }, 3500); 
+                }
+                return; 
+            }
+
+            // Handle main page flash messages
+            setTimeout(() => {
+                message.style.opacity = '0';
+                message.style.marginTop = '-50px'; 
+            }, 3000); 
+
+            setTimeout(() => {
+                message.remove();
+            }, 3500); 
+        });
+    });
+
+    // Toggle Add New RM Form visibility
+    const addRmToggleBtn = document.getElementById('add_rm_toggle_btn');
+    if (addRmToggleBtn) {
+        addRmToggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const container = document.getElementById('add_rm_container');
+            container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
+        });
+    }
+
+    // Toggle RM Management List visibility
+    const viewRmListToggle = document.getElementById('view_rm_list_toggle');
+    if (viewRmListToggle) {
+        viewRmListToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            const list = document.getElementById('rm_management_list');
+            if (list.style.display === 'none' || list.style.display === '') {
+                list.style.display = 'block';
+                this.textContent = 'Hide RMs';
+            } else {
+                list.style.display = 'none';
+                this.textContent = 'View/Delete RMs';
+            }
+        });
+    }
+    
+    // DELETE RM LOGIC
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.classList.contains('delete-rm-btn')) {
+            e.preventDefault();
+            const rmId = e.target.getAttribute('data-rm-id');
+            const rmName = e.target.getAttribute('data-rm-name');
+            const clientId = document.querySelector('input[name="client_id"]').value;
+
+            if (!confirm(`Are you sure you want to delete Relationship Manager: ${rmName}? This action cannot be undone.`)) {
+                return;
+            }
+
+            fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                },
+                body: new URLSearchParams({
+                    ajax_action: 'delete_rm',
+                    rm_id: rmId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showContextualFlash('success', `✅ RM ${rmName} deleted. Reloading list...`);
+                    // Reload the page to reflect changes in dropdown and list
+                    window.location.reload(); 
+                } else {
+                    showContextualFlash('error', `❌ Failed to delete RM: ${data.error}`);
+                }
+            })
+            .catch(err => {
+                showContextualFlash('error', 'Network error during deletion.');
+                console.error('Delete Error:', err);
+            });
+        }
+    });
 
     // Auto-save textareas on blur
     document.querySelectorAll('.large-textarea').forEach(function(textarea) {
@@ -790,7 +1112,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        showToast('Saved ' + field);
+                        showToast('Saved ' + field); 
                     } else {
                         alert('Save failed: ' + (data.error || 'Unknown error'));
                     }
@@ -802,7 +1124,63 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         });
     });
 
-    // Auto-save dropdowns
+    // NEW: Handle RM Selector Change (Loads RM signature into the textarea)
+    const rmSelector = document.getElementById('rm_selector');
+    if (rmSelector) {
+        rmSelector.addEventListener('change', function() {
+            const rmId = this.value;
+            const textarea = document.getElementById('signature_textarea');
+            const clientId = this.getAttribute('data-client-id');
+            
+            if (rmId > 0) {
+                // Load RM signature block via AJAX
+                fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: new URLSearchParams({
+                        ajax_action: 'load_rm', // Target the new RM loader endpoint
+                        rm_id: rmId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        textarea.value = data.signature_block;
+                        showContextualFlash('success', `✅ Loaded signature for ${data.rm_name}. Auto-saving...`);
+                        
+                        // Manually trigger the auto-save mechanism for the signature field
+                        const signatureData = new URLSearchParams({
+                            ajax: '1',
+                            client_id: clientId,
+                            field: 'signature',
+                            value: data.signature_block
+                        });
+                        
+                        fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                            method: 'POST',
+                            body: signatureData
+                        });
+
+                    } else {
+                        showContextualFlash('error', `❌ Error loading signature: ${data.error}`);
+                    }
+                })
+                .catch(err => {
+                    showContextualFlash('error', 'Network error loading RM data.');
+                    console.error('RM Load Error:', err);
+                });
+            } else {
+                // Option "--- Use Saved Text ---" selected (ID 0). 
+                showContextualFlash('success', 'Using client-specific saved signature.');
+                // Trigger blur to save the text currently in the box (if edited)
+                textarea.dispatchEvent(new Event('blur'));
+            }
+        });
+    }
+
+    // Existing auto-save scripts for dropdowns and inputs (unchanged)
     document.querySelectorAll('.action-dropdown').forEach(function(select) {
         select.addEventListener('change', function() {
             const schemeId = select.getAttribute('data-scheme-id');
@@ -831,7 +1209,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         });
     });
 
-    // Auto-save scheme inputs (text and number)
     document.querySelectorAll('.scheme-input').forEach(function(input) {
         input.addEventListener('blur', function() {
             const schemeId = input.getAttribute('data-scheme-id');

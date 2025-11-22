@@ -113,7 +113,7 @@ function handleEmailSending($clientId) {
             }
         }
 
-        // Fetch RM Details
+        // Fetch RM Details (using centralized function from db_config)
         $rm = getDefaultRelationshipManager();
         $rmName        = $rm['name'] ?? 'Relationship Manager';
         $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
@@ -158,7 +158,7 @@ function handleEmailSending($clientId) {
             $clientMessageParts[] = $introTextStored;
         }
         
-        if ($closingTextStored !== '') {
+if ($closingTextStored !== '') {
             $clientMessageParts[] = $closingTextStored;
         }
         
@@ -351,6 +351,19 @@ function handleEmailSending($clientId) {
 
             $mail->send();
             
+            // --- FIX: Log the successful email transmission ---
+            $logStmt = $pdo->prepare("
+                INSERT INTO email_logs (client_id, recipients_count, sent_by, sent_at)
+                VALUES (:client_id, :recipients_count, :sent_by, NOW())
+            ");
+            $logStmt->execute([
+                ':client_id' => $clientId,
+                ':recipients_count' => count($emailList),
+                // Assuming RM's email is the sender's identity
+                ':sent_by' => $smtpFromEmail 
+            ]);
+            // ----------------------------------------------------
+
             // Clean up all uploaded files after sending
             foreach ($attachmentPaths as $file) {
                 if (file_exists($file)) {
