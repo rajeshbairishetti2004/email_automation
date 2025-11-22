@@ -74,7 +74,7 @@ if (!checkAuth()) {
         </style>
     </head>
     <body>
-    <h1>Client Reports Login</h1>
+    <h1>Client Reports Login Page by Finance Doctor</h1>
     <form method="post">
         <input type="hidden" name="redirect" value="<?php echo htmlspecialchars($_GET['redirect'] ?? 'upload.php'); ?>">
         <label>Username
