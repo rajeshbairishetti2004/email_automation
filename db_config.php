@@ -79,6 +79,42 @@ function addNewRelationshipManager(string $name, string $designation, string $mo
     return (int)$pdo->lastInsertId();
 }
 
+// --- Template Functions ---
+
+function getReportTemplates(string $section_type): array {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT id, name, content FROM report_templates WHERE section_type = :section_type ORDER BY name ASC");
+    $stmt->execute([':section_type' => $section_type]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function deleteTemplate(int $template_id): bool {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("DELETE FROM report_templates WHERE id = :id");
+    return $stmt->execute([':id' => $template_id]);
+}
+
+function getTemplateContent(int $template_id): ?string {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT content FROM report_templates WHERE id = :id");
+    $stmt->execute([':id' => $template_id]);
+    return $stmt->fetchColumn();
+}
+
+function addNewTemplate(string $name, string $section_type, string $content): ?int {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("
+        INSERT INTO report_templates (name, section_type, content)
+        VALUES (:name, :section_type, :content)
+    ");
+    $stmt->execute([
+        ':name' => $name,
+        ':section_type' => $section_type,
+        ':content' => $content,
+    ]);
+    return (int)$pdo->lastInsertId();
+}
+
 
 /* ---------- GENERIC HELPERS ---------- */
 

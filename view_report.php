@@ -10,6 +10,12 @@ require_once 'email_handler.php';
 require_once 'renderers.php';
 require_once 'env_loader.php'; // Add this line to load environment variables
 
+// --- IMPORTANT: Include the AJAX handling logic ---
+// This file contains the logic for 'load_template', 'delete_template', 'load_rm', 'delete_rm', etc.,
+// and will exit immediately if an AJAX POST request is detected.
+require_once 'template_actions.php'; 
+
+
 requireAuth();
 
 $pdo = getPdo();
@@ -20,7 +26,7 @@ if ($clientId <= 0) {
     exit;
 }
 
-/* ---------- DATABASE HELPER FUNCTIONS (Existing) ---------- */
+/* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
 
 function getClientById($clientId) {
     $pdo = getPdo();
@@ -72,226 +78,10 @@ function getNextClientId($clientId) {
 }
 
 
-/* ---------- AJAX SCHEME UPDATE HANDLER ---------- */
+/* ---------- HANDLE POST REQUESTS (Non-AJAX, Redirect Only) ---------- */
+// NOTE: All AJAX handlers are in template_actions.php
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_POST['ajax_scheme'] === '1') {
-    header('Content-Type: application/json');
-
-    try {
-        $pdo = getPdo();
-        $schemeId = (int)($_POST['scheme_id'] ?? 0);
-
-        if (!$schemeId) {
-            throw new Exception('Invalid scheme ID');
-        }
-
-        $updates = [];
-        $params = [':id' => $schemeId];
-
-        if (isset($_POST['action_step'])) {
-            $updates[] = 'action_step = :action_step';
-            $params[':action_step'] = $_POST['action_step'];
-        }
-
-        if (isset($_POST['recommended_scheme'])) {
-            $updates[] = 'recommended_scheme = :recommended_scheme';
-            $params[':recommended_scheme'] = $_POST['recommended_scheme'];
-        }
-
-        if (isset($_POST['recommended_amount'])) {
-            $amount = (float)$_POST['recommended_amount'];
-            $updates[] = 'recommended_amount = :recommended_amount';
-            $params[':recommended_amount'] = $amount;
-        }
-
-        if (!empty($updates)) {
-            $sql = "UPDATE client_schemes SET " . implode(', ', $updates) . " WHERE id = :id";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
-        }
-
-        echo json_encode(['success' => true]);
-    } catch (Throwable $e) {
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage(),
-        ]);
-    }
-    exit;
-}
-
-
-/* ---------- AJAX RM LOADER HANDLER (NEW) ---------- */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'load_rm') {
-    header('Content-Type: application/json');
-
-    try {
-        // RM functions are now available via db_config.php
-        $rmId = (int)($_POST['rm_id'] ?? 0);
-        
-        $pdo = getPdo();
-        $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE id = :rm_id");
-        $stmt->execute([':rm_id' => $rmId]);
-        $rm = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$rm) {
-            throw new Exception("Relationship Manager not found for ID: " . $rmId);
-        }
-
-        // Generate the default signature block from the RM's details (Function defined in db_config.php)
-        $newSignature = generateSignatureBlock($rm);
-
-        echo json_encode([
-            'success' => true,
-            'signature_block' => $newSignature,
-            'rm_name' => $rm['name']
-        ]);
-
-    } catch (Throwable $e) {
-        error_log("RM Load AJAX Error: " . $e->getMessage());
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage(),
-        ]);
-    }
-    exit;
-}
-
-
-/* ---------- AJAX DELETE RM HANDLER (NEW) ---------- */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action']) && $_POST['ajax_action'] === 'delete_rm') {
-    header('Content-Type: application/json');
-
-    try {
-        $rmId = (int)($_POST['rm_id'] ?? 0);
-        
-        if ($rmId <= 0) {
-            throw new Exception("Invalid RM ID for deletion.");
-        }
-        
-        $rmCount = getRelationshipManagerCount();
-        if ($rmCount <= 1) {
-            throw new Exception("Cannot delete: At least one Relationship Manager must remain in the system.");
-        }
-        
-        $pdo = getPdo();
-        
-        // 1. Check if the RM being deleted is the current default
-        $stmtCheck = $pdo->prepare("SELECT is_default FROM relationship_managers WHERE id = :rm_id");
-        $stmtCheck->execute([':rm_id' => $rmId]);
-        $isDefault = $stmtCheck->fetchColumn();
-
-        // 2. Delete the RM
-        $stmtDelete = $pdo->prepare("DELETE FROM relationship_managers WHERE id = :rm_id");
-        $stmtDelete->execute([':rm_id' => $rmId]);
-        
-        // 3. If the deleted RM was the default, set a new default
-        if ($isDefault == 1) {
-            $pdo->exec("UPDATE relationship_managers SET is_default = 1 ORDER BY id ASC LIMIT 1");
-        }
-
-        echo json_encode([
-            'success' => true,
-            'rm_id' => $rmId
-        ]);
-
-    } catch (Throwable $e) {
-        error_log("RM Delete AJAX Error: " . $e->getMessage());
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage(),
-        ]);
-    }
-    exit;
-}
-
-
-/* ---------- AJAX EDIT HANDLER (For textareas) ---------- */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
-    header('Content-Type: application/json');
-
-    try {
-        $pdo      = getPdo();
-        $clientId = (int)($_POST['client_id'] ?? 0);
-        $field    = $_POST['field'] ?? '';
-        $value    = $_POST['value'] ?? '';
-
-        if (!$clientId || !in_array($field, ['client_message', 'rationale', 'signature'], true)) {
-            throw new Exception("Invalid input. Client ID: {$clientId}, Field: {$field}");
-        }
-
-        $sql = '';
-        $params = [':id' => $clientId];
-
-        // Handle merged client message: update three separate columns
-        if ($field === 'client_message') {
-            
-            // Parse the message to extract parts
-            $lines = explode("\n\n", $value);
-            
-            // First paragraph = greeting
-            $greeting = isset($lines[0]) ? trim($lines[0]) : '';
-            
-            // Last paragraph = closing (if more than one line)
-            $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
-            
-            // Middle paragraphs = intro (all lines between greeting and closing)
-            $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
-            $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
-            
-            // Fallback for simple message without clear paragraph splits
-            if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
-                $intro = $value;
-                $greeting = $closing = '';
-            }
-
-            // Update all three fields
-            $sql = "UPDATE clients SET greeting_prefix = :greeting, intro_text = :intro, closing_text = :closing WHERE id = :id";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                ':greeting' => $greeting,
-                ':intro'    => $intro,
-                ':closing'  => $closing,
-                ':id'       => $clientId,
-            ]);
-            
-            echo json_encode(['success' => true]);
-            exit;
-        }
-
-        // Handle Rationale and Signature: update a single column
-        switch ($field) {
-            case 'rationale':
-                $column = 'rationale_text';
-                break;
-            case 'signature':
-                $column = 'signature_block';
-                break;
-            default:
-                throw new Exception('Unknown field');
-        }
-
-        $sql = "UPDATE clients SET {$column} = :val WHERE id = :id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':val' => $value,
-            ':id'  => $clientId,
-        ]);
-
-        echo json_encode(['success' => true]);
-    } catch (Throwable $e) {
-        echo json_encode([
-            'success' => false,
-            'error'   => $e->getMessage(),
-        ]);
-    }
-    exit;
-}
-
-/* ---------- HANDLE ADD NEW RM REQUEST (NEW) ---------- */
+/* ---------- HANDLE ADD NEW RM REQUEST (Existing) ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_add_rm'])) {
     try {
@@ -319,14 +109,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_add_rm'])) {
     }
 }
 
-/* ---------- HANDLE "SEND EMAIL" REQUEST ---------- */
+/* ---------- HANDLE ADD TEMPLATE REQUEST (NEW) ---------- */
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_add_template'])) {
+    try {
+        $name         = trim($_POST['template_name'] ?? '');
+        $section_type = trim($_POST['template_section'] ?? '');
+        $content      = trim($_POST['template_content'] ?? '');
+        // NEW: Check for an ID to update
+        $template_id_to_update = (int)($_POST['template_id_to_update'] ?? 0); 
+        
+        if (empty($name) || empty($section_type) || empty($content)) {
+            throw new Exception("Name, Section, and Content are required.");
+        }
+        
+        if (!in_array($section_type, ['greeting', 'intro', 'closing', 'rationale'])) {
+             throw new Exception("Invalid section type provided.");
+        }
+
+        $pdo = getPdo();
+        
+        if ($template_id_to_update > 0) {
+            // FIX: PERFORM UPDATE (Editing existing template)
+            $stmt = $pdo->prepare("
+                UPDATE report_templates 
+                SET name = :name, content = :content 
+                WHERE id = :id AND section_type = :section_type
+            ");
+            $stmt->execute([
+                ':name' => $name,
+                ':content' => $content,
+                ':id' => $template_id_to_update,
+                ':section_type' => $section_type
+            ]);
+            $newId = $template_id_to_update;
+        } else {
+            // PERFORM INSERT (Adding new template)
+            $stmt = $pdo->prepare("
+                INSERT INTO report_templates (name, section_type, content)
+                VALUES (:name, :section_type, :content)
+            ");
+            $stmt->execute([
+                ':name' => $name,
+                ':section_type' => $section_type,
+                ':content' => $content,
+            ]);
+            $newId = (int)$pdo->lastInsertId();
+        }
+
+        // Redirect back to the report view with success message
+        header('Location: view_report.php?id=' . $clientId . '&template_added=1&section=' . $section_type);
+        exit;
+
+    } catch (Exception $e) {
+        header('Location: view_report.php?id=' . $clientId . '&template_add_error=' . urlencode($e->getMessage()));
+        exit;
+    }
+}
+
+
+/* ---------- HANDLE "SEND EMAIL" REQUEST (Existing) ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_email']) && $_POST['send_email'] == '1') {
     handleEmailSending($clientId);
     exit;
 }
 
-/* ---------- HANDLE "SAVE REPORT" REQUEST ---------- */
+/* ---------- HANDLE "SAVE REPORT" REQUEST (Existing) ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
     $pdo = getPdo();
@@ -431,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
     }
 }
 
-/* ---------- LOAD AND DISPLAY CLIENT REPORT ---------- */
+/* ---------- LOAD AND DISPLAY CLIENT REPORT (View Logic) ---------- */
 
 // Load client data
 $client = getClientById($clientId);
@@ -458,8 +307,15 @@ if (!$client) {
 // Get RM data
 $rm = getDefaultRelationshipManager();
 
-// Get ALL RMs for the dropdown
+// Get ALL RMs and Templates
 $allRMs = getAllRelationshipManagers();
+$templates = [
+    'greeting' => getReportTemplates('greeting'),
+    'intro' => getReportTemplates('intro'),
+    'closing' => getReportTemplates('closing'),
+    'rationale' => getReportTemplates('rationale'),
+];
+
 
 // Get related data
 $goals = getClientGoals($clientId);
@@ -540,7 +396,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <link rel="stylesheet" href="public/css/styles.css">
     
     <style>
-        /* Additional specific styles for view_report.php */
+        /* Global CSS included here for convenience and external files */
         .report-table {
             width: 70%;
             margin: 0 auto 20px 0;
@@ -589,24 +445,55 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             background-color: #0056b3;
             text-decoration: none;
         }
-        .delete-rm-btn {
-            color: red !important;
+        .delete-rm-btn, .delete-template-btn, .edit-template-btn, .add-template-btn {
+            color: #007bff !important;
             font-weight: 600;
             text-decoration: none;
             padding: 2px 4px;
             border: 1px solid #f0f0f0;
             border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1.5;
+            vertical-align: top;
+            margin-left: 5px; /* Added margin for spacing */
         }
-        .delete-rm-btn:hover {
-            background-color: #ffe6e6;
+        .delete-template-btn {
+            color: red !important;
+        }
+        .add-template-btn {
+            color: green !important;
+        }
+        .delete-rm-btn:hover, .delete-template-btn:hover, .edit-template-btn:hover, .add-template-btn:hover {
+            background-color: #eee;
             text-decoration: none;
         }
-        .rm-list-item {
+        .rm-list-item, .template-list-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 5px 0;
             border-bottom: 1px dashed #eee;
+        }
+        .template-part-selector {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            padding: 10px 0;
+            border: 1px dashed #eee;
+            border-radius: 4px;
+        }
+        .template-selector-group {
+            margin-right: 20px;
+            padding: 0 10px;
+            position: relative;
+        }
+        .template-selector-group label {
+            font-weight: 600;
+            font-size: 13px;
+            display: block;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -672,18 +559,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <form method="POST" id="reportForm">
         <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
 
-        <div class="card">
-            <label class="card-title">Client Communication</label>
-            <textarea name="client_message"
-                      class="large-textarea" 
-                      data-field="client_message" 
-                      data-client-id="<?php echo (int)$clientId; ?>"
-                      placeholder="Write your greeting, introduction, and closing remarks here..."><?php echo htmlspecialchars($clientMessage); ?></textarea>
-            <p style="font-size: 12px; color: #666; margin-top: 8px;">
-                💡 This message will appear at the top of the email and printed report
-            </p>
-        </div>
-
+        <?php require_once 'client_communication.php'; ?>
+        
         <h3>1. Current Situation</h3>
         <table class="report-table">
             <tr><th colspan="2">Current Situation</th></tr>
@@ -820,119 +697,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             <?php endforeach; ?>
         </table>
 
-        <div class="card" style="margin-top: 20px;">
-            <label class="card-title">Rationale</label>
-            <textarea name="rationale"
-                      class="large-textarea" 
-                      data-field="rationale" 
-                      data-client-id="<?php echo (int)$clientId; ?>"
-                      placeholder="Write your rationale here..."><?php echo htmlspecialchars($rationaleText); ?></textarea>
-        </div>
+        <?php require_once 'rationale.php'; ?>
 
-        <div class="card" style="margin-top: 20px;">
-            <label class="card-title">Signature / Closing Note</label>
-            
-            <?php if (count($allRMs) === 0): ?>
-                <div class="signature-flash-container">
-                    <div class="flash-message flash-error" style="opacity: 1; margin-top: 5px;">
-                        You must **add a Relationship Manager** before using the dynamic signature feature.
-                    </div>
-                </div>
-                <form method="POST" style="padding: 15px; border: 1px dashed #DDD;">
-                    <input type="hidden" name="action_add_rm" value="1">
-                    <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">Add New Relationship Manager</h4>
-                    
-                    <input type="text" name="rm_name" placeholder="Name (e.g., Vivek Sharma)" required style="margin-bottom: 8px;">
-                    <input type="text" name="rm_designation" placeholder="Designation (e.g., Relationship Manager)" value="Relationship Manager" style="margin-bottom: 8px;">
-                    <input type="text" name="rm_mobile" placeholder="Mobile (e.g., 888 4091 666)" required style="margin-bottom: 8px;">
-                    <input type="email" name="rm_email" placeholder="Email (e.g., vivek.sharma@...)" required style="margin-bottom: 15px;">
-                    
-                    <button type="submit" class="rm-action-button" style="width: auto;">
-                        ➕ Add & Set as Default
-                    </button>
-                    <p style="font-size: 12px; color: #999; margin-top: 5px;">
-                        The first RM added will be set as the default automatically.
-                    </p>
-                </form>
-
-            <?php else: ?>
-                <div id="signature_flash_container" class="signature-flash-container">
-                    <?php if (isset($_GET['rm_added'])): ?>
-                        <div class="flash-message flash-success" style="opacity: 1;">✅ Relationship Manager added successfully!</div>
-                    <?php elseif (isset($_GET['rm_add_error'])): ?>
-                        <div class="flash-message flash-error" style="opacity: 1;">❌ Failed to add RM: <?php echo htmlspecialchars($_GET['rm_add_error']); ?></div>
-                    <?php endif; ?>
-                </div>
-
-                <div style="margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap;">
-                    <label for="rm_selector" style="font-size: 14px; font-weight: normal; margin-top: 0; margin-right: 10px;">
-                        Select Default RM:
-                    </label>
-                    <select id="rm_selector" data-client-id="<?php echo (int)$clientId; ?>" style="width: 160px; padding: 5px;">
-                        <option value="0">--- Use Saved Text ---</option>
-                        <?php foreach ($allRMs as $currentRM): ?>
-                            <option value="<?php echo (int)$currentRM['id']; ?>"
-                                    data-name="<?php echo htmlspecialchars($currentRM['name']); ?>">
-                                <?php echo htmlspecialchars($currentRM['name']); ?>
-                                <?php echo ($currentRM['is_default'] == 1) ? ' (Default)' : ''; ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <a href="#" id="add_rm_toggle_btn" class="rm-action-button" style="margin-left: 10px;">
-                        + Add New RM
-                    </a>
-                    <a href="#" id="view_rm_list_toggle" class="rm-action-button" style="margin-left: 10px;">
-                        View/Delete RMs
-                    </a>
-                </div>
-                
-                <div id="rm_management_list" style="display: none; padding: 15px; border: 1px dashed #DDD; margin-bottom: 15px;">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">Manage Relationship Managers</h4>
-                    <ul style="list-style: none; padding: 0; margin: 0;">
-                        <?php foreach ($allRMs as $rmItem): ?>
-                            <li class="rm-list-item" data-rm-id="<?php echo (int)$rmItem['id']; ?>">
-                                <span>
-                                    <strong><?php echo htmlspecialchars($rmItem['name']); ?></strong>
-                                    (<?php echo htmlspecialchars($rmItem['designation']); ?>)
-                                    <?php echo ($rmItem['is_default'] == 1) ? ' <span style="color: green; font-weight: 600;">(Default)</span>' : ''; ?>
-                                </span>
-                                <a href="#" 
-                                   class="delete-rm-btn" 
-                                   data-rm-id="<?php echo (int)$rmItem['id']; ?>" 
-                                   data-rm-name="<?php echo htmlspecialchars($rmItem['name']); ?>" 
-                                   title="Delete this Relationship Manager">
-                                    [Delete]
-                                </a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-
-                <div id="add_rm_container" style="display: none; padding: 15px; border: 1px dashed #DDD; margin-bottom: 15px;">
-                    <form method="POST">
-                        <input type="hidden" name="action_add_rm" value="1">
-                        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-                        <h4 style="margin-top: 0; margin-bottom: 10px;">Add New Relationship Manager</h4>
-                        
-                        <input type="text" name="rm_name" placeholder="Name (Required)" required style="margin-bottom: 8px;">
-                        <input type="text" name="rm_designation" placeholder="Designation" value="Relationship Manager" style="margin-bottom: 8px;">
-                        <input type="text" name="rm_mobile" placeholder="Mobile (Required)" required style="margin-bottom: 8px;">
-                        <input type="email" name="rm_email" placeholder="Email (Required)" required style="margin-bottom: 15px;">
-                        <button type="submit" class="rm-action-button" style="width: auto;">
-                            ➕ Add RM
-                        </button>
-                    </form>
-                </div>
-
-                <textarea name="signature_block"
-                        class="large-textarea" 
-                        data-field="signature" 
-                        data-client-id="<?php echo (int)$clientId; ?>"
-                        id="signature_textarea"
-                        placeholder="Write your signature block here..."><?php echo htmlspecialchars($signatureBlock); ?></textarea>
-            <?php endif; ?>
-        </div>
+        <?php require_once 'signature.php'; ?>
 
         <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
             <button type="submit" name="save_report" class="btn-primary">
@@ -956,7 +723,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <div id="toast" class="toast"></div>
 
 <script>
-    // Note: The showToast function is for general use, while showContextualFlash is for specific blocks.
+    // --- GLOBAL UTILITY FUNCTIONS (Needed by all modules) ---
     function showToast(msg) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
@@ -967,11 +734,13 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     }
 
     // Function to display a contextual flash message
-    function showContextualFlash(type, message, containerId = 'signature_flash_container') {
+    function showContextualFlash(type, message, containerId) {
         const container = document.getElementById(containerId);
-        if (!container) return;
+        if (!container) {
+            showToast(message);
+            return;
+        }
 
-        // Clear existing messages in the container
         container.innerHTML = '';
         
         const div = document.createElement('div');
@@ -981,7 +750,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         
         container.appendChild(div);
 
-        // Set the timer for disappearance
         setTimeout(() => {
             div.style.opacity = '0';
             div.style.marginTop = '-50px'; 
@@ -991,257 +759,305 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         }, 3500); 
     }
 
-    // New: Handle disappearing top page flash messages
-    document.addEventListener('DOMContentLoaded', function() {
-        const flashMessages = document.querySelectorAll('.flash-message');
+    // Function to get the content of a template selector (Needed by Communication and Rationale modules)
+    function getTemplateContentById(selectorId) {
+        const selector = document.getElementById(selectorId);
+        if (!selector || selector.value === '0') return null;
         
-        flashMessages.forEach(function(message) {
-            // Only handle top-level messages (those not inside the signature card)
-            if (message.closest('.card')) {
-                // Handle contextual messages inside the card (like rm_added message)
-                const container = message.closest('.signature-flash-container');
-                if (container) {
-                     setTimeout(() => {
-                        message.style.opacity = '0';
-                        message.style.marginTop = '-50px'; 
-                    }, 3000); 
-                    setTimeout(() => {
-                        message.remove();
-                    }, 3500); 
-                }
-                return; 
-            }
+        const selectedOption = selector.options[selector.selectedIndex];
+        // Use data-content for fast lookup (already loaded in PHP)
+        return selectedOption.getAttribute('data-content');
+    }
 
-            // Handle main page flash messages
+    // Function to build the entire client message from the three template parts (Needed by Communication module)
+    function assembleClientMessage() {
+        const greeting = getTemplateContentById('greeting_template_selector');
+        const intro = getTemplateContentById('intro_template_selector');
+        const closing = getTemplateContentById('closing_template_selector');
+        
+        let messageParts = [];
+        if (greeting) {
+            messageParts.push(greeting); 
+        }
+        if (intro) {
+            messageParts.push(intro);
+        }
+        if (closing) {
+            messageParts.push(closing);
+        }
+        
+        return messageParts.join('\n\n');
+    }
+
+    // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle disappearing flash messages (Existing logic remains)
+        const flashMessages = document.querySelectorAll('.flash-message');
+        flashMessages.forEach(function(message) {
             setTimeout(() => {
                 message.style.opacity = '0';
                 message.style.marginTop = '-50px'; 
             }, 3000); 
-
             setTimeout(() => {
                 message.remove();
             }, 3500); 
         });
-    });
 
-    // Toggle Add New RM Form visibility
-    const addRmToggleBtn = document.getElementById('add_rm_toggle_btn');
-    if (addRmToggleBtn) {
-        addRmToggleBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            const container = document.getElementById('add_rm_container');
-            container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
-        });
-    }
+        // --- ATTACH LISTENERS FOR AUTOSAVE AND AJAX ---
 
-    // Toggle RM Management List visibility
-    const viewRmListToggle = document.getElementById('view_rm_list_toggle');
-    if (viewRmListToggle) {
-        viewRmListToggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            const list = document.getElementById('rm_management_list');
-            if (list.style.display === 'none' || list.style.display === '') {
-                list.style.display = 'block';
-                this.textContent = 'Hide RMs';
-            } else {
-                list.style.display = 'none';
-                this.textContent = 'View/Delete RMs';
-            }
-        });
-    }
-    
-    // DELETE RM LOGIC
-    document.addEventListener('click', function(e) {
-        if (e.target && e.target.classList.contains('delete-rm-btn')) {
-            e.preventDefault();
-            const rmId = e.target.getAttribute('data-rm-id');
-            const rmName = e.target.getAttribute('data-rm-name');
-            const clientId = document.querySelector('input[name="client_id"]').value;
-
-            if (!confirm(`Are you sure you want to delete Relationship Manager: ${rmName}? This action cannot be undone.`)) {
-                return;
-            }
-
-            fetch('view_report.php?id=' + encodeURIComponent(clientId), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                },
-                body: new URLSearchParams({
-                    ajax_action: 'delete_rm',
-                    rm_id: rmId
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showContextualFlash('success', `✅ RM ${rmName} deleted. Reloading list...`);
-                    // Reload the page to reflect changes in dropdown and list
-                    window.location.reload(); 
-                } else {
-                    showContextualFlash('error', `❌ Failed to delete RM: ${data.error}`);
+        // DELETE TEMPLATE LOGIC (Consolidated for all modules)
+        document.querySelectorAll('.delete-template-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const selectorId = this.getAttribute('data-template-id-attr');
+                const templateSection = this.getAttribute('data-template-section');
+                
+                const selector = document.getElementById(selectorId);
+                const templateId = selector.value;
+                
+                if (templateId === '0' || templateId === 0) {
+                    showContextualFlash('error', '❌ Please select a template name to delete.', `${templateSection}_flash_container`);
+                    return;
                 }
-            })
-            .catch(err => {
-                showContextualFlash('error', 'Network error during deletion.');
-                console.error('Delete Error:', err);
-            });
-        }
-    });
+                
+                const templateName = selector.options[selector.selectedIndex].text;
+                const clientId = document.querySelector('input[name="client_id"]').value;
 
-    // Auto-save textareas on blur
-    document.querySelectorAll('.large-textarea').forEach(function(textarea) {
-        textarea.addEventListener('blur', function() {
-            const clientId = textarea.getAttribute('data-client-id');
-            const field = textarea.getAttribute('data-field');
-            const value = textarea.value.trim();
+                if (!confirm(`Are you sure you want to delete the template "${templateName}"?`)) return;
 
-            if (clientId && field) {
                 fetch('view_report.php?id=' + encodeURIComponent(clientId), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
                     body: new URLSearchParams({
-                        ajax: '1',
-                        client_id: clientId,
-                        field: field,
-                        value: value
+                        ajax_action: 'delete_template',
+                        template_id: templateId
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        showToast('Saved ' + field); 
+                        showContextualFlash('success', `Template "${templateName}" deleted. Reloading...`, `${templateSection}_flash_container`);
+                        
+                        // FIX: Use window.location.href to force a non-cached reload
+                        window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1'; 
+
                     } else {
-                        alert('Save failed: ' + (data.error || 'Unknown error'));
+                        showContextualFlash('error', `❌ Failed to delete template: ${data.error}`, `${templateSection}_flash_container`);
                     }
                 })
                 .catch(err => {
-                    console.error('Save error:', err);
+                    showContextualFlash('error', 'Network error during template deletion.', `${templateSection}_flash_container`);
                 });
-            }
+            });
         });
-    });
+        
+        // --- RM LOGIC (Toggle/Delete) ---
 
-    // NEW: Handle RM Selector Change (Loads RM signature into the textarea)
-    const rmSelector = document.getElementById('rm_selector');
-    if (rmSelector) {
-        rmSelector.addEventListener('change', function() {
-            const rmId = this.value;
-            const textarea = document.getElementById('signature_textarea');
-            const clientId = this.getAttribute('data-client-id');
-            
-            if (rmId > 0) {
-                // Load RM signature block via AJAX
+        // Toggle Add New RM Form visibility
+        const addRmToggleBtn = document.getElementById('add_rm_toggle_btn');
+        if (addRmToggleBtn) {
+            addRmToggleBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const container = document.getElementById('add_rm_container');
+                container.style.display = (container.style.display === 'none' || container.style.display === '') ? 'block' : 'none';
+            });
+        }
+
+        // Toggle RM Management List visibility
+        const viewRmListToggle = document.getElementById('view_rm_list_toggle');
+        if (viewRmListToggle) {
+            viewRmListToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                const list = document.getElementById('rm_management_list');
+                if (list.style.display === 'none' || list.style.display === '') {
+                    list.style.display = 'block';
+                    this.textContent = 'Hide RMs';
+                } else {
+                    list.style.display = 'none';
+                    this.textContent = 'View/Delete RMs';
+                }
+            });
+        }
+
+        // DELETE RM LOGIC
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('delete-rm-btn')) {
+                e.preventDefault();
+                const rmId = e.target.getAttribute('data-rm-id');
+                const rmName = e.target.getAttribute('data-rm-name');
+                const clientId = document.querySelector('input[name="client_id"]').value;
+
+                if (!confirm(`Are you sure you want to delete Relationship Manager: ${rmName}? This action cannot be undone.`)) {
+                    return;
+                }
+
                 fetch('view_report.php?id=' + encodeURIComponent(clientId), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                     },
                     body: new URLSearchParams({
-                        ajax_action: 'load_rm', // Target the new RM loader endpoint
+                        ajax_action: 'delete_rm',
                         rm_id: rmId
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        textarea.value = data.signature_block;
-                        showContextualFlash('success', `✅ Loaded signature for ${data.rm_name}. Auto-saving...`);
-                        
-                        // Manually trigger the auto-save mechanism for the signature field
-                        const signatureData = new URLSearchParams({
+                        showContextualFlash('success', `✅ RM ${rmName} deleted. Reloading list...`, 'signature_flash_container');
+                        window.location.reload(); 
+                    } else {
+                        showContextualFlash('error', `❌ Failed to delete RM: ${data.error}`, 'signature_flash_container');
+                    }
+                })
+                .catch(err => {
+                    showContextualFlash('error', 'Network error during deletion.', 'signature_flash_container');
+                    console.error('Delete Error:', err);
+                });
+            }
+        });
+
+        // RM Selector Change (Loads RM signature into the textarea)
+        const rmSelector = document.getElementById('rm_selector');
+        if (rmSelector) {
+            rmSelector.addEventListener('change', function() {
+                const rmId = this.value;
+                const textarea = document.getElementById('signature_textarea');
+                const clientId = document.querySelector('input[name="client_id"]').value;
+                
+                if (rmId > 0) {
+                    fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body: new URLSearchParams({ ajax_action: 'load_rm', rm_id: rmId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            textarea.value = data.signature_block;
+                            showContextualFlash('success', `✅ Loaded signature for ${data.rm_name}. Auto-saving...`, 'signature_flash_container');
+                            
+                            // Manually trigger the auto-save mechanism for the signature field
+                            textarea.dispatchEvent(new Event('blur'));
+                        } else {
+                            showContextualFlash('error', `❌ Error loading signature: ${data.error}`, 'signature_flash_container');
+                        }
+                    })
+                    .catch(err => {
+                        showContextualFlash('error', 'Network error loading RM data.', 'signature_flash_container');
+                        console.error('RM Load Error:', err);
+                    });
+                } else {
+                    // Option "--- Use Saved Text ---" selected (ID 0). 
+                    showContextualFlash('success', 'Using client-specific saved signature.', 'signature_flash_container');
+                    // Trigger blur to save the text currently in the box (if edited)
+                    textarea.dispatchEvent(new Event('blur'));
+                }
+            });
+        }
+        
+        // Auto-save textareas on blur
+        document.querySelectorAll('.large-textarea').forEach(function(textarea) {
+            textarea.addEventListener('blur', function() {
+                const clientId = textarea.getAttribute('data-client-id');
+                const field = textarea.getAttribute('data-field');
+                const value = textarea.value.trim();
+
+                if (clientId && field) {
+                    fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                        },
+                        body: new URLSearchParams({
                             ajax: '1',
                             client_id: clientId,
-                            field: 'signature',
-                            value: data.signature_block
-                        });
-                        
-                        fetch('view_report.php?id=' + encodeURIComponent(clientId), {
-                            method: 'POST',
-                            body: signatureData
-                        });
-
-                    } else {
-                        showContextualFlash('error', `❌ Error loading signature: ${data.error}`);
-                    }
-                })
-                .catch(err => {
-                    showContextualFlash('error', 'Network error loading RM data.');
-                    console.error('RM Load Error:', err);
-                });
-            } else {
-                // Option "--- Use Saved Text ---" selected (ID 0). 
-                showContextualFlash('success', 'Using client-specific saved signature.');
-                // Trigger blur to save the text currently in the box (if edited)
-                textarea.dispatchEvent(new Event('blur'));
-            }
-        });
-    }
-
-    // Existing auto-save scripts for dropdowns and inputs (unchanged)
-    document.querySelectorAll('.action-dropdown').forEach(function(select) {
-        select.addEventListener('change', function() {
-            const schemeId = select.getAttribute('data-scheme-id');
-            const value = select.value;
-
-            if (schemeId) {
-                fetch('view_report.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: new URLSearchParams({
-                        ajax_scheme: '1',
-                        scheme_id: schemeId,
-                        action_step: value
+                            field: field,
+                            value: value
+                        })
                     })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('Action step saved');
-                    }
-                })
-                .catch(err => console.error(err));
-            }
-        });
-    });
-
-    document.querySelectorAll('.scheme-input').forEach(function(input) {
-        input.addEventListener('blur', function() {
-            const schemeId = input.getAttribute('data-scheme-id');
-            const field = input.getAttribute('data-field');
-            const value = input.value.trim();
-
-            if (schemeId && field) {
-                fetch('view_report.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: new URLSearchParams({
-                        ajax_scheme: '1',
-                        scheme_id: schemeId,
-                        [field]: value
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (field !== 'signature' && field !== 'rationale' && field !== 'client_message') {
+                                showToast('Saved ' + field); 
+                            }
+                        } else {
+                            alert('Save failed: ' + (data.error || 'Unknown error'));
+                        }
                     })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('Saved ' + field);
-                    } else {
-                        alert('Save failed: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(err => {
-                    console.error('Save error:', err);
-                });
-            }
+                    .catch(err => {
+                        console.error('Save error:', err);
+                    });
+                }
+            });
+        });
+
+        // Auto-save dropdowns
+        document.querySelectorAll('.action-dropdown').forEach(function(select) {
+            select.addEventListener('change', function() {
+                const schemeId = select.getAttribute('data-scheme-id');
+                const value = select.value;
+
+                if (schemeId) {
+                    fetch('view_report.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                        },
+                        body: new URLSearchParams({
+                            ajax_scheme: '1',
+                            scheme_id: schemeId,
+                            action_step: value
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Action step saved');
+                        }
+                    })
+                    .catch(err => console.error(err));
+                }
+            });
+        });
+
+        // Auto-save scheme inputs (text and number)
+        document.querySelectorAll('.scheme-input').forEach(function(input) {
+            input.addEventListener('blur', function() {
+                const schemeId = input.getAttribute('data-scheme-id');
+                const field = input.getAttribute('data-field');
+                const value = input.value.trim();
+
+                if (schemeId && field) {
+                    fetch('view_report.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                        },
+                        body: new URLSearchParams({
+                            ajax_scheme: '1',
+                            scheme_id: schemeId,
+                            [field]: value
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Saved ' + field);
+                        } else {
+                            alert('Save failed: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Save error:', err);
+                    });
+                }
+            });
         });
     });
 </script>
 
 </body>
-</html>
+</html> 
