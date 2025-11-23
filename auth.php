@@ -1,5 +1,5 @@
 <?php
-// auth.php (Updated with designation in registration)
+// auth.php
 
 require_once 'db_config.php';
 // Start the session at the very beginning
@@ -45,8 +45,7 @@ function getCurrentUser(): ?array {
     
     // Safety Fallbacks
     $user['name'] = $user['name'] ?? $user['username'];
-    // FIX: Fallback to 'Relationship Manager' (the most common professional title)
-    $user['designation'] = $user['designation'] ?? 'Relationship Manager'; 
+    $user['designation'] = $user['designation'] ?? 'Relationship Manager';
     $user['mobile'] = $user['mobile'] ?? 'N/A';
     $user['email'] = $user['email'] ?? 'N/A';
     

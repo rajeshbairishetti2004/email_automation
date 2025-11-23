@@ -47,9 +47,8 @@ if (empty(trim($signatureBlock))) {
         </div>
     
     <div class="signature-card">
-<div class="signature-content">
-    <?php echo htmlspecialchars(trim($signatureBlock)); ?>
+        <div class="signature-content">
+            <?php echo htmlspecialchars(trim($signatureBlock)); ?>
+        </div>
+    </div>
 </div>
-    </div>
-    
-    </div>

@@ -41,57 +41,72 @@ $initials = strtoupper(substr($nameForInitials, 0, 1));
 
 
 /* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
-function getClientById($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT * FROM clients WHERE id = :id");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetch(PDO::FETCH_ASSOC);
+// FIX: Wrap local functions in function_exists() to prevent redeclaration fatal error
+if (!function_exists('getClientById')) {
+    function getClientById($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM clients WHERE id = :id");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
 }
 
-function getClientGoals($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT * FROM client_goals WHERE client_id = :id ORDER BY id ASC");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+if (!function_exists('getClientGoals')) {
+    function getClientGoals($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM client_goals WHERE client_id = :id ORDER BY id ASC");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
-function getClientAllocations($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT * FROM client_allocations WHERE client_id = :id ORDER BY id ASC");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+if (!function_exists('getClientAllocations')) {
+    function getClientAllocations($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM client_allocations WHERE client_id = :id ORDER BY id ASC");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
-function getClientSchemes($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT * FROM client_schemes WHERE client_id = :id ORDER BY id ASC");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+if (!function_exists('getClientSchemes')) {
+    function getClientSchemes($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM client_schemes WHERE client_id = :id ORDER BY id ASC");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
-function getClientAnnexures($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT * FROM client_annexures WHERE client_id = :id ORDER BY id ASC");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+if (!function_exists('getClientAnnexures')) {
+    function getClientAnnexures($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT * FROM client_annexures WHERE client_id = :id ORDER BY id ASC");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
-function getPrevClientId($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT id FROM clients WHERE id < :id ORDER BY id DESC LIMIT 1");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchColumn();
+if (!function_exists('getPrevClientId')) {
+    function getPrevClientId($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT id FROM clients WHERE id < :id ORDER BY id DESC LIMIT 1");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchColumn();
+    }
 }
 
-function getNextClientId($clientId) {
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT id FROM clients WHERE id > :id ORDER BY id ASC LIMIT 1");
-    $stmt->execute([':id' => $clientId]);
-    return $stmt->fetchColumn();
+if (!function_exists('getNextClientId')) {
+    function getNextClientId($clientId) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("SELECT id FROM clients WHERE id > :id ORDER BY id ASC LIMIT 1");
+        $stmt->execute([':id' => $clientId]);
+        return $stmt->fetchColumn();
+    }
 }
 // --------------------------------------------------------------------------
 
-/* ---------- HANDLE AJAX REQUESTS (INLINE FIELD SAVE) ---------- */
+/* ---------- HANDLE AJAX REQUESTS (INLINE FIELD SAVE - e.g., signature block) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
     header('Content-Type: application/json');
     $clientId = (int)($_POST['client_id'] ?? 0);
@@ -113,7 +128,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
         }
         
         // General text area save logic (e.g., rationale)
-        // NOTE: This generic block must be expanded if you add more AJAX fields with 'ajax' => '1'
+        // This is only for the live content, not the template.
+        $stmt = $pdo->prepare("UPDATE clients SET {$field}_text = :value WHERE id = :id"); // Assuming field is intro, closing, or rationale
+        $stmt->execute([':value' => $value, ':id' => $clientId]);
+        
+        // NOTE: The main save button (non-AJAX) handles the parsing of client_message into greeting/intro/closing.
+        // The AJAX handler here should be kept simple as it is not the full save.
+
         echo json_encode(['success' => true]); 
         exit; 
     } catch (PDOException $e) {
@@ -124,12 +145,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
     }
 }
 // ---------------------------------------------------------------
-// REMOVED: AJAX REQUESTS (USER DETAIL SAVE) block is fully removed
-// ---------------------------------------------------------------
+
+
+/* ---------- HANDLE AJAX REQUESTS (USER RATIONALE TEMPLATE MANAGEMENT) ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+    header('Content-Type: application/json');
+    $userId = (int)($currentUser['id'] ?? 0);
+
+    if ($userId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'User not authenticated.']);
+        exit;
+    }
+    
+    try {
+        if ($_POST['ajax_action'] === 'save_user_template') {
+            $templateName = trim($_POST['template_name'] ?? '');
+            $content = $_POST['template_content'] ?? '';
+            // FIX: Read the ID correctly and cast as integer
+            $templateId = (int)($_POST['template_id_to_update'] ?? 0); 
+            
+            if (empty($templateName) || empty($content)) {
+                throw new Exception("Template name and content are required.");
+            }
+            
+            // saveUserRationaleTemplate is defined in db_config.php
+            // If templateId > 0, it updates; otherwise, it inserts.
+            $success = saveUserRationaleTemplate($userId, $templateName, $content, $templateId > 0 ? $templateId : null);
+            
+            // FIX: Add check for DB failure in the save function
+            if (!$success) {
+                 throw new Exception("Database failed to save or update the template.");
+            }
+
+            echo json_encode(['success' => $success, 'message' => 'Template saved/updated successfully.']);
+            exit; 
+
+        } elseif ($_POST['ajax_action'] === 'delete_user_template') {
+            $templateId = (int)($_POST['template_id'] ?? 0);
+            
+            if ($templateId <= 0) {
+                throw new Exception("Invalid template ID for deletion.");
+            }
+            
+            // deleteUserRationaleTemplate is defined in db_config.php
+            $success = deleteUserRationaleTemplate($userId, $templateId);
+
+            echo json_encode(['success' => $success, 'message' => 'Template deleted successfully.']);
+            exit; 
+        }
+    } catch (Exception $e) {
+        error_log("User Rationale Template Error: " . $e->getMessage());
+        http_response_code(500); 
+        // Pass the specific error message from the exception to the frontend for better debugging
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]); 
+        exit; 
+    }
+}
+// ---------------------------------------------------------------------------------
+
+
+/* ---------- HANDLE AJAX REQUESTS (SCHEME SAVE) ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_POST['ajax_scheme'] === '1') {
+    header('Content-Type: application/json');
+    $schemeId = (int)($_POST['scheme_id'] ?? 0);
+    
+    if ($schemeId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Invalid scheme ID.']);
+        exit;
+    }
+
+    try {
+        $updateFields = [];
+        $params = [];
+        
+        if (isset($_POST['action_step'])) {
+            $updateFields[] = 'action_step = :action_step';
+            $params[':action_step'] = trim($_POST['action_step']);
+        }
+        if (isset($_POST['recommended_scheme'])) {
+            $updateFields[] = 'recommended_scheme = :recommended_scheme';
+            $params[':recommended_scheme'] = trim($_POST['recommended_scheme']);
+        }
+        if (isset($_POST['recommended_amount'])) {
+            $updateFields[] = 'recommended_amount = :recommended_amount';
+            $params[':recommended_amount'] = (float)$_POST['recommended_amount'];
+        }
+
+        if (!empty($updateFields)) {
+            $sql = "UPDATE client_schemes SET " . implode(', ', $updateFields) . " WHERE id = :id";
+            $params[':id'] = $schemeId;
+            
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Scheme updated.']);
+        exit;
+    } catch (PDOException $e) {
+        error_log("AJAX Scheme Save Error: " . $e->getMessage());
+        http_response_code(500); 
+        echo json_encode(['success' => false, 'error' => 'Scheme update failed.']);
+        exit; 
+    }
+}
+// -------------------------------------------------------------------
 
 
 /* ---------- HANDLE POST REQUESTS (Non-AJAX, Redirect Only) ---------- */
-// ... (Existing code for SEND EMAIL and SAVE REPORT remains the same) ...
+// ... (Existing code for SEND EMAIL remains the same) ...
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_email']) && $_POST['send_email'] == '1') {
     handleEmailSending($clientId);
@@ -147,14 +270,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
             $rationale = trim($_POST['rationale'] ?? '');
             $signatureBlock = trim($_POST['signature_block'] ?? ''); // Read new signature
 
-            // Parse client message into greeting, intro, closing (using the same logic as AJAX)
+            // Parse client message into greeting, intro, closing 
             $lines = explode("\n\n", $clientMessage);
             $greeting = isset($lines[0]) ? trim($lines[0]) : '';
             $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
             $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
             $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
             
+            // Simple check to prevent multi-part message being treated as just intro/closing if no clear greeting prefix
             if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
+                // If it doesn't look like a greeting, assume the whole message is intro
                 $intro = $clientMessage;
                 $greeting = $closing = '';
             }
@@ -178,41 +303,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
                 ':id' => $clientId,
             ]);
 
-            // Save scheme recommendations if provided (Logic remains the same)
+            // Save scheme recommendations (handles all updates from the main form)
             if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
                 foreach ($_POST['recommended_scheme'] as $schemeId => $schemeName) {
                     
                     $schemeId = (int)$schemeId;
                     if ($schemeId <= 0) { continue; }
                     $amount = (float)($_POST['recommended_amount'][$schemeId] ?? 0);
+                    $actionStep = $_POST['action_step'][$schemeId] ?? 'Continue';
                     
                     $stmt = $pdo->prepare("
                         UPDATE client_schemes 
                         SET recommended_scheme = :scheme,
-                            recommended_amount = :amount
+                            recommended_amount = :amount,
+                            action_step = :action_step
                         WHERE id = :id
                     ");
                     $stmt->execute([
                         ':scheme' => trim($schemeName),
                         ':amount' => $amount,
-                        ':id' => $schemeId,
-                    ]);
-                }
-            }
-
-            // Save action steps if provided (Logic remains the same)
-            if (isset($_POST['action_step']) && is_array($_POST['action_step'])) {
-                foreach ($_POST['action_step'] as $schemeId => $actionStep) {
-                    
-                    $schemeId = (int)$schemeId;
-                    if ($schemeId <= 0) { continue; }
-                    
-                    $stmt = $pdo->prepare("
-                        UPDATE client_schemes 
-                        SET action_step = :action_step
-                        WHERE id = :id
-                    ");
-                    $stmt->execute([
                         ':action_step' => $actionStep,
                         ':id' => $schemeId,
                     ]);
@@ -253,33 +362,41 @@ if (!$client) {
     exit;
 }
 
-// FIX: Override RM defaults with LOGGED-IN USER details
+// Override RM defaults with LOGGED-IN USER details
 $rmName        = $currentUser['name'] ?? $currentUser['username'] ?? 'Relationship Manager';
 $rmDesignation = $currentUser['designation'] ?? 'Relationship Manager'; 
 $rmMobile      = $currentUser['mobile'] ?? 'N/A';
 $rmEmail       = $currentUser['email'] ?? 'N/A';
 
 
-// FIX: Get the list of all active user emails for the 'From' dropdown
+// Get the list of all active user emails for the 'From' dropdown
 $allActiveUsers = getAllActiveUserEmails(); 
 
 
-// Get ALL RMs and Templates (Logic remains the same)
+// Load User-Specific Rationale Templates
+$currentUserId = $currentUser['id'] ?? 0;
+$userRationaleTemplates = [];
+if ($currentUserId > 0) {
+    $userRationaleTemplates = getUserRationaleTemplates($currentUserId);
+} 
+
+// Get ALL RMs and Templates (Generic, for other sections)
 $templates = [
     'greeting' => getReportTemplates('greeting'),
     'intro' => getReportTemplates('intro'),
     'closing' => getReportTemplates('closing'),
-    'rationale' => getReportTemplates('rationale'),
+    // Note: 'rationale' here is now unused in rationale.php but kept for completeness
+    'rationale' => getReportTemplates('rationale'), 
 ];
 
 
-// Get related data (Logic remains the same)
+// Get related data
 $goals = getClientGoals($clientId);
 $allocations = getClientAllocations($clientId);
 $schemes = getClientSchemes($clientId);
 $annexures = getClientAnnexures($clientId);
 
-// Navigation (Logic remains the same)
+// Navigation
 $prevId = getPrevClientId($clientId);
 $nextId = getNextClientId($clientId);
 
@@ -307,7 +424,7 @@ $DEFAULT_RATIONALE = 'Rationale for recommendations';
 // DYNAMIC DEFAULT SIGNATURE BLOCK (Uses logged-in user details)
 $DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 
-// MERGED: Combine greeting, intro, and closing into ONE message (Logic remains the same)
+// MERGED: Combine greeting, intro, and closing into ONE message
 $clientMessageParts = [];
 
 // Add greeting
@@ -326,7 +443,7 @@ if ($introTextStored !== '') {
 
 // Add closing
 if ($closingTextStored !== '') {
-    $clientMessageParts[] = $closingTextParts[] = $closingTextStored;
+    $clientMessageParts[] = $closingTextStored;
 } else {
     $clientMessageParts[] = "We are very keen to have a portfolio discussion meeting with you to discuss the portfolio. Please let us know at your convenience.";
 }
@@ -335,7 +452,7 @@ $clientMessage = implode("\n\n", $clientMessageParts);
 
 $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
 
-// FIX: Use stored signature if saved, otherwise use the dynamically generated default.
+// Use stored signature if saved, otherwise use the dynamically generated default.
 $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATURE; 
 
 
@@ -925,67 +1042,38 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
 
-        // Auto-save dropdowns
-        document.querySelectorAll('.action-dropdown').forEach(function(select) {
-            select.addEventListener('change', function() {
-                const schemeId = select.getAttribute('data-scheme-id');
-                const value = select.value;
+        // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
+        document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
+            const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
+            
+            element.addEventListener(eventType, function() {
+                const schemeId = element.getAttribute('data-scheme-id');
+                const field = element.getAttribute('data-field') || 'action_step'; // Default to action_step for dropdown
+                const value = element.value.trim();
 
                 if (schemeId) {
+                    const postBody = {
+                        ajax_scheme: '1',
+                        scheme_id: schemeId,
+                    };
+                    postBody[field] = value;
+
                     fetch('view_report.php', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                         },
-                        body: new URLSearchParams({
-                            ajax_scheme: '1',
-                            scheme_id: schemeId,
-                            action_step: value
-                        })
+                        body: new URLSearchParams(postBody)
                     })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            showToast('Saved action step');
+                            showToast('Saved ' + (field === 'action_step' ? 'action step' : field.replace('_', ' ')));
                         } else {
                             alert('Save failed: ' + (data.error || 'Unknown error'));
                         }
                     })
                     .catch(err => console.error(err));
-                }
-            });
-        });
-
-        // Auto-save scheme inputs (text and number)
-        document.querySelectorAll('.scheme-input').forEach(function(input) {
-            input.addEventListener('blur', function() {
-                const schemeId = input.getAttribute('data-scheme-id');
-                const field = input.getAttribute('data-field');
-                const value = input.value.trim();
-
-                if (schemeId && field) {
-                    fetch('view_report.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                        },
-                        body: new URLSearchParams({
-                            ajax_scheme: '1',
-                            scheme_id: schemeId,
-                            [field]: value
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            showToast('Saved ' + field);
-                        } else {
-                            alert('Save failed: ' + (data.error || 'Unknown error'));
-                        }
-                    })
-                    .catch(err => {
-                        console.error('Save error:', err);
-                    });
                 }
             });
         });

@@ -20,7 +20,7 @@ function getPdo(): PDO {
     }
     return $pdo;
 }
-// ... (All other database and helper functions: getDefaultRelationshipManager, getEmailContacts, saveNewEmailContact, deleteEmailContacts, etc.) ...
+
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
     // Fetch RM set as default (is_default = 1)
@@ -87,7 +87,7 @@ function getAllActiveUserEmails(): array {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// --- Template Functions ---
+// --- Template Functions (Generic) ---
 
 function getReportTemplates(string $section_type): array {
     $pdo = getPdo();
@@ -124,14 +124,72 @@ function addNewTemplate(string $name, string $section_type, string $content): ?i
 }
 
 
-/* ---------- EMAIL CONTACT FUNCTIONS (For Dropdowns Persistence) ---------- */
+// --- USER SPECIFIC TEMPLATE FUNCTIONS (using new table name user_rationale_templates) ---
 
 /**
- * Fetches email addresses for a specific list type and client (if applicable).
- * @param string $list_type 'RM', 'CLIENT', or 'CC'.
- * @param int|null $clientId Client ID for client-specific emails, NULL for shared RM/CC lists.
- * @return array Array of email strings.
+ * Fetches Rationale templates specific to a logged-in user.
+ * @param int $userId The ID of the currently logged-in user.
+ * @return array Array of user-specific rationale templates.
  */
+function getUserRationaleTemplates(int $userId): array {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("
+        SELECT id, template_name AS name, content 
+        FROM user_rationale_templates  -- UPDATED TABLE NAME
+        WHERE user_id = :user_id AND section_type = 'rationale' 
+        ORDER BY template_name ASC
+    ");
+    $stmt->execute([':user_id' => $userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Saves or updates a user-specific rationale template.
+ */
+function saveUserRationaleTemplate(int $userId, string $templateName, string $content, ?int $templateId = null): bool {
+    $pdo = getPdo();
+
+    if ($templateId) {
+        // Update existing template
+        $stmt = $pdo->prepare("
+            UPDATE user_rationale_templates -- UPDATED TABLE NAME
+            SET template_name = :name, content = :content 
+            WHERE id = :id AND user_id = :user_id
+        ");
+        return $stmt->execute([
+            ':name' => $templateName,
+            ':content' => $content,
+            ':id' => $templateId,
+            ':user_id' => $userId
+        ]);
+    } else {
+        // Insert new template
+        $stmt = $pdo->prepare("
+            INSERT INTO user_rationale_templates (user_id, template_name, content, section_type) -- UPDATED TABLE NAME
+            VALUES (:user_id, :name, :content, 'rationale')
+        ");
+        return $stmt->execute([
+            ':user_id' => $userId,
+            ':name' => $templateName,
+            ':content' => $content
+        ]);
+    }
+}
+
+/**
+ * Deletes a user-specific rationale template.
+ */
+function deleteUserRationaleTemplate(int $userId, int $templateId): bool {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("DELETE FROM user_rationale_templates WHERE id = :id AND user_id = :user_id"); // UPDATED TABLE NAME
+    return $stmt->execute([
+        ':id' => $templateId,
+        ':user_id' => $userId
+    ]);
+}
+
+
+/* ---------- EMAIL CONTACT FUNCTIONS (For Dropdowns Persistence) ---------- */
 function getEmailContacts(string $list_type, ?int $clientId = null): array {
     $pdo = getPdo();
     
@@ -151,9 +209,6 @@ function getEmailContacts(string $list_type, ?int $clientId = null): array {
     return $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
-/**
- * Adds a new email contact to the database.
- */
 function saveNewEmailContact(string $email, string $list_type, ?int $clientId = null): bool {
     $pdo = getPdo();
     
@@ -171,13 +226,6 @@ function saveNewEmailContact(string $email, string $list_type, ?int $clientId = 
     return $stmt->execute($params);
 }
 
-/**
- * Deletes one or more email contacts from the database.
- * @param array $emailsToDelete Array of email strings to delete.
- * @param string $list_type The list type to restrict deletion.
- * @param int|null $clientId Client ID (optional, but recommended for 'CLIENT' type).
- * @return int Number of rows deleted.
- */
 function deleteEmailContacts(array $emailsToDelete, string $list_type, ?int $clientId = null): int {
     if (empty($emailsToDelete)) return 0;
     
@@ -287,7 +335,7 @@ function formatAmount($value) {
         return "Rs." . round($num / 100000, 2) . " lakhs";
     }
 
-    // Thousands = 1,000 to < 1,00,000
+    // Thousands = 1,000 to < 1,00,00,000
     if ($num >= 1000) {
         return "Rs." . round($num / 1000, 1) . "k";
     }
@@ -367,3 +415,4 @@ function checkDatabaseEnvironment(): array {
     
     return $errors;
 }
+// NO CLOSING PHP TAG
