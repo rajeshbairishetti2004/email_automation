@@ -5,10 +5,18 @@
 
 require_once 'db_config.php'; // Include database config to use new functions
 
-$clientId = 139; // Using HARVINDER SINGH GILL's ID from SQL dump
+// This file now relies on $clientId, $allActiveUsers, and $default_sender_email
+// being passed or available in the scope of view_report.php.
 
-// --- FETCH DATA FROM DATABASE ---
+// Use the client ID from the main view_report context
+$clientId = (int)($clientId ?? 0); 
+
+// --- FETCH DATA FROM DATABASE (Requires $clientId, $default_sender_email and $allActiveUsers from view_report.php) ---
 try {
+    // Note: $allActiveUsers should be populated in view_report.php using getAllActiveUserEmails()
+    // We assume $allActiveUsers is passed into the scope of this file from view_report.php
+    $allActiveUsers = $allActiveUsers ?? []; 
+    
     $rmMailOptions     = getEmailContacts('RM');
     $generalCCMailOptions = getEmailContacts('CC');
     $clientMailOptions = getEmailContacts('CLIENT', $clientId);
@@ -16,15 +24,15 @@ try {
     // Combine all CC options (RM emails + Client emails + General CC emails)
     $allEmails = array_unique(array_merge($rmMailOptions, $clientMailOptions, $generalCCMailOptions));
 
-    // Set a default initial 'From' email (e.g., the first RM email)
-    $fromEmail = !empty($rmMailOptions) ? $rmMailOptions[0] : '';
+    // Fallback if $default_sender_email was not explicitly set in view_report.php
+    $default_sender_email = $default_sender_email ?? (!empty($allActiveUsers) ? $allActiveUsers[0]['email'] : '');
     
 } catch (PDOException $e) {
     // Fallback if DB connection fails
     $rmMailOptions = ['db_error@fallback.com'];
     $clientMailOptions = [];
     $allEmails = [];
-    $fromEmail = 'db_error@fallback.com';
+    $default_sender_email = 'db_error@fallback.com';
     error_log("Failed to load email contacts: " . $e->getMessage());
 }
 ?>
@@ -44,19 +52,35 @@ try {
                         <div class="input-with-buttons">
                             <label for="from_email">From (Sender Email):</label>
                             <div class="manage-buttons-group">
-                                <button type="button" class="manage-btn add-btn" title="Add Email" onclick="addEmail('rm-emails', 'From Options', 'RM')">➕</button>
-                                <button type="button" class="manage-btn delete-btn" title="Delete Email" onclick="openDeleteModal('rm-emails', 'From Options', 'from_email', 'RM')">➖</button>
+                                <button type="button" class="manage-btn add-btn" title="Add Email" onclick="addEmail('from-emails-list', 'From Options', 'RM')">➕</button>
+                                <button type="button" class="manage-btn delete-btn" title="Delete Email" onclick="openDeleteModal('from-emails-list', 'From Options', 'from_email', 'RM')">➖</button>
                             </div>
                         </div>
-                        <input type="email" name="from_email" id="from_email" 
-                               value="<?php echo htmlspecialchars($fromEmail); ?>" 
-                               list="rm-emails"
-                               required
-                               class="styled-input">
                         
-                        <datalist id="rm-emails">
-                            <?php foreach ($rmMailOptions as $email): ?>
-                                <option value="<?php echo htmlspecialchars($email); ?>">
+                       <select name="from_email" id="from_email" 
+        required
+        class="styled-input">
+    <?php 
+    if (!empty($allActiveUsers)):
+        foreach ($allActiveUsers as $user):
+            // FIX: Change the display variable to ONLY include the email.
+            $display = htmlspecialchars($user['email']);
+            
+            // Set 'selected' if this email matches the logged-in user's email
+            $selected = (strtolower($user['email']) === strtolower($default_sender_email)) ? 'selected' : '';
+            
+            echo "<option value=\"" . htmlspecialchars($user['email']) . "\" {$selected}>{$display}</option>";
+        endforeach;
+    else:
+        // Fallback if no active users are found
+        echo "<option value=\"\" disabled selected>No active sender emails found</option>";
+    endif;
+    ?>
+</select>
+                        
+                        <datalist id="from-emails-list">
+                            <?php foreach ($allActiveUsers as $user): ?>
+                                <option value="<?php echo htmlspecialchars($user['email']); ?>">
                             <?php endforeach; ?>
                         </datalist>
                     </div>
@@ -123,7 +147,7 @@ try {
             </div>
 
         </div>
-                            <button type="submit" class="submit-button">
+        <button type="submit" class="submit-button">
             Send Report by Email
         </button>
         
@@ -145,6 +169,7 @@ try {
 </div>
 
 <style>
+    /* ... (CSS remains the same) ... */
     /* New Class to match Client Communication Box (image_a36b79.png) */
     .communication-box-style {
         border: 1px solid #c9c9c9; 

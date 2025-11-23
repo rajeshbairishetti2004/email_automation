@@ -26,7 +26,7 @@ try {
         }
         $email = trim($_POST['email']);
         
-        // Execute the database insertion
+        // Execute the database insertion (saveNewEmailContact is defined in db_config.php)
         $success = saveNewEmailContact($email, $listType, $clientId);
         
         if ($success) {
@@ -45,7 +45,7 @@ try {
         // Emails come as a comma-separated string from JavaScript
         $emailsToDelete = array_map('trim', explode(',', $_POST['emails']));
         
-        // Execute the database deletion
+        // Execute the database deletion (deleteEmailContacts is defined in db_config.php)
         $deletedCount = deleteEmailContacts($emailsToDelete, $listType, $clientId);
         
         echo json_encode(['status' => 'success', 'message' => "$deletedCount email(s) deleted successfully."]);
@@ -61,4 +61,3 @@ try {
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Database operation failed.']);
 }
-?>

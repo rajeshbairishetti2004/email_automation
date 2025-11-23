@@ -343,6 +343,9 @@ if ($currentUser) {
     $rmEmail       = $rm['email'] ?? 'N/A';
 }
 
+// FIX: Get the list of all active user emails for the 'From' dropdown
+$allActiveUsers = getAllActiveUserEmails(); 
+
 
 // Get ALL RMs and Templates
 $allRMs = getAllRelationshipManagers();

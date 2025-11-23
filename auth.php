@@ -32,18 +32,19 @@ function getCurrentUser(): ?array {
         return null;
     }
     $pdo = getPdo();
-    // Fetch all relevant fields. This query requires 'mobile' and 'designation' columns to exist in the 'users' table.
+    // Select all required fields for header display and RM defaults.
+    // NOTE: This query assumes 'mobile' and 'designation' columns have been added to the 'users' table via SQL.
     $stmt = $pdo->prepare("SELECT id, username, name, email, mobile, designation FROM users WHERE id = :id");
     $stmt->execute([':id' => $_SESSION['user_id']]);
     
-    // FIX: Check if fetch returns false (no user found) and explicitly return null to satisfy the ?array return type.
+    // FIX: Explicitly check for false return from fetch to prevent TypeError
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user === false) {
         return null;
     }
     
-    // Safety Fallbacks in case columns are NULL in the database
+    // Safety Fallbacks in case columns are NULL in the DB
     $user['name'] = $user['name'] ?? $user['username'];
     $user['designation'] = $user['designation'] ?? 'System User';
     $user['mobile'] = $user['mobile'] ?? 'N/A';

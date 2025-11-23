@@ -1,6 +1,5 @@
 <?php
 // db_config.php
-// ... (All functions remain the same as the final version in the previous response) ...
 require_once 'env_loader.php';
 
 // Get database credentials from environment variables
@@ -73,6 +72,19 @@ function addNewRelationshipManager(string $name, string $designation, string $mo
         ':is_default' => $is_default ? 1 : 0
     ]);
     return (int)$pdo->lastInsertId();
+}
+
+/**
+ * Fetches the ID, Name, and Email of all registered users.
+ * Used to populate the "From" dropdown list.
+ * @return array Array of user records.
+ */
+function getAllActiveUserEmails(): array {
+    $pdo = getPdo();
+    // FIX: Removed 'WHERE status = "active"' to return all emails and fix visibility issue.
+    $stmt = $pdo->prepare("SELECT id, name, username, email FROM users ORDER BY name ASC, username ASC");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // --- Template Functions ---
@@ -355,4 +367,3 @@ function checkDatabaseEnvironment(): array {
     
     return $errors;
 }
-?>
