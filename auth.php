@@ -1,5 +1,5 @@
 <?php
-// auth.php
+// auth.php (Updated with designation in registration)
 
 require_once 'db_config.php';
 // Start the session at the very beginning
@@ -33,7 +33,6 @@ function getCurrentUser(): ?array {
     }
     $pdo = getPdo();
     // Select all required fields for header display and RM defaults.
-    // NOTE: This query assumes 'mobile' and 'designation' columns have been added to the 'users' table via SQL.
     $stmt = $pdo->prepare("SELECT id, username, name, email, mobile, designation FROM users WHERE id = :id");
     $stmt->execute([':id' => $_SESSION['user_id']]);
     
@@ -44,9 +43,10 @@ function getCurrentUser(): ?array {
         return null;
     }
     
-    // Safety Fallbacks in case columns are NULL in the DB
+    // Safety Fallbacks
     $user['name'] = $user['name'] ?? $user['username'];
-    $user['designation'] = $user['designation'] ?? 'System User';
+    // FIX: Fallback to 'Relationship Manager' (the most common professional title)
+    $user['designation'] = $user['designation'] ?? 'Relationship Manager'; 
     $user['mobile'] = $user['mobile'] ?? 'N/A';
     $user['email'] = $user['email'] ?? 'N/A';
     
@@ -79,9 +79,10 @@ function attemptLogin(string $emailOrUsername, string $password): bool {
 
 /**
  * Registers a new user.
+ * UPDATED: Added $designation parameter.
  * @return bool|string User ID on success, error message string otherwise.
  */
-function registerUser(string $username, string $email, string $mobile, string $password, string $name): bool|string {
+function registerUser(string $username, string $email, string $mobile, string $password, string $name, string $designation): bool|string {
     $pdo = getPdo();
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
     
@@ -92,19 +93,20 @@ function registerUser(string $username, string $email, string $mobile, string $p
         return "Username or email already exists.";
     }
 
-    // 2. Insert new user with 'inactive' status (will be 'active' after OTP)
+    // 2. Insert new user with 'inactive' status and the provided designation
     $stmt = $pdo->prepare("
-        INSERT INTO users (username, email, password_hash, name, mobile, status)
-        VALUES (:username, :email, :password_hash, :name, :mobile, 'inactive')
+        INSERT INTO users (username, email, mobile, designation, password_hash, name, status)
+        VALUES (:username, :email, :mobile, :designation, :password_hash, :name, 'inactive')
     ");
 
     try {
         $stmt->execute([
             ':username' => $username,
             ':email' => $email,
+            ':mobile' => $mobile,
+            ':designation' => $designation, // <-- NEW PARAMETER
             ':password_hash' => $passwordHash,
             ':name' => $name,
-            ':mobile' => $mobile 
         ]);
         
         $userId = $pdo->lastInsertId();

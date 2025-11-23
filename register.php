@@ -9,20 +9,21 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = '';
-$name = $username = $email = $mobile = '';
+$name = $username = $email = $mobile = $designation = ''; // Added $designation
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $mobile = trim($_POST['mobile'] ?? '');
+    $designation = trim($_POST['designation'] ?? ''); // Read designation
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
     
     // Check AJAX availability status
     if (isset($_POST['username_available']) && $_POST['username_available'] === 'false') {
          $error = 'The chosen username is already taken. Please choose another.';
-    } elseif (empty($name) || empty($username) || empty($email) || empty($mobile) || empty($password) || empty($confirmPassword)) {
+    } elseif (empty($name) || empty($username) || empty($email) || empty($mobile) || empty($designation) || empty($password) || empty($confirmPassword)) {
         $error = 'All fields are required.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Invalid email format.';
@@ -31,7 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters long.';
     } else {
-        $result = registerUser($username, $email, $mobile, $password, $name);
+        // UPDATED: Pass designation to registerUser
+        $result = registerUser($username, $email, $mobile, $password, $name, $designation);
         
         if ($result === true) {
             // Registration success, proceed to OTP verification
@@ -121,7 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         input[type="text"],
         input[type="email"],
         input[type="password"],
-        input[type="tel"] {
+        input[type="tel"],
+        select { /* Added select */
             width: 100%;
             padding: 12px;
             margin-bottom: 20px;
@@ -189,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php endif; ?>
 
     <form method="post">
-        <label for="name">Name</label>
+        <label for="name">Full Name</label>
         <input type="text" name="name" id="name" required value="<?= htmlspecialchars($name) ?>">
         
         <label for="username">Username</label>
@@ -202,6 +205,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <label for="mobile">Mobile Number</label>
         <input type="tel" name="mobile" id="mobile" required value="<?= htmlspecialchars($mobile) ?>">
+
+        <label for="designation">Designation</label>
+        <select name="designation" id="designation" required>
+            <option value="" disabled selected>Select your role</option>
+            <option value="Relationship Manager" <?= ($designation === 'Relationship Manager' ? 'selected' : '') ?>>Relationship Manager</option>
+            <option value="Associate Relationship Manager" <?= ($designation === 'Associate Relationship Manager' ? 'selected' : '') ?>>Associate Relationship Manager</option>
+        </select>
         
         <label for="password">Password (min 6 chars)</label>
         <div class="password-container">
