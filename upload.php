@@ -4,14 +4,39 @@
 // - Parse and build per-client reports
 // - Store everything into DB
 
-require_once 'login.php';
+require_once 'auth.php'; 
 require_once 'db_config.php';
-require_once 'parsers.php';
-require_once 'renderers.php';
-require_once 'env_loader.php';
+// Assuming parsers.php, renderers.php, and env_loader.php exist
+require_once 'parsers.php'; 
+require_once 'renderers.php'; 
+require_once 'env_loader.php'; 
 
-requireAuth();
+requireAuth(); // Enforce login
 
+// Fetch current user details
+$currentUser = getCurrentUser();
+
+// Determine the correct name to display.
+$displayName = 'User';
+$nameForInitials = 'U';
+
+if ($currentUser) {
+    // Priority 1: Use the formal 'name' if available and not empty.
+    if (!empty($currentUser['name'])) {
+        $displayName = htmlspecialchars($currentUser['name']);
+        $nameForInitials = $currentUser['name'];
+    } 
+    // Priority 2: Fallback to 'username' if 'name' is empty/null.
+    elseif (!empty($currentUser['username'])) {
+        $displayName = htmlspecialchars($currentUser['username']);
+        $nameForInitials = $currentUser['username'];
+    }
+}
+
+$initials = strtoupper(substr($nameForInitials, 0, 1));
+
+
+/* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
 /* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
 $DEFAULT_GREETING  = $_POST['greeting']       ?? 'Dear Mr.';
 $DEFAULT_INTRO     = $_POST['intro_text']     ?? 'Introduction';
@@ -262,10 +287,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                 ':total_goal_current' => $totalGoalCurrent,
                 ':total_goal_target'  => $totalGoalTarget,
                 ':total_sip'          => $totalSip,
-                ':greeting_prefix'    => $greetingBase,
-                ':intro_text'         => $introText,
-                ':closing_text'       => $closingText,
-                ':rationale_text'     => $rationaleText,
+                ':greeting_prefix'    => $DEFAULT_GREETING,
+                ':intro_text'         => $DEFAULT_INTRO,
+                ':closing_text'       => $DEFAULT_CLOSING,
+                ':rationale_text'     => $DEFAULT_RATIONALE,
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
@@ -328,9 +353,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
         if ($firstClientId > 0) {
             header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
             exit;
-        }
+        } 
+        
+        // --- ADDED FALLBACK FIX --- 
+        // If files were processed but no clients were found/saved ($firstClientId == 0), 
+        // redirect to the list of saved reports.
+        header('Location: view_saved_reports.php?status=no_new_clients');
+        exit;
+        // ------------------
 
     } catch (Throwable $e) {
+        // ... (Error handling block remains the same) ...
         ?>
         <!DOCTYPE html>
         <html>
@@ -371,12 +404,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 <head>
     <title>Upload Client Files</title>
     
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/styles.css">
     
     <style>
-        body { max-width: 800px; margin: 40px auto; }
+        /* General layout adjustments */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f7f9fb;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* --- FULL WIDTH HEADER BAR --- */
+        .full-width-header-bar {
+            width: 100%;
+            background-color: white; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Header content constrained to max-width */
+        .header {
+            max-width: 1200px; 
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px; 
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        .header-left img {
+            width: 50px; 
+            height: 50px;
+            margin-right: 15px;
+            object-fit: contain;
+        }
+        .header-left .greeting {
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #0288D1; 
+            font-family: 'Poppins', sans-serif;
+        }
+
+        /* Profile/Logout section styles */
+        .header-right {
+            position: relative; /* Essential for positioning the dropdown */
+            display: flex;
+            align-items: center;
+        }
+        
+        .profile-pic {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background-color: #4FC3F7; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            border: 2px solid #0288D1;
+            cursor: pointer; 
+            z-index: 20; /* Ensure it stays on top */
+        }
+
+        /* Dropdown container */
+        .profile-dropdown {
+            position: absolute;
+            top: 100%; /* Position below the profile icon */
+            right: 0;
+            margin-top: 10px; /* Space below icon */
+            width: auto;
+            min-width: 120px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            display: none; /* Initially hidden */
+            z-index: 10;
+        }
+
+        /* Dropdown link styling */
+        .profile-dropdown a {
+            padding: 10px 15px;
+            text-decoration: none;
+            display: block;
+            text-align: right;
+            font-size: 15px;
+            color: #333;
+            transition: background-color 0.1s;
+        }
+        .profile-dropdown a:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* Specific style for Logout link (Red Text) */
+        .profile-dropdown a.logout-link {
+            color: #F44336; /* Red text for logout */
+            font-weight: 600;
+        }
+        
+        /* --- MAIN PAGE CONTENT --- */
+        .main-content {
+            max-width: 800px;
+            margin: 20px auto 40px auto; 
+            padding: 0 20px; 
+            text-align: center; 
+        }
+
+        h1 {
+            color: #0288D1;
+            font-family: 'Poppins', sans-serif;
+            font-size: 24px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .nav-bar {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: center; 
+            gap: 10px;
+        }
+        .nav-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #0288D1;
+            color: #fff;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 15px; 
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .nav-button:hover {
+            background-color: #01579B;
+        }
         
         label {
             display: block;
@@ -384,6 +553,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             font-weight: 600;
             color: #0288D1;
             font-size: 14px;
+            text-align: left; 
         }
         
         input[type="file"],
@@ -396,19 +566,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             font-family: 'Inter', sans-serif;
             margin-top: 8px;
             font-size: 14px;
-        }
-        
-        input[type="file"]:focus,
-        input[type="text"]:focus,
-        textarea:focus {
-            border-color: #4FC3F7;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
-        }
-        
-        textarea {
-            min-height: 100px;
-            resize: vertical;
         }
         
         button[type="submit"] {
@@ -425,36 +582,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
         }
         
-        button[type="submit"]:hover {
-            background: linear-gradient(135deg, #29B6F6 0%, #0288D1 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(41, 182, 246, 0.4);
-        }
-        
         .form-section {
             background: white;
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
             margin-bottom: 20px;
+            text-align: left; 
         }
     </style>
 </head>
 <body>
 
-<div class="nav-bar">
-    <a href="upload.php" class="nav-button">Upload New Files</a>
-    <a href="view_saved_reports.php" class="nav-button">View Saved Reports</a>
+<div class="full-width-header-bar">
+    <header class="header">
+        <div class="header-left">
+            <img src="image.png" alt="Company Logo">
+            <span class="greeting">Hi <?= $displayName ?>!</span>
+        </div>
+        
+        <div class="header-right">
+            <div class="profile-pic" onclick="toggleDropdown()">
+                <?= $initials ?>
+            </div>
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <a href="logout.php" class="logout-link">Logout</a>
+            </div>
+        </div>
+    </header>
 </div>
 
-<h1>Upload Client Data Files</h1>
+<div class="main-content">
+    
+    <div class="nav-bar">
+        <a href="upload.php" class="nav-button">Upload New Files</a>
+        <a href="view_saved_reports.php" class="nav-button">View Saved Reports</a>
+    </div>
 
-<div class="form-section">
-    <form method="post" enctype="multipart/form-data">
-        <label for="client_files">Select Excel &amp; PDF files (multiple allowed):</label>
-        <input type="file" name="client_files[]" id="client_files" multiple required>
-        <button type="submit">Create Reports</button>
-    </form>
+    <h1>Upload Client Data Files</h1>
+
+    <div class="form-section">
+        <form method="post" enctype="multipart/form-data">
+            <label for="client_files">Select Excel &amp; PDF files (multiple allowed):</label>
+            <input type="file" name="client_files[]" id="client_files" multiple required>
+            <button type="submit">Create Reports</button>
+        </form>
+    </div>
 </div>
+
+<script>
+    function toggleDropdown() {
+        const dropdown = document.getElementById('profileDropdown');
+        const isVisible = dropdown.style.display === 'block';
+        
+        // Hide all open dropdowns first (if any)
+        document.querySelectorAll('.profile-dropdown').forEach(d => {
+            d.style.display = 'none';
+        });
+
+        // Toggle visibility of the current dropdown
+        if (!isVisible) {
+            dropdown.style.display = 'block';
+        }
+    }
+
+    // Close the dropdown if the user clicks anywhere outside of it
+    document.addEventListener('click', function(event) {
+        const profilePic = document.querySelector('.profile-pic');
+        const dropdown = document.getElementById('profileDropdown');
+
+        if (profilePic && dropdown) {
+            const isClickInsidePic = profilePic.contains(event.target);
+            const isClickInsideDropdown = dropdown.contains(event.target);
+
+            if (!isClickInsidePic && !isClickInsideDropdown) {
+                dropdown.style.display = 'none';
+            }
+        }
+    });
+</script>
+
 </body>
 </html>

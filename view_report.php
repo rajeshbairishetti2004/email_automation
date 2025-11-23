@@ -4,7 +4,7 @@
 // - Inline editable fields with AJAX -> DB
 // - Send current client report by email using PHPMailer
 
-require_once 'login.php';
+require_once 'auth.php'; // FIX: Using auth.php instead of login.php
 require_once 'db_config.php';
 require_once 'email_handler.php';
 require_once 'renderers.php';
@@ -26,8 +26,28 @@ if ($clientId <= 0) {
     exit;
 }
 
-/* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
+// Fetch current user details for the header and defaults
+$currentUser = getCurrentUser();
 
+// Determine the correct name and initials for the header
+$displayName = 'User';
+$nameForInitials = 'U';
+
+if ($currentUser) {
+    if (!empty($currentUser['name'])) {
+        $displayName = htmlspecialchars($currentUser['name']);
+        $nameForInitials = $currentUser['name'];
+    } elseif (!empty($currentUser['username'])) {
+        $displayName = htmlspecialchars($currentUser['username']);
+        $nameForInitials = $currentUser['username'];
+    }
+}
+
+$initials = strtoupper(substr($nameForInitials, 0, 1));
+
+
+/* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
+// ... (getClientById, getClientGoals, getClientAllocations, etc. remain the same) ...
 function getClientById($clientId) {
     $pdo = getPdo();
     $stmt = $pdo->prepare("SELECT * FROM clients WHERE id = :id");
@@ -76,6 +96,7 @@ function getNextClientId($clientId) {
     $stmt->execute([':id' => $clientId]);
     return $stmt->fetchColumn();
 }
+// --------------------------------------------------------------------------
 
 
 /* ---------- HANDLE POST REQUESTS (Non-AJAX, Redirect Only) ---------- */
@@ -304,8 +325,24 @@ if (!$client) {
     exit;
 }
 
-// Get RM data
+// Get RM data (used for template lists and fallback signature)
 $rm = getDefaultRelationshipManager();
+
+// FIX: Override RM defaults with LOGGED-IN USER details
+if ($currentUser) {
+    // If the logged-in user is not in the RM table, we construct a virtual RM profile from their user data
+    $rmName        = $currentUser['name'] ?? $currentUser['username'] ?? 'Relationship Manager';
+    $rmDesignation = $currentUser['designation'] ?? 'System User';
+    $rmMobile      = $currentUser['mobile'] ?? 'N/A';
+    $rmEmail       = $currentUser['email'] ?? 'N/A';
+} else {
+    // Fallback to default RM from DB if no user logged in (shouldn't happen due to requireAuth)
+    $rmName        = $rm['name'] ?? 'Relationship Manager';
+    $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
+    $rmMobile      = $rm['mobile'] ?? 'N/A';
+    $rmEmail       = $rm['email'] ?? 'N/A';
+}
+
 
 // Get ALL RMs and Templates
 $allRMs = getAllRelationshipManagers();
@@ -348,12 +385,7 @@ $DEFAULT_INTRO     = 'Introduction';
 $DEFAULT_CLOSING   = 'Closing remarks';
 $DEFAULT_RATIONALE = 'Rationale for recommendations';
 
-// DYNAMIC DEFAULT SIGNATURE BLOCK
-$rmName        = $rm['name'] ?? 'Relationship Manager';
-$rmDesignation = $rm['designation'] ?? 'Relationship Manager';
-$rmMobile      = $rm['mobile'] ?? 'N/A';
-$rmEmail       = $rm['email'] ?? 'N/A';
-
+// DYNAMIC DEFAULT SIGNATURE BLOCK (Uses logged-in user details)
 $DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 
 // MERGED: Combine greeting, intro, and closing into ONE message
@@ -398,11 +430,99 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <style>
         /* Global CSS included here for convenience and external files */
         body { 
+            /* Reset body margins for full-width header */
+            margin: 0; 
+            padding: 0;
             font-family: Arial, sans-serif; 
-            margin: 30px; /* Increased margin for borders */ 
         }
+        
+        /* --- Styles copied from upload.php header --- */
+        .full-width-header-bar {
+            width: 100%;
+            background-color: white; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            max-width: 1200px; 
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px; 
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        .header-left img {
+            width: 50px; 
+            height: 50px;
+            margin-right: 15px;
+            object-fit: contain;
+        }
+        .header-left .greeting {
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #0288D1; 
+            font-family: 'Poppins', sans-serif;
+        }
+        .header-right {
+            position: relative; 
+            display: flex;
+            align-items: center;
+        }
+        .profile-pic {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background-color: #4FC3F7; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            border: 2px solid #0288D1;
+            cursor: pointer; 
+            z-index: 20;
+        }
+        .profile-dropdown {
+            position: absolute;
+            top: 100%; 
+            right: 0;
+            margin-top: 10px; 
+            width: auto;
+            min-width: 120px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            display: none; 
+            z-index: 10;
+        }
+        .profile-dropdown a {
+            padding: 10px 15px;
+            text-decoration: none;
+            display: block;
+            text-align: right;
+            font-size: 15px;
+            color: #333;
+            transition: background-color 0.1s;
+        }
+        .profile-dropdown a.logout-link {
+            color: #F44336; 
+            font-weight: 600;
+        }
+        
+        /* --- Report Specific Styles --- */
+        .main-content {
+            max-width: 1200px; /* Use wide width for report tables */
+            margin: 20px auto 40px auto; 
+            padding: 0 20px; 
+        }
+        
         .report-table {
-            width: 70%;
+            width: 100%; /* Use full width in report view */
             margin: 0 auto 20px 0;
         }
         .report-table.small {
@@ -412,7 +532,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         .client-report {
             page-break-after: always;
         }
-        /* CSS for smooth flash message transition */
+        /* ... (rest of the CSS remains the same) ... */
         .flash-message {
             padding: 10px;
             border-radius: 4px;
@@ -420,7 +540,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             opacity: 1;
             transition: opacity 0.5s ease-out, margin-top 0.5s ease-out;
             margin-top: 0;
-            /* Added for contextual messages */
             width: 100%;
             box-sizing: border-box;
         }
@@ -432,111 +551,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             background: #ffe6e6;
             border: 1px solid #b30000;
         }
-        /* New Button Styling */
-        .rm-action-button {
-            display: inline-block;
-            padding: 4px 8px;
-            background-color: #007bff;
-            color: white !important;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 13px;
-            margin-left: 10px;
-            transition: background-color 0.2s;
-            line-height: normal;
-        }
-        .rm-action-button:hover {
-            background-color: #0056b3;
-            text-decoration: none;
-        }
-        .delete-rm-btn, .delete-template-btn, .edit-template-btn, .add-template-btn {
-            color: #007bff !important;
-            font-weight: 600;
-            text-decoration: none;
-            padding: 2px 4px;
-            border: 1px solid #f0f0f0;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 13px;
-            line-height: 1.5;
-            vertical-align: top;
-            margin-left: 5px; /* Added margin for spacing */
-        }
-        .delete-template-btn {
-            color: red !important;
-        }
-        .add-template-btn {
-            color: green !important;
-        }
-        .delete-rm-btn:hover, .delete-template-btn:hover, .edit-template-btn:hover, .add-template-btn:hover {
-            background-color: #eee;
-            text-decoration: none;
-        }
-        .rm-list-item, .template-list-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 0;
-            border-bottom: 1px dashed #eee;
-        }
-        .template-part-selector {
-            margin-bottom: 10px;
-            display: flex;
-            align-items: flex-start;
-            flex-wrap: wrap;
-            padding: 10px 0;
-            border: 1px dashed #eee;
-            border-radius: 4px;
-        }
-        .template-selector-group {
-            margin-right: 20px;
-            padding: 0 10px;
-            position: relative;
-        }
-        .template-selector-group label {
-            font-weight: 600;
-            font-size: 13px;
-            display: block;
-            margin-bottom: 5px;
-        }
-        /* File List Display */
-        #file-list-display {
-            display: inline-block;
-            margin-left: 10px;
-            font-size: 12px;
-            color: #555;
-            vertical-align: top; /* Align with input */
-            margin-top: 5px; /* Adjust alignment with input button */
-        }
-        .file-name-item {
-            display: block;
-            margin-bottom: 2px;
-            font-weight: 600;
-        }
-        /* Email Fields Layout */
-        .email-fields-container {
-            /* FIX 2: Ensure fields stack vertically */
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .email-field-group {
-            width: 100%; /* Ensure it takes full vertical space */
-        }
-        .email-field-group label {
-            display: block;
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 2px;
-        }
-        .email-field-group input {
-            padding: 4px 8px; 
-            font-size: 13px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        /* FIX 1: NEW: Horizontal Layout for Email/Attachments */
+        /* ... (all button/list styles remain the same) ... */
         .email-attachment-wrapper {
             display: flex;
             gap: 20px;
@@ -545,204 +560,261 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         }
         .email-recipients-section,
         .file-attachments-section {
-            flex: 1 1 48%; /* Ensures a balanced 50/50 split with a gap */
-            padding: 0; /* Remove internal padding here, added it to the fields/wrapper */
+            flex: 1 1 48%; 
+            padding: 0;
         }
     </style>
 </head>
 <body>
 
-<div class="nav-bar">
-    <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
-    <a href="upload.php" class="nav-button">Upload New Files</a>
-    <?php if ($prevId): ?>
-        <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
-    <?php endif; ?>
-    <?php if ($nextId): ?>
-        <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
-    <?php endif; ?>
-    <button type="button" onclick="window.print()" class="nav-button">Print</button>
-</div>
-
-<?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
-    <div class="flash-message flash-success">Email sent successfully.</div>
-<?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
-    <div class="flash-message flash-error">Failed to send email. Please check SMTP settings.</div>
-<?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
-    <div class="flash-message flash-success">✅ Report saved successfully!</div>
-<?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
-    <div class="flash-message flash-success">✅ Report created successfully! You can now edit and save the details.</div>
-<?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
-    <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
-<?php endif; ?>
-
-<div style="margin-bottom: 20px;">
-    <?php require_once 'send_email.php'; ?>
-</div>
-
-<h1>Client Report</h1>
-<h2><?php echo htmlspecialchars($name); ?></h2>
-
-<div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
-
-    <form method="POST" id="reportForm">
-        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-
-        <?php require_once 'client_communication.php'; ?>
-        
-        <h3>1. Current Situation</h3>
-        <table class="report-table">
-            <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
-            <tr>
-                <td>Total Amount </td>
-                <td><?php echo formatAmount($totalAmount); ?></td>
-            </tr>
-            <tr>
-                <td>CAGR of current schemes</td>
-                <td><?php echo formatPercent($cagr); ?></td>
-            </tr>
-            <?php if ($xirr != 0): ?>
-                <tr>
-                    <td>XIRR of all schemes since inception</td>
-                    <td><?php echo formatPercent($xirr); ?></td>
-                </tr>
-            <?php endif; ?>
-            <tr>
-                <td>Profit since inception</td>
-                <td><?php echo formatAmount($profit); ?></td>
-            </tr>
-        </table>
-
-        <h3>2. Objectives Progress for guiding on appropriate schemes</h3>
-        <table class="report-table">
-            <tr>
-                <th>Goal/s</th>
-                <th>Target Year</th>
-                <th>Current Amount (Rs)</th>
-                <th>SIP/SWP</th>
-                <th>Target Amount (Rs)</th>
-                <th>Status</th>
-            </tr>
-            <?php foreach ($goals as $g): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($g['goal']); ?></td>
-                    <td><?php
-                        $year = '';
-                        if (!empty($g['goal_date'])) {
-                            $year = substr($g['goal_date'], -4);
-                        }
-                        echo htmlspecialchars($year);
-                    ?></td>
-                    <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
-                    <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
-                    <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
-                    <td class="<?php echo ($g['status'] === 'On Track') ? 'status-on' : 'status-off'; ?>">
-                        <?php echo ($g['status'] === 'Needs Attention') ? 'Invest More' : htmlspecialchars($g['status']); ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            <tr>
-                <td><strong>Total</strong></td>
-                <td></td>
-                <td><?php echo formatAmount($totalGoalCurrent); ?></td>
-                <td><?php echo formatAmount($totalSip); ?></td>
-                <td><?php echo formatAmount($totalGoalTarget); ?></td>
-                <td></td>
-            </tr>
-        </table>
-
-        <h3>3. Appropriate Product Selection at a macro level</h3>
-        <table class="report-table small">
-            <tr>
-                <th>Asset</th>
-                <th>Share%</th>
-            </tr>
-            <?php
-            $sumShare = 0;
-            foreach ($allocations as $a):
-                $sumShare += (float)$a['share_pct'];
-                ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($a['asset']); ?></td>
-                    <td><?php echo number_format((float)$a['share_pct'], 0); ?></td>
-                </tr>
-            <?php endforeach; ?>
-            <tr>
-                <td><strong>Total</strong></td>
-                <td><strong><?php echo number_format($sumShare, 0); ?></strong></td>
-            </tr>
-        </table>
-
-        <h3>4. Appropriate Scheme Selection</h3>
-        <table class="report-table">
-            <tr>
-                <th colspan="3">Present Schemes</th>
-                <th rowspan="2">Action Step</th>
-                <th colspan="2">Recommended Schemes</th>
-            </tr>
-            <tr>
-                <th>Scheme Name</th>
-                <th>SIP/SWP</th>
-                <th>Value as of <?php echo htmlspecialchars($asOn); ?></th>
-                <th>Scheme Name</th>
-                <th>Amount</th>
-            </tr>
-            <?php foreach ($schemes as $s): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
-                    <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
-                    <td><?php echo formatAmount((float)$s['current_value']); ?></td>
-                    <td>
-                        <select name="action_step[<?php echo (int)$s['id']; ?>]" 
-                                class="action-dropdown" 
-                                data-scheme-id="<?php echo (int)$s['id']; ?>">
-                            <option value="Continue" <?php echo ($s['action_step'] ?? 'Continue') === 'Continue' ? 'selected' : ''; ?>>Continue</option>
-                            <option value="Drop" <?php echo ($s['action_step'] ?? '') === 'Drop' ? 'selected' : ''; ?>>Drop</option>
-                            <option value="Switch" <?php echo ($s['action_step'] ?? '') === 'Switch' ? 'selected' : ''; ?>>Switch</option>
-                            <option value="Redeem" <?php echo ($s['action_step'] ?? '') === 'Redeem' ? 'selected' : ''; ?>>Redeem</option>
-                            <option value="Partially Redeem" <?php echo ($s['action_step'] ?? '') === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
-                        </select>
-                    </td>
-                    <td>
-                        <input type="text" 
-                               name="recommended_scheme[<?php echo (int)$s['id']; ?>]"
-                               class="scheme-input" 
-                               data-scheme-id="<?php echo (int)$s['id']; ?>"
-                               data-field="recommended_scheme"
-                               value="<?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?>"
-                               placeholder="Enter recommended scheme...">
-                    </td>
-                    <td>
-                        <input type="number" 
-                               name="recommended_amount[<?php echo (int)$s['id']; ?>]"
-                               class="scheme-input" 
-                               data-scheme-id="<?php echo (int)$s['id']; ?>"
-                               data-field="recommended_amount"
-                               value="<?php echo $s['recommended_amount'] ?? ''; ?>"
-                               placeholder="Amount"
-                               step="0.01">
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-        </table>
-
-        <?php require_once 'rationale.php'; ?>
-
-        <?php require_once 'signature.php'; ?>
-
-        <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
-            <button type="submit" name="save_report" class="btn-primary">
-                💾 Save
-            </button>
+<div class="full-width-header-bar">
+    <header class="header">
+        <div class="header-left">
+            <img src="image.png" alt="Company Logo">
+            <span class="greeting">Hi <?= $displayName ?>!</span>
         </div>
+        
+        <div class="header-right">
+            <div class="profile-pic" onclick="toggleDropdown()">
+                <?= $initials ?>
+            </div>
 
-    </form>
+            <div id="profileDropdown" class="profile-dropdown">
+                <a href="logout.php" class="logout-link">Logout</a>
+            </div>
+        </div>
+    </header>
+</div>
+
+<div class="main-content">
+    
+    <div class="nav-bar">
+        <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
+        <a href="upload.php" class="nav-button">Upload New Files</a>
+        <?php if ($prevId): ?>
+            <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
+        <?php endif; ?>
+        <?php if ($nextId): ?>
+            <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
+        <?php endif; ?>
+        <button type="button" onclick="window.print()" class="nav-button">Print</button>
+    </div>
+
+    <?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
+        <div class="flash-message flash-success">Email sent successfully.</div>
+    <?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
+        <div class="flash-message flash-error">Failed to send email. Please check SMTP settings.</div>
+    <?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
+        <div class="flash-message flash-success">✅ Report saved successfully!</div>
+    <?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
+        <div class="flash-message flash-success">✅ Report created successfully! You can now edit and save the details.</div>
+    <?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
+        <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
+    <?php endif; ?>
+
+    <div style="margin-bottom: 20px;">
+        <?php 
+        // Pass the logged-in user's email as the default sender for the email form
+        $default_sender_email = $currentUser['email'] ?? '';
+        require 'send_email.php'; 
+        ?>
+    </div>
+
+    <h1>Client Report</h1>
+    <h2><?php echo htmlspecialchars($name); ?></h2>
+
+    <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
+
+        <form method="POST" id="reportForm">
+            <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
+
+            <?php require_once 'client_communication.php'; ?>
+            
+            <h3>1. Current Situation</h3>
+            <table class="report-table">
+                <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
+                <tr>
+                    <td>Total Amount </td>
+                    <td><?php echo formatAmount($totalAmount); ?></td>
+                </tr>
+                <tr>
+                    <td>CAGR of current schemes</td>
+                    <td><?php echo formatPercent($cagr); ?></td>
+                </tr>
+                <?php if ($xirr != 0): ?>
+                    <tr>
+                        <td>XIRR of all schemes since inception</td>
+                        <td><?php echo formatPercent($xirr); ?></td>
+                    </tr>
+                <?php endif; ?>
+                <tr>
+                    <td>Profit since inception</td>
+                    <td><?php echo formatAmount($profit); ?></td>
+                </tr>
+            </table>
+
+            <h3>2. Objectives Progress for guiding on appropriate schemes</h3>
+            <table class="report-table">
+                <tr>
+                    <th>Goal/s</th>
+                    <th>Target Year</th>
+                    <th>Current Amount (Rs)</th>
+                    <th>SIP/SWP</th>
+                    <th>Target Amount (Rs)</th>
+                    <th>Status</th>
+                </tr>
+                <?php foreach ($goals as $g): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($g['goal']); ?></td>
+                        <td><?php
+                            $year = '';
+                            if (!empty($g['goal_date'])) {
+                                $year = substr($g['goal_date'], -4);
+                            }
+                            echo htmlspecialchars($year);
+                        ?></td>
+                        <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
+                        <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
+                        <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
+                        <td class="<?php echo ($g['status'] === 'On Track') ? 'status-on' : 'status-off'; ?>">
+                            <?php echo ($g['status'] === 'Needs Attention') ? 'Invest More' : htmlspecialchars($g['status']); ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td><strong>Total</strong></td>
+                    <td></td>
+                    <td><?php echo formatAmount($totalGoalCurrent); ?></td>
+                    <td><?php echo formatAmount($totalSip); ?></td>
+                    <td><?php echo formatAmount($totalGoalTarget); ?></td>
+                    <td></td>
+                </tr>
+            </table>
+
+            <h3>3. Appropriate Product Selection at a macro level</h3>
+            <table class="report-table small">
+                <tr>
+                    <th>Asset</th>
+                    <th>Share%</th>
+                </tr>
+                <?php
+                $sumShare = 0;
+                foreach ($allocations as $a):
+                    $sumShare += (float)$a['share_pct'];
+                    ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($a['asset']); ?></td>
+                        <td><?php echo number_format((float)$a['share_pct'], 0); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td><strong>Total</strong></td>
+                    <td><strong><?php echo number_format($sumShare, 0); ?></strong></td>
+                </tr>
+            </table>
+
+            <h3>4. Appropriate Scheme Selection</h3>
+            <table class="report-table">
+                <tr>
+                    <th colspan="3">Present Schemes</th>
+                    <th rowspan="2">Action Step</th>
+                    <th colspan="2">Recommended Schemes</th>
+                </tr>
+                <tr>
+                    <th>Scheme Name</th>
+                    <th>SIP/SWP</th>
+                    <th>Value as of <?php echo htmlspecialchars($asOn); ?></th>
+                    <th>Scheme Name</th>
+                    <th>Amount</th>
+                </tr>
+                <?php foreach ($schemes as $s): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
+                        <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
+                        <td><?php echo formatAmount((float)$s['current_value']); ?></td>
+                        <td>
+                            <select name="action_step[<?php echo (int)$s['id']; ?>]" 
+                                    class="action-dropdown" 
+                                    data-scheme-id="<?php echo (int)$s['id']; ?>">
+                                <option value="Continue" <?php echo ($s['action_step'] ?? 'Continue') === 'Continue' ? 'selected' : ''; ?>>Continue</option>
+                                <option value="Drop" <?php echo ($s['action_step'] ?? '') === 'Drop' ? 'selected' : ''; ?>>Drop</option>
+                                <option value="Switch" <?php echo ($s['action_step'] ?? '') === 'Switch' ? 'selected' : ''; ?>>Switch</option>
+                                <option value="Redeem" <?php echo ($s['action_step'] ?? '') === 'Redeem' ? 'selected' : ''; ?>>Redeem</option>
+                                <option value="Partially Redeem" <?php echo ($s['action_step'] ?? '') === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" 
+                                   name="recommended_scheme[<?php echo (int)$s['id']; ?>]"
+                                   class="scheme-input" 
+                                   data-scheme-id="<?php echo (int)$s['id']; ?>"
+                                   data-field="recommended_scheme"
+                                   value="<?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?>"
+                                   placeholder="Enter recommended scheme...">
+                        </td>
+                        <td>
+                            <input type="number" 
+                                   name="recommended_amount[<?php echo (int)$s['id']; ?>]"
+                                   class="scheme-input" 
+                                   data-scheme-id="<?php echo (int)$s['id']; ?>"
+                                   data-field="recommended_amount"
+                                   value="<?php echo $s['recommended_amount'] ?? ''; ?>"
+                                   placeholder="Amount"
+                                   step="0.01">
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </table>
+
+            <?php require_once 'rationale.php'; ?>
+
+            <?php require_once 'signature.php'; ?>
+
+            <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
+                <button type="submit" name="save_report" class="btn-primary">
+                    💾 Save
+                </button>
+            </div>
+
+        </form>
+
+    </div>
 
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
+    // --- Header Dropdown Toggle Script ---
+    function toggleDropdown() {
+        const dropdown = document.getElementById('profileDropdown');
+        const isVisible = dropdown.style.display === 'block';
+        
+        // Hide all open dropdowns first (if any)
+        document.querySelectorAll('.profile-dropdown').forEach(d => {
+            d.style.display = 'none';
+        });
+
+        // Toggle visibility of the current dropdown
+        if (!isVisible) {
+            dropdown.style.display = 'block';
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const profilePic = document.querySelector('.profile-pic');
+        const dropdown = document.getElementById('profileDropdown');
+
+        if (profilePic && dropdown) {
+            const isClickInsidePic = profilePic.contains(event.target);
+            const isClickInsideDropdown = dropdown.contains(event.target);
+
+            if (!isClickInsidePic && !isClickInsideDropdown) {
+                dropdown.style.display = 'none';
+            }
+        }
+    });
+
     // --- GLOBAL UTILITY FUNCTIONS (Needed by all modules) ---
     function showToast(msg) {
         const toast = document.getElementById('toast');
