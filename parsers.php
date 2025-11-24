@@ -296,6 +296,8 @@ function parsePortfolioSummary(string $path): array {
     return $data;
 }
 
+// parsers.php - Corrected parseGoalStatusPdf function
+
 function parseGoalStatusPdf(string $path): array {
     $parser = new PdfParser();
     $pdf    = $parser->parseFile($path);
@@ -333,16 +335,22 @@ function parseGoalStatusPdf(string $path): array {
             $goalName = trim(implode(' ', array_slice($parts, 0, $goalDatePos)));
             $goalDate = $parts[$goalDatePos];
 
+            // Start rest after Goal Date (skipping Years Left)
             $rest = array_slice($parts, $goalDatePos + 2);
-            if (count($rest) < 5) continue;
+            // Check if we have enough elements for Target, Completion, Current, SIP, Projected, and Shortfall
+            if (count($rest) < 6) continue;
 
             $targetAmount = parseIndianNumber($rest[0] ?? '0');
             $completion   = (float)str_replace(['%', ','], '', $rest[1] ?? '0');
             $currentValue = parseIndianNumber($rest[2] ?? '0');
             $runningSip   = parseIndianNumber($rest[3] ?? '0');
             $projected    = parseIndianNumber($rest[4] ?? '0');
+            // *** CORRECTION: Extract Shortfall ***
+            $shortfall    = parseIndianNumber($rest[5] ?? '0'); // Shortfall is the 6th element (index 5)
 
-            $status = ($completion >= 70) ? 'On Track' : 'Needs Attention';
+            // Note: Status logic is correctly handled in view_report.php, but we still pass the
+            // original status string if the parser extracted it, though we rely on view_report.php for the rule-based status.
+            $status = ($completion >= 70) ? 'On Track' : 'Needs Attention'; 
 
             $goals[] = [
                 'goal'          => $goalName,
@@ -351,6 +359,7 @@ function parseGoalStatusPdf(string $path): array {
                 'current_value' => $currentValue,
                 'running_sip'   => $runningSip,
                 'projected'     => $projected,
+                'shortfall'     => $shortfall, // *** ADDED ***
                 'completion'    => $completion,
                 'status'        => $status,
             ];
@@ -363,7 +372,6 @@ function parseGoalStatusPdf(string $path): array {
         'goals'       => $goals,
     ];
 }
-
 /* ---------- MERGING ---------- */
 
 function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $pdfGoal): array {
@@ -463,4 +471,4 @@ function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $
     }
 
     return $clients;
-}   
+}

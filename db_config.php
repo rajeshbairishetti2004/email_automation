@@ -304,8 +304,18 @@ function findHeaderRowGeneric(array $rows, array $mustKeywords): ?int {
 }
 
 function parseIndianNumber(string $s): float {
+    // 1. Remove Rupee symbols, trim whitespace, remove Indian lakhs/crore symbols if present.
+    $s = trim(str_ireplace(['Rs.', 'Cr', 'lakhs', 'k', 'lakh', 'crore'], '', $s));
+    
+    // 2. Remove commas (Indian thousand separators).
+    $s = str_replace(',', '', $s);
+    
+    // 3. Handle cases where negative sign might be outside the parentheses, e.g., "-583102.00 *"
     $s = preg_replace('/[^\d\.\-]/', '', $s);
-    if ($s === '' || $s === '-' || $s === '--') return 0.0;
+
+    if ($s === '' || $s === '-' || $s === '.') return 0.0;
+    
+    // Convert to float
     return (float)$s;
 }
 

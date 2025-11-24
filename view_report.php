@@ -702,7 +702,24 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Target Amount (Rs)</th>
                     <th>Status</th>
                 </tr>
-                <?php foreach ($goals as $g): ?>
+                <?php foreach ($goals as $g): 
+                    // DYNAMIC STATUS CALCULATION (Ignoring the static $g['status'] field)
+                    $shortfall = (float)($g['shortfall'] ?? 0); 
+                    $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
+
+                    // Calculate the 1% threshold
+                    $threshold = $targetAmount * 0.01;
+                    
+                    if ($shortfall > 0 && $shortfall > $threshold) {
+                        // Condition: Shortfall is positive AND greater than 1% of target. Major deficit.
+                        $newStatus = 'Invest More';
+                        $statusClass = 'status-off'; // Red background
+                    } else {
+                        // Condition: Shortfall is negative (surplus), zero, or a minor positive deficit (<= 1% of target).
+                        $newStatus = 'On Track';
+                        $statusClass = 'status-on'; // Green background
+                    }
+                ?>
                     <tr>
                         <td><?php echo htmlspecialchars($g['goal']); ?></td>
                         <td><?php
@@ -715,8 +732,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
                         <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
                         <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
-                        <td class="<?php echo ($g['status'] === 'On Track') ? 'status-on' : 'status-off'; ?>">
-                            <?php echo ($g['status'] === 'Needs Attention') ? 'Invest More' : htmlspecialchars($g['status']); ?>
+                        <td class="<?php echo $statusClass; ?>">
+                            <?php echo htmlspecialchars($newStatus); ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>

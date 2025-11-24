@@ -175,14 +175,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                  :greeting_prefix, :intro_text, :closing_text, :rationale_text)
         ");
 
-        $stmtGoal = $pdo->prepare("
-            INSERT INTO client_goals
-                (client_id, goal, goal_date, current_amount, sip_swp,
-                 target_amount, projected, completion, status)
-            VALUES
-                (:client_id, :goal, :goal_date, :current_amount, :sip_swp,
-                 :target_amount, :projected, :completion, :status)
-        ");
+$stmtGoal = $pdo->prepare("
+    INSERT INTO client_goals
+        (client_id, goal, goal_date, current_amount, sip_swp,
+         target_amount, projected, shortfall, completion, status)
+    VALUES
+        (:client_id, :goal, :goal_date, :current_amount, :sip_swp,
+         :target_amount, :projected, :shortfall, :completion, :status)
+");
 
         $stmtAlloc = $pdo->prepare("
             INSERT INTO client_allocations
@@ -301,8 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
             $savedCount++;
 
-            // ----- SAVE GOALS -----
-            foreach ($goals as $g) {
+          foreach ($goals as $g) {
                 $stmtGoal->execute([
                     ':client_id'      => $clientId,
                     ':goal'           => $g['goal']          ?? '',
@@ -311,6 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                     ':sip_swp'        => $g['running_sip']   ?? 0,
                     ':target_amount'  => $g['target_amount'] ?? 0,
                     ':projected'      => $g['projected']     ?? 0,
+                    ':shortfall'      => $g['shortfall']     ?? 0, // *** ADDED ***
                     ':completion'     => $g['completion']    ?? 0,
                     ':status'         => $g['status']        ?? '',
                 ]);
