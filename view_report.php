@@ -39,6 +39,12 @@ if ($currentUser) {
 
 $initials = strtoupper(substr($nameForInitials, 0, 1));
 
+// --- ROLE DETECTION ---
+$userDesignation = $currentUser['designation'] ?? '';
+// If designation contains "Associate", treat as ARM. Otherwise RM.
+$isARM = (stripos($userDesignation, 'Associate') !== false);
+$isRM  = !$isARM;
+
 
 /* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
 // FIX: Wrap local functions in function_exists() to prevent redeclaration fatal error
@@ -228,7 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
         }
         if (isset($_POST['recommended_amount'])) {
             $updateFields[] = 'recommended_amount = :recommended_amount';
-            $params[':recommended_amount'] = (float)$_POST['recommended_amount'];
+            $params[':recommended_amount'] = trim($_POST['recommended_amount']);
         }
 
         if (!empty($updateFields)) {
@@ -252,88 +258,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
 
 
 /* ---------- HANDLE POST REQUESTS (Non-AJAX, Redirect Only) ---------- */
-// ... (Existing code for SEND EMAIL remains the same) ...
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_email']) && $_POST['send_email'] == '1') {
-    handleEmailSending($clientId);
-    exit;
-}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // --- 1. EMAIL SENDING (Must be checked first) ---
+    if (isset($_POST['send_email']) && $_POST['send_email'] == '1') {
+        // Backend security check is in handleEmailSending() - no need to check here
+        // because $reportState is not yet loaded at this point in the code
+        handleEmailSending($clientId);
+        exit;
+    }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
-    $pdo = getPdo();
-    $clientId = (int)($_POST['client_id'] ?? 0);
+    // --- 2. SAVE CONTENT AND WORKFLOW STATUS ---
+    if (isset($_POST['save_report']) || isset($_POST['workflow_action'])) {
+        $pdo = getPdo();
+        $clientId = (int)($_POST['client_id'] ?? 0);
 
-    if ($clientId > 0) {
-        try {
-            // Get all text fields from POST
-            $clientMessage = trim($_POST['client_message'] ?? '');
-            $rationale = trim($_POST['rationale'] ?? '');
-            $signatureBlock = trim($_POST['signature_block'] ?? ''); // Read new signature
+        if ($clientId > 0) {
+            try {
+                // --- SAVE REPORT CONTENT (Always runs first) ---
+                $clientMessage = trim($_POST['client_message'] ?? '');
+                $rationale = trim($_POST['rationale'] ?? '');
+                $signatureBlock = trim($_POST['signature_block'] ?? ''); 
 
-            // Parse client message into greeting, intro, closing 
-            $lines = explode("\n\n", $clientMessage);
-            $greeting = isset($lines[0]) ? trim($lines[0]) : '';
-            $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
-            $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
-            $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
-            
-            // Simple check to prevent multi-part message being treated as just intro/closing if no clear greeting prefix
-            if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
-                // If it doesn't look like a greeting, assume the whole message is intro
-                $intro = $clientMessage;
-                $greeting = $closing = '';
-            }
-
-            // Update client text fields
-            $stmt = $pdo->prepare("
-                UPDATE clients 
-                SET greeting_prefix = :greeting,
-                    intro_text = :intro,
-                    closing_text = :closing,
-                    rationale_text = :rationale,
-                    signature_block = :signature
-                WHERE id = :id
-            ");
-            $stmt->execute([
-                ':greeting' => $greeting,
-                ':intro' => $intro,
-                ':closing' => $closing,
-                ':rationale' => $rationale,
-                ':signature' => $signatureBlock,
-                ':id' => $clientId,
-            ]);
-
-            // Save scheme recommendations (handles all updates from the main form)
-            if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
-                foreach ($_POST['recommended_scheme'] as $schemeId => $schemeName) {
-                    
-                    $schemeId = (int)$schemeId;
-                    if ($schemeId <= 0) { continue; }
-                    $amount = (float)($_POST['recommended_amount'][$schemeId] ?? 0);
-                    $actionStep = $_POST['action_step'][$schemeId] ?? 'Continue';
-                    
-                    $stmt = $pdo->prepare("
-                        UPDATE client_schemes 
-                        SET recommended_scheme = :scheme,
-                            recommended_amount = :amount,
-                            action_step = :action_step
-                        WHERE id = :id
-                    ");
-                    $stmt->execute([
-                        ':scheme' => trim($schemeName),
-                        ':amount' => $amount,
-                        ':action_step' => $actionStep,
-                        ':id' => $schemeId,
-                    ]);
+                $lines = explode("\n\n", $clientMessage);
+                $greeting = isset($lines[0]) ? trim($lines[0]) : '';
+                $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
+                $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
+                $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
+                
+                if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
+                    $intro = $clientMessage;
+                    $greeting = $closing = '';
                 }
-            }
 
-            header('Location: view_report.php?id=' . $clientId . '&saved=1');
-            exit;
-        } catch (Exception $e) {
-            error_log("Report Save Error for client ID " . $clientId . ": " . $e->getMessage());
-            header('Location: view_report.php?id=' . $clientId . '&save_error=1');
-            exit;
+                $stmt = $pdo->prepare("UPDATE clients SET greeting_prefix=:g, intro_text=:i, closing_text=:c, rationale_text=:r, signature_block=:s WHERE id=:id");
+                $stmt->execute([':g'=>$greeting, ':i'=>$intro, ':c'=>$closing, ':r'=>$rationale, ':s'=>$signatureBlock, ':id'=>$clientId]);
+
+                if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
+                    foreach ($_POST['recommended_scheme'] as $sId => $sName) {
+                        $sId=(int)$sId; if($sId<=0) continue;
+                        $amt=trim($_POST['recommended_amount'][$sId]??'');
+                        $step=$_POST['action_step'][$sId]??'Continue';
+                        $pdo->prepare("UPDATE client_schemes SET recommended_scheme=:s, recommended_amount=:a, action_step=:st WHERE id=:id")
+                            ->execute([':s'=>trim($sName), ':a'=>$amt, ':st'=>$step, ':id'=>$sId]);
+                    }
+                }
+
+                // --- UPDATE WORKFLOW STATUS (If triggered) ---
+                if (!empty($_POST['workflow_action'])) {
+                    $action = $_POST['workflow_action'];
+                    $comment = $_POST['review_comment'] ?? null;
+
+                    if ($action === 'save_draft') {
+                        $pdo->prepare("UPDATE clients SET report_state='draft', draft_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id'=>$clientId]);
+                    } 
+                    elseif ($action === 'ready_for_review') {
+                        $pdo->prepare("UPDATE clients SET report_state='ready', ready_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id'=>$clientId]);
+                    } 
+                    elseif ($action === 'approve_review') {
+                        $pdo->prepare("UPDATE clients SET report_state='reviewed', reviewed_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id'=>$clientId]);
+                    } 
+                    elseif ($action === 'review_not_ok') {
+                        $pdo->prepare("UPDATE clients SET report_state='draft', review_not_ok=1, review_comment=:c WHERE id=:id")->execute([':id'=>$clientId, ':c'=>$comment]);
+                    }
+                }
+
+                header('Location: view_report.php?id=' . $clientId . '&saved=1');
+                exit;
+            } catch (Exception $e) {
+                error_log("Report Save Error: " . $e->getMessage());
+                header('Location: view_report.php?id=' . $clientId . '&save_error=1');
+                exit;
+            }
         }
     }
 }
@@ -361,6 +357,11 @@ if (!$client) {
     <?php
     exit;
 }
+
+// --- WORKFLOW STATE VARIABLES ---
+$reportState    = $client['report_state'] ?? 'draft'; // draft, ready, reviewed, sent
+$reviewNotOk    = (int)($client['review_not_ok'] ?? 0);
+$reviewComment  = $client['review_comment'] ?? '';
 
 // Override RM defaults with LOGGED-IN USER details
 $rmName        = $currentUser['name'] ?? $currentUser['username'] ?? 'Relationship Manager';
@@ -602,6 +603,61 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             flex: 1 1 48%; 
             padding: 0;
         }
+        
+        /* WORKFLOW STYLES */
+        .workflow-bar {
+            background: #fff;
+            padding: 15px 20px;
+            margin: 0 auto 20px auto;
+            max-width: 1200px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 5px solid #ccc;
+        }
+        .workflow-status-badge {
+            font-size: 14px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        .status-draft { background: #e0e0e0; color: #555; border-left-color: #999; }
+        .status-ready { background: #fff3cd; color: #856404; border-left-color: #ffc107; }
+        .status-reviewed { background: #d4edda; color: #155724; border-left-color: #28a745; }
+        .status-sent { background: #cce5ff; color: #004085; border-left-color: #007bff; }
+        .status-rejected { background: #f8d7da; color: #721c24; border-left-color: #dc3545; cursor: pointer; }
+
+        .workflow-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .wf-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        .btn-draft { background: #6c757d; color: white; }
+        .btn-ready { background: #ffc107; color: #333; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+        
+        /* Modal for Rejection */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-box {
+            background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -619,11 +675,81 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </div>
 
             <div id="profileDropdown" class="profile-dropdown">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px;">
+                    <?= htmlspecialchars($userDesignation) ?>
+                </div>
                 <a href="logout.php" class="logout-link">Logout</a>
             </div>
         </div>
     </header>
 </div>
+
+<?php
+    // Determine Status Badge Class & Text
+    $statusClass = 'status-' . $reportState;
+    $statusText = ucfirst($reportState);
+    $borderColor = '#999';
+    
+    if ($reviewNotOk == 1) {
+        $statusClass = 'status-rejected';
+        $statusText = 'Reviewed Not OK';
+        $borderColor = '#dc3545';
+    } elseif ($reportState == 'ready') {
+        $borderColor = '#ffc107';
+    } elseif ($reportState == 'reviewed') {
+        $borderColor = '#28a745';
+    } elseif ($reportState == 'sent') {
+        $borderColor = '#007bff';
+    }
+?>
+
+<div class="workflow-bar" style="border-left-color: <?= $borderColor ?>;">
+    <div class="workflow-status">
+        <span style="font-size: 12px; color: #666; margin-right: 10px;">Status:</span>
+        <span class="workflow-status-badge <?= $statusClass ?>">
+            <?= $statusText ?>
+        </span>
+    </div>
+
+    <div class="workflow-actions">
+        <?php if ($isARM): ?>
+            <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
+                <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
+                <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+            <?php endif; ?>
+            
+            <?php if ($reportState == 'reviewed' && $reviewNotOk == 0): ?>
+                <span style="font-size: 13px; color: #28a745; font-weight: 600;">Approved. You can send email below.</span>
+            <?php endif; ?>
+        <?php endif; ?>
+
+        <?php if ($isRM): ?>
+            <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
+                <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
+                <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+            <?php endif; ?>
+
+            <?php if ($reportState == 'ready' && $reviewNotOk == 0): ?>
+                <button type="button" class="wf-btn btn-approve" onclick="submitWorkflow('approve_review')">Approve (Reviewed OK)</button>
+                <button type="button" class="wf-btn btn-reject" onclick="openRejectModal()">Reject (Not OK)</button>
+            <?php endif; ?>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if ($reviewNotOk == 1 && !empty($reviewComment)): ?>
+    <div style="max-width: 1200px; margin: 0 auto 20px auto; padding: 0 20px;">
+        <div style="background: #fff3cd; border-left: 5px solid #dc3545; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+                <span style="font-size: 24px; color: #dc3545;">⚠️</span>
+                <div style="flex: 1;">
+                    <strong style="color: #721c24; font-size: 16px; display: block; margin-bottom: 8px;">RM Comment:</strong>
+                    <p style="color: #856404; margin: 0; line-height: 1.5; white-space: pre-wrap;"><?= htmlspecialchars($reviewComment) ?></p>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="main-content">
     
@@ -642,7 +768,10 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
         <div class="flash-message flash-success">Email sent successfully.</div>
     <?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
-        <div class="flash-message flash-error">Failed to send email. Please check SMTP settings.</div>
+        <div class="flash-message flash-error">
+            ❌ Failed to send email.<br>
+            <strong>Error Detail:</strong> <?php echo htmlspecialchars($_GET['msg'] ?? 'Unknown error'); ?>
+        </div>
     <?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
         <div class="flash-message flash-success">✅ Report saved successfully!</div>
     <?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
@@ -651,13 +780,15 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
     <?php endif; ?>
 
-    <div style="margin-bottom: 20px;">
-        <?php 
-        // Pass the logged-in user's email as the default sender for the email form
-        $default_sender_email = $currentUser['email'] ?? '';
-        require 'send_email.php'; 
-        ?>
-    </div>
+    <?php if ($reportState == 'reviewed' && $reviewNotOk == 0): ?>
+        <div style="margin-bottom: 20px;">
+            <?php 
+            // Pass the logged-in user's email as the default sender for the email form
+            $default_sender_email = $currentUser['email'] ?? '';
+            require 'send_email.php'; 
+            ?>
+        </div>
+    <?php endif; ?>
 
     <h1>Client Report</h1>
     <h2><?php echo htmlspecialchars($name); ?></h2>
@@ -666,6 +797,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
         <form method="POST" id="reportForm">
             <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
+            
+            <input type="hidden" name="workflow_action" id="workflowActionInput" value="">
+            <input type="hidden" name="review_comment" id="reviewCommentInput" value="">
 
             <?php require_once 'client_communication.php'; ?>
             
@@ -783,7 +917,12 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Scheme Name</th>
                     <th>Amount</th>
                 </tr>
-                <?php foreach ($schemes as $s): ?>
+                <?php foreach ($schemes as $s): 
+                    // FILTER: If both SIP and Value are 0, skip this row
+                    if ((float)$s['sip_swp'] == 0 && (float)$s['current_value'] == 0) {
+                        continue;
+                    }
+                ?>
                     <tr>
                         <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
                         <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
@@ -809,14 +948,13 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    placeholder="Enter recommended scheme...">
                         </td>
                         <td>
-                            <input type="number" 
+                            <input type="text" 
                                    name="recommended_amount[<?php echo (int)$s['id']; ?>]"
                                    class="scheme-input" 
                                    data-scheme-id="<?php echo (int)$s['id']; ?>"
                                    data-field="recommended_amount"
-                                   value="<?php echo $s['recommended_amount'] ?? ''; ?>"
-                                   placeholder="Amount"
-                                   step="0.01">
+                                   value="<?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?>"
+                                   placeholder="Amount / Note">
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -1095,7 +1233,53 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
     });
+    
+    // --- PATCH 4: NEW WORKFLOW JS FUNCTIONS ---
+    function submitWorkflow(action) {
+        if(!confirm("Are you sure you want to perform this action?")) return;
+        
+        // 1. Set the action in the hidden input inside the form
+        document.getElementById('workflowActionInput').value = action;
+        
+        // 2. Submit the form naturally. This sends ALL data + the action.
+        document.getElementById('reportForm').submit();
+    }
+
+    function openRejectModal() {
+        document.getElementById('rejectModal').style.display = 'flex';
+    }
+    function closeRejectModal() {
+        document.getElementById('rejectModal').style.display = 'none';
+    }
+    
+    function submitRejection() {
+        const comment = document.getElementById('rejectComment').value.trim();
+        if(!comment) {
+            alert("Comment is required for rejection.");
+            return;
+        }
+        
+        // Set Action and Comment in hidden inputs
+        document.getElementById('workflowActionInput').value = 'review_not_ok';
+        document.getElementById('reviewCommentInput').value = comment;
+        
+        // Submit Form
+        document.getElementById('reportForm').submit();
+    }
 </script>
+
+<!-- Rejection Modal -->
+<div id="rejectModal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+        <h3 style="margin-top:0; color:#dc3545;">Reject Report</h3>
+        <p>Please provide a reason for rejection:</p>
+        <textarea id="rejectComment" rows="4" style="width:100%; border:1px solid #ccc; padding:8px;" placeholder="E.g., Fix the intro text..."></textarea>
+        <div style="margin-top:15px; text-align:right;">
+            <button onclick="closeRejectModal()" style="padding:8px 12px; border:none; background:#ccc; cursor:pointer; margin-right:5px;">Cancel</button>
+            <button onclick="submitRejection()" style="padding:8px 12px; border:none; background:#dc3545; color:white; cursor:pointer;">Submit Rejection</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
