@@ -254,11 +254,38 @@ $stmtGoal = $pdo->prepare("
             $totalSip         = 0;
             $totalGoalCurrent = 0;
             $totalGoalTarget  = 0;
-            foreach ($goals as $g) {
+            
+            // --- FIX: Recalculate status based on shortfall before saving ---
+            foreach ($goals as &$g) {
+                $shortfall = (float)($g['shortfall'] ?? 0); 
+                $targetAmount = (float)($g['target_amount'] ?? 0); 
+                
+                // DEFAULT: Assume On Track if no issues found
+                $g['status'] = 'On Track'; 
+                
+                // If the shortfall is NEGATIVE (meaning a surplus), it must be 'On Track'.
+                if ($shortfall <= 0) {
+                    $g['status'] = 'On Track'; 
+                } 
+                // If the shortfall is POSITIVE, check if it exceeds the 1% threshold
+                elseif ($targetAmount > 0) {
+                    // Define a 1% threshold of the target amount
+                    $threshold = $targetAmount * 0.01;
+                    
+                    // If shortfall is positive AND greater than the threshold, set to Invest More
+                    if ($shortfall > $threshold) {
+                        $g['status'] = 'Invest More';
+                    } else {
+                         // Shortfall is positive but negligible (within 1% margin)
+                         $g['status'] = 'On Track';
+                    }
+                }
+                
                 $totalSip         += $g['running_sip']   ?? 0;
                 $totalGoalCurrent += $g['current_value'] ?? 0;
                 $totalGoalTarget  += $g['target_amount'] ?? 0;
             }
+            unset($g); // Important to unset the reference
 
             if ($asOn !== '') {
                 $annexureLinesForClient = [
@@ -302,6 +329,7 @@ $stmtGoal = $pdo->prepare("
             $savedCount++;
 
           foreach ($goals as $g) {
+                // Now saving the RE-CALCULATED status from the loop above
                 $stmtGoal->execute([
                     ':client_id'      => $clientId,
                     ':goal'           => $g['goal']          ?? '',
@@ -309,10 +337,10 @@ $stmtGoal = $pdo->prepare("
                     ':current_amount' => $g['current_value'] ?? 0,
                     ':sip_swp'        => $g['running_sip']   ?? 0,
                     ':target_amount'  => $g['target_amount'] ?? 0,
-                    ':projected'      => $g['projected']     ?? 0,
-                    ':shortfall'      => $g['shortfall']     ?? 0, // *** ADDED ***
+                    ':projected'      => $g['projected']     ?? 0, 
+                    ':shortfall'      => $g['shortfall']     ?? 0, 
                     ':completion'     => $g['completion']    ?? 0,
-                    ':status'         => $g['status']        ?? '',
+                    ':status'         => $g['status']        ?? '', // Use the calculated status
                 ]);
             }
 

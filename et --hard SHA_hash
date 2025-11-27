@@ -1,0 +1,83 @@
+[33mcommit 66bf10126a349148b72d715d1b41417f7aa6896c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Tue Nov 25 12:03:14 2025 +0530
+
+    fixed current value error
+
+[33mcommit a2f74c248870887cb93ff9e7697c646a906b3f82[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Tue Nov 25 11:43:54 2025 +0530
+
+    updated shortfall error
+
+[33mcommit 0f9b528e6ef87505419c4850ed5d99925e5c69bf[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Mon Nov 24 16:22:23 2025 +0530
+
+    fixed shortfall error
+
+[33mcommit 42ea21eceb063d1371ecbad78b6348855b4d8c31[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Mon Nov 24 01:51:19 2025 +0530
+
+    edited rationale
+
+[33mcommit c62c0a7ff88ab90580d0bb722850f0f61edd8f13[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sun Nov 23 23:31:47 2025 +0530
+
+    added designation to register page
+
+[33mcommit 0b50076e7c46134fd8828ac023d4fd4d621ff25b[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sun Nov 23 22:24:55 2025 +0530
+
+    edit to email receipents
+
+[33mcommit f6f78659dcbd986051ed4db45e308c51c515b445[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sun Nov 23 21:20:09 2025 +0530
+
+    authentication
+
+[33mcommit 839eb9cd8ac2bf42d51ed8250eac507e0e2c2558[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sun Nov 23 02:25:37 2025 +0530
+
+    email
+
+[33mcommit c91c244c7cca08329b6c7fe3e63de6f803ef95cb[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sun Nov 23 00:12:16 2025 +0530
+
+    client communication
+
+[33mcommit d2425fcf2fdae2ba701ff464783f1e8a5139d294[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sat Nov 22 21:38:14 2025 +0530
+
+    signature block
+
+[33mcommit 7e727251313fd829f8aa8c7ed25881d5d6245db8[m
+Author: Vivek Sharma <your.email@example.com>
+Date:   Sat Nov 22 12:23:25 2025 +0530
+
+    changed login page
+
+[33mcommit 7e0385468c765eba94ece41b038d89829d57a846[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Sat Nov 22 11:11:17 2025 +0530
+
+    added save button
+
+[33mcommit 16246c6352fead3b85abedbfd462b5a1dfb5e201[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Thu Nov 20 03:31:47 2025 +0530
+
+    updated .env
+
+[33mcommit 33186f70cb37e571bf5c54d26ac8e504b6960819[m
+Author: Rajesh18 <rajeshbairisetti234@gmail.com>
+Date:   Thu Nov 20 02:23:22 2025 +0530
+
+    initial commit
