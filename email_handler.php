@@ -11,6 +11,17 @@ use PHPMailer\PHPMailer\Exception;
 function handleEmailSending($clientId) {
     $pdo = getPdo();
     
+    // --- BACKEND SECURITY: Verify report state before proceeding ---
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = :id");
+    $stmt->execute([':id' => $clientId]);
+    $stateCheck = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$stateCheck || $stateCheck['report_state'] !== 'reviewed' || $stateCheck['review_not_ok'] != 0) {
+        // State is not 'reviewed' or report is rejected - deny access
+        header('Location: view_report.php?id=' . $clientId . '&error=permission_denied');
+        exit;
+    }
+    
     // --- NEW: Read email fields from the form ---
     $toEmail = trim($_POST['recipient_email'] ?? '');
     $ccEmailsRaw = trim($_POST['cc_emails'] ?? '');
@@ -29,7 +40,12 @@ function handleEmailSending($clientId) {
 
     if ($clientId <= 0 || empty($emailList) || empty($fromEmailSender)) {
         // Redirect if no recipients or no sender is specified
-        header('Location: view_report.php?id=' . $clientId);
+        $errorMsg = '';
+        if ($clientId <= 0) $errorMsg = 'Invalid client ID';
+        elseif (empty($fromEmailSender)) $errorMsg = 'Sender email is required';
+        elseif (empty($emailList)) $errorMsg = 'At least one recipient is required';
+        
+        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($errorMsg));
         exit;
     }
 
@@ -38,6 +54,13 @@ function handleEmailSending($clientId) {
     $smtpPort = $_ENV['SMTP_PORT'] ?? 587;
     $smtpUsername = $_ENV['SMTP_USERNAME'] ?? '';
     $smtpPassword = $_ENV['SMTP_PASSWORD'] ?? '';
+    
+    // Validate SMTP credentials
+    if (empty($smtpUsername) || empty($smtpPassword)) {
+        error_log("SMTP credentials missing in environment variables");
+        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode('SMTP configuration is missing. Please contact administrator.'));
+        exit;
+    }
     
     // Use the dynamic sender email as the sender for PHPMailer
     $smtpFromEmail = $fromEmailSender; 
@@ -348,7 +371,16 @@ function handleEmailSending($clientId) {
 
             $mail->send();
             
-            // --- FIX: Log the successful email transmission ---
+            // --- UPDATE REPORT STATUS TO 'SENT' ---
+            $updateStmt = $pdo->prepare("
+                UPDATE clients 
+                SET report_state = 'sent', 
+                    sent_at = NOW() 
+                WHERE id = :client_id
+            ");
+            $updateStmt->execute([':client_id' => $clientId]);
+            
+            // --- Log the successful email transmission ---
             $logStmt = $pdo->prepare("
                 INSERT INTO email_logs (client_id, recipients_count, sent_by, sent_at)
                 VALUES (:client_id, :recipients_count, :sent_by, NOW())
@@ -356,10 +388,8 @@ function handleEmailSending($clientId) {
             $logStmt->execute([
                 ':client_id' => $clientId,
                 ':recipients_count' => count($emailList),
-                // Assuming RM's email is the sender's identity
                 ':sent_by' => $smtpFromEmail 
             ]);
-            // ----------------------------------------------------
 
             // Clean up all uploaded files after sending
             foreach ($attachmentPaths as $file) {
@@ -378,7 +408,10 @@ function handleEmailSending($clientId) {
                 }
             }
             
-            header('Location: view_report.php?id=' . $clientId . '&sent_error=1');
+            // Log the error for debugging
+            error_log("Email sending failed for client ID $clientId: " . $e->getMessage());
+            
+            header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($e->getMessage()));
             exit;
         }
     } else {

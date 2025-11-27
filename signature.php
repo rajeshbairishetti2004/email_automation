@@ -1,6 +1,6 @@
 <?php
 // signature.php
-// Renders the Signature / Closing Note section with static details of the logged-in user.
+// Renders the Signature / Closing Note section.
 // Requires: $clientId, $signatureBlock, $DEFAULT_SIGNATURE (from view_report.php scope)
 
 $clientId = (int)($clientId ?? 0);
@@ -14,41 +14,20 @@ if (empty(trim($signatureBlock))) {
 }
 ?>
 
-<style>
-    /* CSS specific to Signature */
-    .signature-card {
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        background-color: #fff;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .signature-content {
-        /* Ensure the content uses line breaks correctly */
-        white-space: pre-wrap; 
-        font-family: 'Inter', sans-serif;
-        font-size: 14px;
-        color: #333;
-        padding: 5px;
-    }
-    .card-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #0288D1;
-        display: block;
-        margin-bottom: 10px;
-    }
-</style>
-
 <div class="card" style="margin-top: 20px;">
     <label class="card-title">Signature / Closing Note</label>
     
-    <div id="signature_flash_container" class="signature-flash-container">
-        </div>
+    <div id="signature_flash_container" class="signature-flash-container"></div>
     
-    <div class="signature-card">
-        <div class="signature-content">
-            <?php echo htmlspecialchars(trim($signatureBlock)); ?>
-        </div>
-    </div>
+    <textarea name="signature_block" 
+              id="signature_block"
+              class="large-textarea" 
+              data-field="signature_block" 
+              data-client-id="<?php echo (int)$clientId; ?>"
+              placeholder="Enter signature here..."
+              style="min-height: 150px;"><?php echo htmlspecialchars(trim($signatureBlock)); ?></textarea>
+
+    <p style="font-size: 12px; color: #666; margin-top: 8px;">
+        💡 You can edit this signature for this specific report. It will auto-save when you click outside.
+    </p>
 </div>
