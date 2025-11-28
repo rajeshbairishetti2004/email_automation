@@ -277,19 +277,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // --- SAVE REPORT CONTENT (Always runs first) ---
                 $clientMessage = trim($_POST['client_message'] ?? '');
+                // DIRECT SAVE LOGIC - No more explode/parse confusion
+                // Since we now have 3 separate fields (greeting, intro, closing), we save them directly
+                $greeting = trim($_POST['greeting'] ?? '');
+                $intro = trim($_POST['intro'] ?? '');
+                $closing = trim($_POST['closing'] ?? '');
                 $rationale = trim($_POST['rationale'] ?? '');
-                $signatureBlock = trim($_POST['signature_block'] ?? ''); 
-
-                $lines = explode("\n\n", $clientMessage);
-                $greeting = isset($lines[0]) ? trim($lines[0]) : '';
-                $closing = (count($lines) > 1 && $lines[count($lines) - 1] !== $greeting) ? trim($lines[count($lines) - 1]) : '';
-                $introParts = array_slice($lines, 1, count($lines) - (empty($closing) ? 1 : 2));
-                $intro = !empty($introParts) ? implode("\n\n", $introParts) : '';
-                
-                if (strpos(strtolower($greeting), 'dear') === false && strpos($greeting, ',') === false) {
-                    $intro = $clientMessage;
-                    $greeting = $closing = '';
-                }
+                $signatureBlock = trim($_POST['signature_block'] ?? '');
 
                 $stmt = $pdo->prepare("UPDATE clients SET greeting_prefix=:g, intro_text=:i, closing_text=:c, rationale_text=:r, signature_block=:s WHERE id=:id");
                 $stmt->execute([':g'=>$greeting, ':i'=>$intro, ':c'=>$closing, ':r'=>$rationale, ':s'=>$signatureBlock, ':id'=>$clientId]);

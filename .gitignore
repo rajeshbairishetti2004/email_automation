@@ -136,3 +136,9 @@ yarn-error.log*
 *.tar
 *.gz
 *.7z
+
+# .gitignore
+.env
+/vendor
+/uploads
+.DS_Store

@@ -1,88 +1,98 @@
 <?php
 // send_email.php
-// Renders the email sending interface with separate Add and Delete buttons for list management.
-// List updates are handled via AJAX to the server-side API.
+require_once 'db_config.php';
 
-require_once 'db_config.php'; // Include database config to use new functions
+// 1. LOAD ORGANIZATION PROFILES
+$domainProfiles = require __DIR__ . '/organization_emails.php';
 
-// This file now relies on $clientId, $allActiveUsers, and $default_sender_email
-// being passed or available in the scope of view_report.php.
+// Prepare the list for dropdown usage (preserves structure)
+$sendAsProfiles = $domainProfiles;
 
-// Use the client ID from the main view_report context
+// 2. Client ID
 $clientId = (int)($clientId ?? 0); 
 
-// --- FETCH DATA FROM DATABASE (Requires $clientId, $default_sender_email and $allActiveUsers from view_report.php) ---
+// Load Client Emails for the "To" field
+$clientMailOptions = [];
+$rmMailOptions = [];
+$generalCCMailOptions = [];
+
 try {
-    // Note: $allActiveUsers should be populated in view_report.php using getAllActiveUserEmails()
-    // We assume $allActiveUsers is passed into the scope of this file from view_report.php
-    $allActiveUsers = $allActiveUsers ?? []; 
-    
+    $clientMailOptions = getEmailContacts('CLIENT', $clientId);
     $rmMailOptions     = getEmailContacts('RM');
     $generalCCMailOptions = getEmailContacts('CC');
-    $clientMailOptions = getEmailContacts('CLIENT', $clientId);
-
-    // Combine all CC options (RM emails + Client emails + General CC emails)
-    $allEmails = array_unique(array_merge($rmMailOptions, $clientMailOptions, $generalCCMailOptions));
-
-    // Fallback if $default_sender_email was not explicitly set in view_report.php
-    $default_sender_email = $default_sender_email ?? (!empty($allActiveUsers) ? $allActiveUsers[0]['email'] : '');
-    
-} catch (PDOException $e) {
-    // Fallback if DB connection fails
-    $rmMailOptions = ['db_error@fallback.com'];
-    $clientMailOptions = [];
-    $allEmails = [];
-    $default_sender_email = 'db_error@fallback.com';
-    error_log("Failed to load email contacts: " . $e->getMessage());
+} catch (Exception $e) {
+    // Silent fail if DB issue, dropdowns will just be empty
 }
+
+// Combine for CC suggestions
+$allEmails = array_unique(array_merge($rmMailOptions, $clientMailOptions, $generalCCMailOptions));
 ?>
+
+<script>
+function updateSenderDetails(selectObj) {
+    const selectedOption = selectObj.options[selectObj.selectedIndex];
+    const name = selectedOption.getAttribute('data-name');
+    const mobile = selectedOption.getAttribute('data-mobile');
+    const designation = selectedOption.getAttribute('data-designation');
+    const email = selectedOption.value;
+
+    if (!name) { return; }
+
+    const hiddenNameField = document.getElementById('from_name');
+    if (hiddenNameField) { hiddenNameField.value = name; }
+
+    const newSignature = "Regards,\n\n" +
+        name + ",\n" +
+        designation + ",\n" +
+        "Finance Doctor Private Limited.\n\n" +
+        "Mobile - " + mobile + ".\n" +
+        "Email - " + email + "\n" +
+        "Url: www.financedoctor.in";
+
+    let visibleSignatureBox = document.getElementById('signature_block');
+    if (!visibleSignatureBox) {
+        visibleSignatureBox = document.querySelector('textarea[name=\"signature_block\"]');
+    }
+
+    if (visibleSignatureBox) {
+        visibleSignatureBox.value = newSignature;
+        visibleSignatureBox.dispatchEvent(new Event('blur'));
+        visibleSignatureBox.style.transition = "background-color 0.5s";
+        visibleSignatureBox.style.backgroundColor = "#e8f0fe";
+        setTimeout(() => { visibleSignatureBox.style.backgroundColor = "#fff"; }, 800);
+    }
+
+    const hiddenSigField = document.getElementById('custom_signature_for_email');
+    if (hiddenSigField) { hiddenSigField.value = newSignature; }
+}
+</script>
 
 <div class="email-send-container">
     <form method="post" enctype="multipart/form-data" class="email-form">
         <input type="hidden" name="send_email" value="1">
         <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-
+        <input type="hidden" name="from_name" id="from_name" value="Finance Doctor">
+        <input type="hidden" name="custom_signature" id="custom_signature_for_email" value="">
         <div class="email-attachment-wrapper communication-box-style">
-
             <div class="email-recipients-section">
                 <strong class="section-title">Email Recipients</strong>
                 <div class="email-fields-container">
                     
                     <div class="email-field-group">
-                        <div class="input-with-buttons">
-                            <label for="from_email">From (Sender Email):</label>
-                            <div class="manage-buttons-group">
-                                <button type="button" class="manage-btn add-btn" title="Add Email" onclick="addEmail('from-emails-list', 'From Options', 'RM')">➕</button>
-                                <button type="button" class="manage-btn delete-btn" title="Delete Email" onclick="openDeleteModal('from-emails-list', 'From Options', 'from_email', 'RM')">➖</button>
-                            </div>
-                        </div>
+                        <label for="from_email">Send As:</label>
                         
-                       <select name="from_email" id="from_email" 
-        required
-        class="styled-input">
-    <?php 
-    if (!empty($allActiveUsers)):
-        foreach ($allActiveUsers as $user):
-            // FIX: Change the display variable to ONLY include the email.
-            $display = htmlspecialchars($user['email']);
-            
-            // Set 'selected' if this email matches the logged-in user's email
-            $selected = (strtolower($user['email']) === strtolower($default_sender_email)) ? 'selected' : '';
-            
-            echo "<option value=\"" . htmlspecialchars($user['email']) . "\" {$selected}>{$display}</option>";
-        endforeach;
-    else:
-        // Fallback if no active users are found
-        echo "<option value=\"\" disabled selected>No active sender emails found</option>";
-    endif;
-    ?>
-</select>
-                        
-                        <datalist id="from-emails-list">
-                            <?php foreach ($allActiveUsers as $user): ?>
-                                <option value="<?php echo htmlspecialchars($user['email']); ?>">
-                            <?php endforeach; ?>
-                        </datalist>
+                        <select name="from_email" id="from_email" required class="styled-input" onchange="updateSenderDetails(this)">
+        <option value="" disabled selected>-- Select Sender --</option>
+        <?php foreach ($sendAsProfiles as $email => $profile): ?>
+            <option value="<?php echo htmlspecialchars($email); ?>" 
+                    data-name="<?php echo htmlspecialchars($profile['name']); ?>"
+                    data-mobile="<?php echo htmlspecialchars($profile['mobile']); ?>"
+                    data-designation="<?php echo htmlspecialchars($profile['designation']); ?>"
+                    <?php echo ($email === 'contact@financedoctor.in') ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($profile['name']); ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
                     </div>
                     
                     <div class="email-field-group">
@@ -402,213 +412,3 @@ try {
         color: white;
     }
 </style>
-
-<script>
-    // Global variables to store context when modal is opened
-    let currentDatalistId = '';
-    let currentInputId = '';
-    let currentListType = ''; 
-
-    const CLIENT_ID = <?php echo (int)$clientId; ?>;
-    const API_ENDPOINT = 'manage_contacts_api.php'; // New API endpoint
-
-    /**
-     * Helper function to validate if a string is a basic email format.
-     */
-    function isValidEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(String(email).toLowerCase());
-    }
-    
-    /**
-     * Sends an asynchronous request to the API endpoint.
-     */
-    function sendApiRequest(data) {
-        const formData = new FormData();
-        for (const key in data) {
-            formData.append(key, data[key]);
-        }
-
-        fetch(API_ENDPOINT, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.status === 'success') {
-                console.log(`Persistence success: ${result.message}`);
-            } else {
-                console.error(`Persistence error: ${result.message}`);
-                // Optional: Alert the user that the change was NOT saved persistently
-            }
-        })
-        .catch(error => {
-            console.error('API connection failed:', error);
-            // Optional: Alert the user about the connection failure
-        });
-    }
-
-    /**
-     * Adds an email to a specific datalist (client-side update + API call).
-     */
-    function addEmail(datalistId, listName, listType) {
-        const datalist = document.getElementById(datalistId);
-        if (!datalist) return;
-
-        const newEmail = prompt(`Add to ${listName}:\n\nEnter the email address to add:`);
-        if (newEmail && isValidEmail(newEmail.trim())) {
-            const cleanedEmail = newEmail.trim();
-            const existingOptions = Array.from(datalist.options).map(opt => opt.value.toLowerCase());
-            
-            if (existingOptions.includes(cleanedEmail.toLowerCase())) {
-                alert(`Error: The email '${cleanedEmail}' already exists in the list.`);
-                return;
-            }
-
-            // 1. Client-side update: Appends new option to the datalist
-            const newOption = document.createElement('option');
-            newOption.value = cleanedEmail;
-            datalist.appendChild(newOption);
-            alert(`Successfully added '${cleanedEmail}' to ${listName}.`);
-            
-            // 2. Server-side Persistence Call
-            sendApiRequest({
-                action: 'add',
-                email: cleanedEmail,
-                listType: listType,
-                clientId: CLIENT_ID 
-            });
-
-        } else if (newEmail !== null && newEmail.trim() !== '') {
-            alert('Error: Please enter a valid email address.');
-        }
-    }
-
-    /**
-     * Opens the custom modal and populates it with checkboxes.
-     */
-    function openDeleteModal(datalistId, listName, inputId, listType) {
-        const datalist = document.getElementById(datalistId);
-        const modal = document.getElementById('deleteModal');
-        const checkboxesContainer = document.getElementById('emailCheckboxes');
-
-        if (!datalist || !modal) return;
-
-        // Set global context
-        currentDatalistId = datalistId;
-        currentInputId = inputId;
-        currentListType = listType;
-
-        document.getElementById('modalTitle').textContent = `Delete Emails from ${listName}`;
-        checkboxesContainer.innerHTML = '';
-        
-        // Populate checkboxes
-        const options = Array.from(datalist.options);
-        if (options.length === 0) {
-            checkboxesContainer.innerHTML = '<p style="font-style:italic;">No emails available to delete.</p>';
-        } else {
-            options.forEach(option => {
-                const email = option.value;
-                const label = document.createElement('label');
-                label.className = 'checkbox-item';
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.value = email;
-                checkbox.name = 'emailToDelete';
-                
-                label.appendChild(checkbox);
-                label.appendChild(document.createTextNode(email));
-                checkboxesContainer.appendChild(label);
-            });
-        }
-
-        modal.style.display = 'flex';
-    }
-    
-    /**
-     * Processes the selected emails from the modal and deletes them (client-side update + API call).
-     */
-    function submitDeletion() {
-        const datalist = document.getElementById(currentDatalistId);
-        const inputField = document.getElementById(currentInputId);
-        const modal = document.getElementById('deleteModal');
-        const listType = currentListType;
-        
-        if (!datalist || !inputField) return;
-
-        const checkedBoxes = document.querySelectorAll('#emailCheckboxes input[name="emailToDelete"]:checked');
-        const emailsToDelete = Array.from(checkedBoxes).map(cb => cb.value); 
-        
-        if (emailsToDelete.length === 0) {
-            alert('Please select at least one email to delete.');
-            return;
-        }
-
-        let deletedCount = 0;
-        
-        emailsToDelete.forEach(email => {
-            const emailLower = email.toLowerCase();
-            
-            // Find option case-insensitively
-            const option = datalist.querySelector(`option[value="${email}" i]`) || 
-                           datalist.querySelector(`option[value="${emailLower}"]`); 
-            
-            if (option) {
-                // 1. Client-side update: Removes option from the datalist
-                datalist.removeChild(option);
-                deletedCount++;
-
-                // If the deleted email was currently selected in the input, clear the input.
-                if (inputField.value.toLowerCase() === emailLower) {
-                    inputField.value = '';
-                }
-            }
-        });
-        
-        // 2. Server-side Persistence Call
-        // Join emails with commas for the API endpoint
-        sendApiRequest({
-            action: 'delete',
-            emails: emailsToDelete.join(','),
-            listType: listType,
-            clientId: CLIENT_ID 
-        });
-
-        alert(`Successfully deleted ${deletedCount} email(s) from the list.`);
-        modal.style.display = 'none';
-        
-        // Clear global context
-        currentDatalistId = '';
-        currentInputId = '';
-        currentListType = '';
-    }
-
-
-    // --- File Attachment Logic (Kept for completeness) ---
-    document.addEventListener('DOMContentLoaded', function() {
-        const attachmentsInput = document.getElementById('attachments');
-        const fileListDisplay = document.getElementById('file-list-display');
-
-        function updateFileListDisplay() {
-            fileListDisplay.innerHTML = '';
-            if (attachmentsInput.files.length > 0) {
-                Array.from(attachmentsInput.files).forEach(file => {
-                    const fileNameSpan = document.createElement('span');
-                    fileNameSpan.className = 'file-name-item';
-                    fileNameSpan.textContent = `• ${file.name}`;
-                    fileListDisplay.appendChild(fileNameSpan);
-                });
-            } else {
-                 const placeholderText = document.createElement('span');
-                 placeholderText.textContent = 'No files selected.';
-                 fileListDisplay.appendChild(placeholderText);
-            }
-        }
-
-        if (attachmentsInput) {
-            attachmentsInput.addEventListener('change', updateFileListDisplay);
-            updateFileListDisplay(); // Initial load
-        }
-    });
-</script>

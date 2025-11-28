@@ -163,6 +163,23 @@ try {
              echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
              break;
 
+        case 'save_template':
+			$section = $_POST['section_type'] ?? '';
+			$name = trim($_POST['template_name'] ?? '');
+			$content = $_POST['template_content'] ?? '';
+
+			if (empty($section) || empty($name) || empty($content)) {
+				throw new Exception('Missing required fields (section, name, or content).');
+			}
+
+			$stmt = $pdo->prepare('INSERT INTO report_templates (name, section_type, content) VALUES (:name, :section, :content)');
+			if ($stmt->execute([':name' => $name, ':section' => $section, ':content' => $content])) {
+				echo json_encode(['success' => true]);
+			} else {
+				throw new Exception('Database insert failed.');
+			}
+			break;
+
         default:
             // If the action is POST but not one of the specific AJAX actions above, 
             // the main script (view_report.php) should handle it.

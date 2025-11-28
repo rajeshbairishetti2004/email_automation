@@ -1,5 +1,5 @@
 <?php
-// rationale.php - REDESIGNED ENTERPRISE UI
+// rationale.php
 // Renders the Rationale section with user-specific template management.
 // Requires: $clientId, $rationaleText, $userRationaleTemplates (new array from view_report.php)
 
@@ -11,289 +11,139 @@ $rationale_flash_container = (isset($_GET['template_added']) && $_GET['section']
 ?>
 
 <style>
-/* ============================================
-   RATIONALE - MODERN ENTERPRISE UI
-   ============================================ */
-
-/* Main Card Container */
-.rat-main-container {
-    background: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
-    padding: 24px;
-    margin-top: 24px;
-}
-
-.rat-main-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: #007bff;
-    margin: 0 0 20px 0;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #e6e8eb;
-    font-family: 'Poppins', 'Segoe UI', sans-serif;
-}
-
-/* Template Controls Bar */
-.rat-controls-bar {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 1px solid #e6e8eb;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.rat-control-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.rat-control-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: #495057;
-    white-space: nowrap;
-}
-
-.rat-template-select {
-    min-width: 220px;
-    padding: 10px 14px;
-    font-size: 14px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    background: #ffffff;
-    color: #495057;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.rat-template-select:hover {
-    border-color: #007bff;
-}
-
-.rat-template-select:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-}
-
-/* Action Buttons */
-.rat-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.rat-btn-save-new {
-    background: #28a745;
-    color: #ffffff;
-    margin-left: auto;
-}
-
-.rat-btn-save-new:hover {
-    background: #218838;
-    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
-    transform: translateY(-1px);
-}
-
-.rat-btn-edit {
-    background: #007bff;
-    color: #ffffff;
-}
-
-.rat-btn-edit:hover {
-    background: #0056b3;
-    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-}
-
-.rat-btn-delete {
-    background: #dc3545;
-    color: #ffffff;
-}
-
-.rat-btn-delete:hover {
-    background: #c82333;
-    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
-}
-
-.rat-btn-icon {
-    font-size: 14px;
-    line-height: 1;
-}
-
-/* Save Form Container */
-.rat-save-form-container {
-    background: #fff;
-    border: 2px solid #28a745;
-    border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 20px;
-    display: none;
-    animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.rat-form-header {
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #e9ecef;
-}
-
-.rat-form-title {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #28a745;
-}
-
-.rat-form-group {
-    margin-bottom: 16px;
-}
-
-.rat-form-label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 6px;
-}
-
-.rat-form-input,
-.rat-form-textarea {
-    width: 100%;
-    padding: 12px 14px;
-    font-size: 14px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-}
-
-.rat-form-input:focus,
-.rat-form-textarea:focus {
-    outline: none;
-    border-color: #28a745;
-    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
-}
-
-.rat-form-textarea {
-    resize: vertical;
-    min-height: 120px;
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-}
-
-.rat-form-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-.rat-btn-primary {
-    background: #28a745;
-    color: #ffffff;
-    padding: 10px 20px;
-}
-
-.rat-btn-primary:hover {
-    background: #218838;
-    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
-}
-
-.rat-btn-secondary {
-    background: #6c757d;
-    color: #ffffff;
-}
-
-.rat-btn-secondary:hover {
-    background: #5a6268;
-}
-
-/* Main Textarea */
-.rat-textarea-container {
-    margin-top: 20px;
-}
-
-.rat-main-textarea {
-    width: 100%;
-    min-height: 250px;
-    padding: 16px;
-    font-size: 14px;
-    line-height: 1.6;
-    border: 2px solid #e6e8eb;
-    border-radius: 8px;
-    resize: vertical;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-}
-
-.rat-main-textarea:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.1);
-}
-
-/* Flash Messages */
-.rat-flash-container {
-    margin-bottom: 16px;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .rat-controls-bar {
-        flex-direction: column;
-        align-items: stretch;
-    }
+    /* CSS for Enterprise Aesthetic */
     
-    .rat-control-group {
-        flex-direction: column;
-        align-items: stretch;
+    /* Container Styling */
+    .rationale-card-container {
+        padding: 30px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+        margin-top: 20px;
     }
-    
-    .rat-template-select {
+    .rationale-card-container .card-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #0288D1;
+        border-bottom: 2px solid #E3F2FD;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+        font-family: 'Poppins', sans-serif;
+    }
+
+    /* Template Controls Bar */
+    .template-controls-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 20px;
+        padding: 10px;
+        background-color: #F8F8F8;
+        border-radius: 8px;
+    }
+    .template-controls-bar label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #333;
+        margin: 0;
+    }
+
+    /* Input/Select Standardization */
+    .template-controls-bar select, 
+    .template-controls-bar input[type="text"] {
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .template-controls-bar select {
+        width: 180px;
+        cursor: pointer;
+    }
+
+    /* Button Styling (Cohesive Enterprise Look) */
+    .enterprise-btn {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        text-decoration: none !important;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .btn-save-new, .btn-edit {
+        background-color: #4CAF50; /* Green */
+        color: white;
+    }
+    .btn-save-new:hover, .btn-edit:hover {
+        background-color: #43A047;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn-delete {
+        background-color: #F44336; /* Red */
+        color: white;
+        padding: 8px 12px;
+    }
+    .btn-delete:hover {
+        background-color: #E53935;
+    }
+
+    /* Template Save Form Styling */
+    #rationale_template_form_container {
+        padding: 20px;
+        border: 2px solid #C5E1A5; /* Light green border */
+        border-radius: 8px;
+        background-color: #F1F8E9; /* Very light green background */
+        margin-bottom: 20px;
+        display: none;
+    }
+    .template-save-form h4 {
+        color: #388E3C;
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 16px;
+    }
+    .template-save-form input[type="text"], 
+    .template-save-form textarea {
         width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #A5D6A7;
+        border-radius: 4px;
+        box-sizing: border-box;
     }
-    
-    .rat-btn-save-new {
-        margin-left: 0;
+    .template-save-form textarea {
+        min-height: 100px;
+    }
+
+    /* Main Rationale Text Area */
+    #rationale_textarea {
         width: 100%;
+        min-height: 250px;
+        padding: 15px;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        box-sizing: border-box;
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
     }
-    
-    .rat-form-actions {
-        flex-direction: column;
+    #rationale_textarea:focus {
+        border-color: #4FC3F7;
+        box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.2);
+        outline: none;
     }
-}
 </style>
 
-<div class="rat-main-container">
-    <h2 class="rat-main-title">Rationale</h2>
+<div class="rationale-card-container">
+    <label class="card-title">Rationale</label>
     
-    <div id="rationale_flash_container" class="rat-flash-container signature-flash-container">
+    <div id="rationale_flash_container" class="signature-flash-container">
         <?php if (isset($_GET['template_added']) && $_GET['section'] == 'rationale'): ?>
             <div class="flash-message flash-success" style="opacity: 1;">✅ Rationale template saved successfully!</div>
         <?php elseif (isset($_GET['template_add_error']) && isset($_GET['section']) && $_GET['section'] == 'rationale'): ?>
@@ -301,93 +151,58 @@ $rationale_flash_container = (isset($_GET['template_added']) && $_GET['section']
         <?php endif; ?>
     </div>
 
-    <!-- Template Controls Bar -->
-    <div class="rat-controls-bar">
-        <div class="rat-control-group">
-            <label for="rationale_template_selector_main" class="rat-control-label">My Templates:</label>
-            <select id="rationale_template_selector_main" 
-                    class="rat-template-select" 
-                    data-textarea-id="rationale_textarea" 
-                    data-section-type="rationale">
-                <option value="0" data-content="<?php echo htmlspecialchars($rationaleText); ?>">-- Use Current Text --</option>
-                <?php foreach ($userRationaleTemplates as $tpl): ?>
-                    <option value="<?php echo (int)$tpl['id']; ?>" 
-                            data-content="<?php echo htmlspecialchars($tpl['content']); ?>">
-                        <?php echo htmlspecialchars($tpl['name']); ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
+    <div class="template-controls-bar">
+        <label for="rationale_template_selector_main">Load My Template:</label>
         
-        <button type="button" id="rationale_delete_template_btn" class="rat-btn rat-btn-delete" title="Delete Selected Template">
-            <span class="rat-btn-icon">🗑️</span>
-            <span>Delete</span>
-        </button>
+        <select id="rationale_template_selector_main" data-textarea-id="rationale_textarea" data-section-type="rationale">
+            <option value="0" data-content="<?php echo htmlspecialchars($rationaleText); ?>">--- Use Current Text ---</option>
+            <?php foreach ($userRationaleTemplates as $tpl): ?>
+                <option value="<?php echo (int)$tpl['id']; ?>" data-content="<?php echo htmlspecialchars($tpl['content']); ?>">
+                    <?php echo htmlspecialchars($tpl['name']); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
         
-        <button type="button" id="rationale_edit_template_btn" class="rat-btn rat-btn-edit" style="display: none;">
-            <span class="rat-btn-icon">✍️</span>
-            <span>Edit Selected</span>
-        </button>
+        <a href="#" id="rationale_delete_template_btn" class="btn-delete enterprise-btn" title="Delete Selected Template">
+           🗑️ Delete
+        </a>
         
-        <button type="button" id="rationale_save_template_toggle" class="rat-btn rat-btn-save-new">
-            <span class="rat-btn-icon">💾</span>
-            <span>Save Current Text as Template</span>
-        </button>
+        <a href="#" id="rationale_save_template_toggle" class="btn-save-new enterprise-btn">
+            + Save Current Text as Template
+        </a>
+        
+        <a href="#" id="rationale_edit_template_btn" class="btn-edit enterprise-btn" style="display: none;">
+            ✍️ Edit Selected
+        </a>
     </div>
 
-    <!-- Save Form Container -->
-    <div id="rationale_template_form_container" class="rat-save-form-container">
-        <form method="POST" id="rationaleTemplateForm">
+    <div id="rationale_template_form_container" style="display: none;">
+        <form method="POST" class="template-save-form" id="rationaleTemplateForm">
             <input type="hidden" name="action_add_template" value="1">
             <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
             <input type="hidden" name="template_section" value="rationale">
             <input type="hidden" name="template_id_to_update" id="template_id_to_update" value="0">
             
-            <div class="rat-form-header">
-                <h4 class="rat-form-title"><span id="templateFormTitle">Save New Rationale Template</span></h4>
-            </div>
+            <h4><span id="templateFormTitle">Save New Rationale Template</span></h4>
             
-            <div class="rat-form-group">
-                <label for="template_name_input" class="rat-form-label">Template Name *</label>
-                <input type="text" 
-                       name="template_name" 
-                       id="template_name_input" 
-                       class="rat-form-input"
-                       placeholder="e.g., Aggressive Growth View, Conservative Outlook" 
-                       required>
-            </div>
+            <label for="template_name_input" style="font-size: 12px; margin: 0;">Template Name (Required)</label>
+            <input type="text" name="template_name" id="template_name_input" placeholder="Template Name (e.g., Aggressive View)" required>
             
-            <div class="rat-form-group">
-                <label for="rationale_template_content_input" class="rat-form-label">Template Content *</label>
-                <textarea name="template_content" 
-                          id="rationale_template_content_input" 
-                          class="rat-form-textarea"
-                          placeholder="Enter the full rationale text here..." 
-                          required 
-                          rows="6"></textarea>
-            </div>
+            <label for="rationale_template_content_input" style="font-size: 12px; margin: 0;">Template Content</label>
+            <textarea name="template_content" id="rationale_template_content_input" placeholder="Paste the full content here..." required rows="5"></textarea>
             
-            <div class="rat-form-actions">
-                <button type="submit" id="templateSaveSubmit" class="rat-btn rat-btn-primary">
-                    <span class="rat-btn-icon">💾</span>
-                    <span>Save Template</span>
-                </button>
-                <button type="button" class="rat-btn rat-btn-secondary rat-cancel-btn">
-                    Cancel
-                </button>
-            </div>
+            <button type="submit" id="templateSaveSubmit" class="btn-save-new enterprise-btn" style="width: auto;">
+                💾 Save Template
+            </button>
         </form>
     </div>
 
-    <!-- Main Textarea -->
-    <div class="rat-textarea-container">
-        <textarea name="rationale"
-                  class="rat-main-textarea large-textarea" 
-                  data-field="rationale" 
-                  data-client-id="<?php echo (int)$clientId; ?>"
-                  id="rationale_textarea"
-                  placeholder="Enter your rationale analysis here. You can type directly or load from your saved templates above..."><?php echo htmlspecialchars($rationaleText); ?></textarea>
-    </div>
+    <textarea name="rationale"
+              class="large-textarea" 
+              data-field="rationale" 
+              data-client-id="<?php echo (int)$clientId; ?>"
+              id="rationale_textarea"
+              placeholder="Write your rationale here..."><?php echo htmlspecialchars($rationaleText); ?></textarea>
 </div>
 
 <script>
@@ -395,8 +210,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const textarea = document.getElementById('rationale_textarea');
     const selector = document.getElementById('rationale_template_selector_main');
     const saveToggleBtn = document.getElementById('rationale_save_template_toggle');
-    const editBtn = document.getElementById('rationale_edit_template_btn');
-    const deleteBtn = document.getElementById('rationale_delete_template_btn');
+    const editBtn = document.getElementById('rationale_edit_template_btn'); // New Edit Btn
+    const deleteBtn = document.getElementById('rationale_delete_template_btn'); 
     const formContainer = document.getElementById('rationale_template_form_container');
     const templateForm = document.getElementById('rationaleTemplateForm');
     const nameInput = document.getElementById('template_name_input');
@@ -404,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const templateIdInput = document.getElementById('template_id_to_update');
     const formTitle = document.getElementById('templateFormTitle');
 
-    // Helper function to reset and show the form
+    // --- Helper function to reset and show the form ---
     function prepareForm(type, templateId, templateName, templateContent) {
         if (type === 'new') {
             formTitle.textContent = 'Save New Rationale Template';
@@ -421,14 +236,14 @@ document.addEventListener('DOMContentLoaded', function() {
         formContainer.style.display = 'block';
     }
 
-    // Template Selector Logic (Load & Control Visibility)
+    // --- Template Selector Logic (Load & Control Visibility) ---
     if (selector) {
         selector.addEventListener('change', function() {
             const selectedOption = selector.options[selector.selectedIndex];
             const templateContent = selectedOption.getAttribute('data-content');
             const templateId = selector.value;
 
-            // Load content into main textarea and trigger auto-save (blur)
+            // 1. Load content into main textarea and trigger auto-save (blur)
             if (templateContent !== null && templateId !== '0') {
                 textarea.value = templateContent;
                 if (typeof showContextualFlash === 'function') {
@@ -448,12 +263,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
             textarea.dispatchEvent(new Event('blur')); 
             
-            // Hide save form if showing
+            // 2. Hide save form if showing
             formContainer.style.display = 'none';
         });
     }
 
-    // Toggle Save Form Logic (SaveToggleBtn - For New Save)
+    // --- Toggle Save Form Logic (SaveToggleBtn - For New Save) ---
     if (saveToggleBtn) {
         saveToggleBtn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -468,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Edit Template Button Logic
+    // --- Edit Template Button Logic ---
     if (editBtn) {
         editBtn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -483,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Delete Template Logic
+    // --- Delete Template Logic ---
     if (deleteBtn) {
         deleteBtn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -519,6 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (typeof showContextualFlash === 'function') {
                          showContextualFlash('success', `✅ Template "${templateName}" deleted. Reloading...`, 'rationale_flash_container');
                     }
+                    // Force full page reload to refresh the selector options
                     window.location.reload(); 
                 } else {
                     if (typeof showContextualFlash === 'function') {
@@ -534,8 +350,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Template Form Submission
+    // --- Template Form Submission (Uses standard POST now, but we validate fields) ---
     templateForm.addEventListener('submit', function(e) {
+        // Prevent default POST behavior to handle the form submission via AJAX
         e.preventDefault(); 
         
         const templateId = templateIdInput.value;
@@ -543,6 +360,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const submitBtn = document.getElementById('templateSaveSubmit');
         submitBtn.disabled = true;
 
+        // Prepare form data with correct parameter names
         const formData = new URLSearchParams();
         formData.append('ajax_action', 'save_user_template');
         formData.append('template_id_to_update', templateId);
@@ -569,6 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (typeof showContextualFlash === 'function') {
                      showContextualFlash('success', `✅ Template ${actionText} successfully. Reloading...`, 'rationale_flash_container');
                 }
+                // Reload to refresh the selector options
                 window.location.reload(); 
             } else {
                 if (typeof showContextualFlash === 'function') {
@@ -584,15 +403,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Template Save Error:', err);
         });
     });
-
-    // Cancel button handler
-    const cancelBtn = document.querySelector('.rat-cancel-btn');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            formContainer.style.display = 'none';
-        });
-    }
 
     // Initial check to control visibility of Edit/Delete buttons on load
     if (selector.value !== '0') {
