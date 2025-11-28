@@ -1,40 +1,5 @@
 <?php
 // db_config.php
-
-// 1. Fetch credentials from Railway Environment Variables
-// We use getenv() because it is more reliable on Railway than $_ENV
-$host = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? 'mysql.railway.internal');
-$dbname = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? 'client_reports');
-$user = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? 'root');
-$port = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? '3306');
-
-// CRITICAL FIX: Your Railway variable is named 'DB_PASSWORD', so we must check that specific key.
-$pass = getenv('DB_PASSWORD') ?: ($_ENV['DB_PASSWORD'] ?? '');
-
-try {
-    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
-
-    // Create the PDO connection
-    $pdo = new PDO($dsn, $user, $pass);
-
-    // Set error mode to exception to catch connection issues
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-
-} catch (PDOException $e) {
-    // If connection fails, stop and show a generic error (for security)
-    // You can echo $e->getMessage() temporarily for debugging if needed
-    error_log("Database Error: " . $e->getMessage());
-    die("Database Connection Failed. Please check your Railway Variables.");
-}
-
-// Helper function to access the connection globally
-function getPdo() {
-    global $pdo;
-    return $pdo;
-}
-?><?php
-// db_config.php
 require_once 'env_loader.php';
 
 // Helper to read environment variables from $_ENV or getenv with a fallback default
