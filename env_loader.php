@@ -32,5 +32,9 @@ function loadEnv($path = '.env') {
     }
 }
 
-// Load environment variables automatically
-loadEnv();
+// Load environment variables automatically; tolerate missing .env on Railway
+try {
+    loadEnv();
+} catch (Throwable $e) {
+    // File not found or unreadable? Use environment variables supplied by the host.
+}
