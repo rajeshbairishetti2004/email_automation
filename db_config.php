@@ -2,11 +2,16 @@
 // db_config.php
 require_once 'env_loader.php';
 
-// Get database credentials from environment variables
-define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
-define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_reports');
-define('DB_USER', $_ENV['DB_USER'] ?? 'root');
-define('DB_PASS', $_ENV['DB_PASS'] ?? '');
+// Helper function to read environment variables with fallbacks
+function getEnvVar(string $key, $default) {
+    return $_ENV[$key] ?? getenv($key) ?? $default;
+}
+
+// Get database credentials (supports both $_ENV and getenv)
+define('DB_HOST', getEnvVar('DB_HOST', 'localhost'));
+define('DB_NAME', getEnvVar('DB_NAME', 'client_reports'));
+define('DB_USER', getEnvVar('DB_USER', 'root'));
+define('DB_PASS', getEnvVar('DB_PASS', ''));
 
 function getPdo(): PDO {
     static $pdo = null;
