@@ -170,7 +170,7 @@ function handleEmailSending($clientId) {
         $signatureStored   = trim((string)($client['signature_block'] ?? ''));
 
         $DEFAULT_RATIONALE = 'Rationale for recommendations';
-        
+
         $clientMessage = implode("\n\n", [
             $greetingStored,
             $introTextStored,
@@ -178,7 +178,18 @@ function handleEmailSending($clientId) {
         ]);
 
         $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
-        $signatureBlock = $signatureStored !== '' ? $signatureStored : generateSignatureBlock($rmData);
+
+        /* --- FIX: PRIORITIZE DYNAMIC SIGNATURE FROM DROPDOWN --- */
+        $dynamicSignature = trim($_POST['custom_signature'] ?? '');
+
+        if (!empty($dynamicSignature)) {
+            $signatureBlock = $dynamicSignature;
+        } elseif ($signatureStored !== '') {
+            $signatureBlock = $signatureStored;
+        } else {
+            $signatureBlock = generateSignatureBlock($rmData);
+        }
+        /* ------------------------------------------------------- */
 
         // Build HTML email body
         ob_start();
