@@ -37,20 +37,23 @@ $initials = strtoupper(substr($nameForInitials, 0, 1));
 
 
 /* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
-/* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
-$DEFAULT_GREETING  = $_POST['greeting']       ?? 'Dear Mr.';
-$DEFAULT_INTRO     = $_POST['intro_text']     ?? 'Introduction';
-$DEFAULT_CLOSING   = $_POST['closing_text']   ?? 'Closing remarks';
-$DEFAULT_RATIONALE = $_POST['rationale_text'] ?? 'Rationale for recommendations';
+// --- FIX: Use simple hardcoded defaults for configuration placeholders ---
+$HARDCODED_GREETING  = 'Dear Mr.';
+$HARDCODED_INTRO     = 'Introduction';
+$HARDCODED_CLOSING   = 'Closing remarks';
+$HARDCODED_RATIONALE = 'Rationale for recommendations';
 
 /* ---------- HANDLE FILE UPLOAD AND PROCESSING ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
-    $greetingBase  = $_POST['greeting']       ?? $DEFAULT_GREETING;
-    $introText     = $_POST['intro_text']     ?? $DEFAULT_INTRO;
-    $closingText   = $_POST['closing_text']   ?? $DEFAULT_CLOSING;
-    $rationaleText = $_POST['rationale_text'] ?? $DEFAULT_RATIONALE;
+    // --- BUG FIX: Correctly determine the text values to be saved ---
+    // If the user has modified the form fields, use the posted value. Otherwise, use the hardcoded default.
+    $greetingBase  = $_POST['greeting']       ?? $HARDCODED_GREETING;
+    $introText     = $_POST['intro_text']     ?? $HARDCODED_INTRO;
+    $closingText   = $_POST['closing_text']   ?? $HARDCODED_CLOSING;
+    $rationaleText = $_POST['rationale_text'] ?? $HARDCODED_RATIONALE;
+    // -----------------------------------------------------------------
 
     // Get upload configuration from environment variables
     $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
@@ -70,48 +73,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
     $fileErrors = [];
 
     try {
-        foreach ($_FILES['client_files']['name'] as $i => $name) {
-            if ($_FILES['client_files']['error'][$i] !== UPLOAD_ERR_OK) {
-                $fileErrors[] = "Error uploading file: " . htmlspecialchars($name);
-                continue;
-            }
-
-            $size = $_FILES['client_files']['size'][$i];
-            if ($size > $maxFileSize) {
-                $maxSizeMB = round($maxFileSize / (1024 * 1024), 1);
-                $fileErrors[] = "File too large (max {$maxSizeMB}MB): " . htmlspecialchars($name);
-                continue;
-            }
-
-            $tmp    = $_FILES['client_files']['tmp_name'][$i];
-            $ext    = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-
-            if (!in_array($ext, $allowedExt, true)) {
-                $allowedExtList = implode(', ', $allowedExt);
-                $fileErrors[] = "Unsupported file type. Allowed: {$allowedExtList} - " . htmlspecialchars($name);
-                continue;
-            }
-
-            $target = $uploadDir . '/' . uniqid() . '_' . basename($name);
-            if (!move_uploaded_file($tmp, $target)) {
-                $fileErrors[] = "Failed to move uploaded file: " . htmlspecialchars($name);
-                continue;
-            }
-
-            if ($ext === 'xlsx' || $ext === 'xls') {
-                if (stripos($name, 'PortfolioValuation') !== false) {
-                    $pvFiles[] = $target;
-                } elseif (stripos($name, 'Allocation Analysis') !== false || stripos($name, 'Allocation_Analysis') !== false) {
-                    $aaFiles[] = $target;
-                } elseif (stripos($name, 'Running Systematic Transactions') !== false) {
-                    $rstFiles[] = $target;
-                } elseif (stripos($name, 'Portfolio Summary') !== false) {
-                    $psFiles[] = $target;
+        // --- SECURITY IMPROVEMENT: Check if any files were actually uploaded. ---
+        if (!isset($_FILES['client_files']) || !is_array($_FILES['client_files']['name'])) {
+            // No files were selected, but the form was submitted. Treat as an error or skip file loop.
+            // Continuing might lead to an empty report, which is handled later, but this check is cleaner.
+        } else {
+             foreach ($_FILES['client_files']['name'] as $i => $name) {
+                if ($_FILES['client_files']['error'][$i] !== UPLOAD_ERR_OK) {
+                    $fileErrors[] = "Error uploading file: " . htmlspecialchars($name);
+                    continue;
                 }
-            } elseif ($ext === 'pdf' && stripos($name, 'GoalStatusReport') !== false) {
-                $pdfFiles[] = $target;
+
+                $size = $_FILES['client_files']['size'][$i];
+                if ($size > $maxFileSize) {
+                    $maxSizeMB = round($maxFileSize / (1024 * 1024), 1);
+                    $fileErrors[] = "File too large (max {$maxSizeMB}MB): " . htmlspecialchars($name);
+                    continue;
+                }
+
+                $tmp    = $_FILES['client_files']['tmp_name'][$i];
+                $ext    = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+                if (!in_array($ext, $allowedExt, true)) {
+                    $allowedExtList = implode(', ', $allowedExt);
+                    $fileErrors[] = "Unsupported file type. Allowed: {$allowedExtList} - " . htmlspecialchars($name);
+                    continue;
+                }
+
+                $target = $uploadDir . '/' . uniqid() . '_' . basename($name);
+                if (!move_uploaded_file($tmp, $target)) {
+                    $fileErrors[] = "Failed to move uploaded file: " . htmlspecialchars($name);
+                    continue;
+                }
+
+                if ($ext === 'xlsx' || $ext === 'xls') {
+                    if (stripos($name, 'PortfolioValuation') !== false) {
+                        $pvFiles[] = $target;
+                    } elseif (stripos($name, 'Allocation Analysis') !== false || stripos($name, 'Allocation_Analysis') !== false) {
+                        $aaFiles[] = $target;
+                    } elseif (stripos($name, 'Running Systematic Transactions') !== false) {
+                        $rstFiles[] = $target;
+                    } elseif (stripos($name, 'Portfolio Summary') !== false) {
+                        $psFiles[] = $target;
+                    }
+                } elseif ($ext === 'pdf' && stripos($name, 'GoalStatusReport') !== false) {
+                    $pdfFiles[] = $target;
+                }
             }
         }
+
 
         $pvAll = [];
         foreach ($pvFiles as $f) {
@@ -225,6 +235,12 @@ $stmtGoal = $pdo->prepare("
             </body>
             </html>
             <?php
+            // --- RESOURCE CLEANUP: Delete uploaded files if processing failed early ---
+            foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+                if (file_exists($file)) {
+                    unlink($file);
+                }
+            }
             exit;
         }
 
@@ -254,11 +270,38 @@ $stmtGoal = $pdo->prepare("
             $totalSip         = 0;
             $totalGoalCurrent = 0;
             $totalGoalTarget  = 0;
-            foreach ($goals as $g) {
+            
+            // --- FIX: Recalculate status based on shortfall before saving ---
+            foreach ($goals as &$g) {
+                $shortfall = (float)($g['shortfall'] ?? 0); 
+                $targetAmount = (float)($g['target_amount'] ?? 0); 
+                
+                // DEFAULT: Assume On Track if no issues found
+                $g['status'] = 'On Track'; 
+                
+                // If the shortfall is NEGATIVE (meaning a surplus), it must be 'On Track'.
+                if ($shortfall <= 0) {
+                    $g['status'] = 'On Track'; 
+                } 
+                // If the shortfall is POSITIVE, check if it exceeds the 1% threshold
+                elseif ($targetAmount > 0) {
+                    // Define a 1% threshold of the target amount
+                    $threshold = $targetAmount * 0.01;
+                    
+                    // If shortfall is positive AND greater than the threshold, set to Invest More
+                    if ($shortfall > $threshold) {
+                        $g['status'] = 'Invest More';
+                    } else {
+                         // Shortfall is positive but negligible (within 1% margin)
+                         $g['status'] = 'On Track';
+                    }
+                }
+                
                 $totalSip         += $g['running_sip']   ?? 0;
                 $totalGoalCurrent += $g['current_value'] ?? 0;
                 $totalGoalTarget  += $g['target_amount'] ?? 0;
             }
+            unset($g); // Important to unset the reference
 
             if ($asOn !== '') {
                 $annexureLinesForClient = [
@@ -271,6 +314,7 @@ $stmtGoal = $pdo->prepare("
             }
 
             // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
+            // This is a valid strategy for handling re-uploads of the same reporting period.
             if ($asOn !== '') {
                 $delStmt = $pdo->prepare("DELETE FROM clients WHERE name = :name AND as_on = :as_on");
                 $delStmt->execute([':name' => $name, ':as_on' => $asOn]);
@@ -287,10 +331,12 @@ $stmtGoal = $pdo->prepare("
                 ':total_goal_current' => $totalGoalCurrent,
                 ':total_goal_target'  => $totalGoalTarget,
                 ':total_sip'          => $totalSip,
-                ':greeting_prefix'    => $DEFAULT_GREETING,
-                ':intro_text'         => $DEFAULT_INTRO,
-                ':closing_text'       => $DEFAULT_CLOSING,
-                ':rationale_text'     => $DEFAULT_RATIONALE,
+                // --- FIX: Use the calculated variables, not the old, confusing defaults ---
+                ':greeting_prefix'    => $greetingBase,
+                ':intro_text'         => $introText,
+                ':closing_text'       => $closingText,
+                ':rationale_text'     => $rationaleText,
+                // -----------------------------------------------------------------
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
@@ -302,6 +348,7 @@ $stmtGoal = $pdo->prepare("
             $savedCount++;
 
           foreach ($goals as $g) {
+                // Now saving the RE-CALCULATED status from the loop above
                 $stmtGoal->execute([
                     ':client_id'      => $clientId,
                     ':goal'           => $g['goal']          ?? '',
@@ -309,10 +356,10 @@ $stmtGoal = $pdo->prepare("
                     ':current_amount' => $g['current_value'] ?? 0,
                     ':sip_swp'        => $g['running_sip']   ?? 0,
                     ':target_amount'  => $g['target_amount'] ?? 0,
-                    ':projected'      => $g['projected']     ?? 0,
-                    ':shortfall'      => $g['shortfall']     ?? 0, // *** ADDED ***
+                    ':projected'      => $g['projected']     ?? 0, 
+                    ':shortfall'      => $g['shortfall']     ?? 0, 
                     ':completion'     => $g['completion']    ?? 0,
-                    ':status'         => $g['status']        ?? '',
+                    ':status'         => $g['status']        ?? '', // Use the calculated status
                 ]);
             }
 
@@ -349,6 +396,13 @@ $stmtGoal = $pdo->prepare("
             }
         }
         
+        // --- RESOURCE CLEANUP: Delete uploaded files after successful processing ---
+        foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        
         // NEW REDIRECT: Redirect to the first generated report for editing
         if ($firstClientId > 0) {
             header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
@@ -363,6 +417,13 @@ $stmtGoal = $pdo->prepare("
         // ------------------
 
     } catch (Throwable $e) {
+        // --- RESOURCE CLEANUP: Delete uploaded files if processing failed ---
+        foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        
         // ... (Error handling block remains the same) ...
         ?>
         <!DOCTYPE html>
@@ -621,6 +682,17 @@ $stmtGoal = $pdo->prepare("
     </div>
 
     <h1>Upload Client Data Files</h1>
+    
+    <?php if (!empty($fileErrors)): ?>
+    <div class="flash flash-error" style="text-align: left; margin-bottom: 20px; padding: 15px; border-radius: 8px;">
+        <strong>File Upload Errors:</strong>
+        <ul>
+            <?php foreach ($fileErrors as $error): ?>
+                <li><?= htmlspecialchars($error) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
 
     <div class="form-section">
         <form method="post" enctype="multipart/form-data">

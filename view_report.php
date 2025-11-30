@@ -835,11 +835,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     $shortfall = (float)($g['shortfall'] ?? 0); 
                     $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
 
-                    // Calculate the 1% threshold
+                    // Define a 1% threshold of the target amount
                     $threshold = $targetAmount * 0.01;
                     
-                    if ($shortfall > 0 && $shortfall > $threshold) {
-                        // Condition: Shortfall is positive AND greater than 1% of target. Major deficit.
+                    if ($shortfall > $threshold) { // Check if shortfall is positive and significant
+                        // Condition: Shortfall is positive AND greater than the threshold. Major deficit.
                         $newStatus = 'Invest More';
                         $statusClass = 'status-off'; // Red background
                     } else {

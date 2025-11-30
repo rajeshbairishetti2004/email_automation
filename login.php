@@ -10,6 +10,7 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = '';
+$usernameOrEmail = ''; // Initialize variable for use in value attribute
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $usernameOrEmail = trim($_POST['username_or_email'] ?? '');
@@ -165,8 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="login-container">
     <img src="image.png" alt="Logo" class="logo-img">
-    <h1>Client Report Portal</h1>
-
+    <h1>Client Report Generation Portal</h1>
     <?php if ($error): ?>
         <div class="flash-error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
@@ -178,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <form method="post">
         <label for="username_or_email">Username or Email</label>
-        <input type="text" name="username_or_email" id="username_or_email" required value="<?= htmlspecialchars($usernameOrEmail ?? '') ?>">
+        <input type="text" name="username_or_email" id="username_or_email" required value="<?= htmlspecialchars($usernameOrEmail) ?>">
         
         <label for="password">Password</label>
         <div class="password-container">
