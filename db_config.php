@@ -1,7 +1,6 @@
 <?php
 // db_config.php
 require_once 'env_loader.php';
-
 // Get database credentials from environment variables
 // These values will now be loaded from your .env file via env_loader.php
 // We use a safe fallback only in case the env file fails to load.
@@ -19,6 +18,7 @@ function getPdo(): PDO {
         $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
         
         // This is line 22 where the error was happening.
+
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

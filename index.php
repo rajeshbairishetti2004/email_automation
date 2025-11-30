@@ -1,4 +1,5 @@
 <?php
+
 // Auto-redirect to login.php (tries same dir, then report/)
 $tries = [
     __DIR__ . '/login.php' => 'login.php',
@@ -14,3 +15,4 @@ foreach ($tries as $filePath => $redirectUrl) {
 
 // ...existing code...
 ?>
+

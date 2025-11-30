@@ -2,6 +2,9 @@
     "require": {
         "phpoffice/phpspreadsheet": "^5.2",
         "smalot/pdfparser": "^2.12",
-        "phpmailer/phpmailer": "^7.0"
+        "phpmailer/phpmailer": "^7.0",
+        "ext-gd": "*",
+        "ext-zip": "*",
+        "ext-pdo_mysql": "*"
     }
 }
