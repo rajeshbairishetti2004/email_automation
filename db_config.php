@@ -3,31 +3,23 @@
 require_once 'env_loader.php';
 
 // Get database credentials from environment variables
-define('DB_HOST', $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'mysql');
-define('DB_NAME', $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'client_reports');
-define('DB_USER', $_ENV['DB_USER'] ?? getenv('DB_USER') ?: 'MyUser');
-define('DB_PASS', $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: 'MySecurePass123!');
+define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
+define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_reports');
+define('DB_USER', $_ENV['DB_USER'] ?? 'root');
+define('DB_PASS', $_ENV['DB_PASS'] ?? '');
 
 function getPdo(): PDO {
     static $pdo = null;
     if ($pdo === null) {
         $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
-
-        // TEMP DEBUG (remove once confirmed):
-        // error_log('DB_HOST used by PDO: ' . DB_HOST);
-
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_EMULATE_PREPARES => false,
         ]);
     }
     return $pdo;
 }
-
-// ... rest of the file remains the same ...
-
-// NO CLOSING PHP TAG
 
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
@@ -318,7 +310,7 @@ function parseIndianNumber(string $s): float {
     // 2. Remove commas (Indian thousand separators).
     $s = str_replace(',', '', $s);
     
-    // 3. Remove any trailing '*' or other non-digit, non-dot, non-hyphen characters.
+    // 3. Handle cases where negative sign might be outside the parentheses, e.g., "-583102.00 *"
     $s = preg_replace('/[^\d\.\-]/', '', $s);
 
     if ($s === '' || $s === '-' || $s === '.') return 0.0;
