@@ -3,15 +3,22 @@
 require_once 'env_loader.php';
 
 // Get database credentials from environment variables
-define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
+// These values will now be loaded from your .env file via env_loader.php
+// We use a safe fallback only in case the env file fails to load.
+define('DB_HOST', $_ENV['DB_HOST'] ?? '127.0.0.1'); // Using 127.0.0.1 as a robust default
 define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_reports');
+// define('DB_USER', $_ENV['DB_USER'] ?? 'MyUser');
+// define('DB_PASS', $_ENV['DB_PASS'] ?? 'MySecurePass123!'); // Empty string for XAMPP root user
 define('DB_USER', $_ENV['DB_USER'] ?? 'root');
-define('DB_PASS', $_ENV['DB_PASS'] ?? '');
+define('DB_PASS', $_ENV['DB_PASS'] ?? ''); 
 
 function getPdo(): PDO {
     static $pdo = null;
     if ($pdo === null) {
+        // DB_HOST should now be 'localhost' or '127.0.0.1' from the updated .env file
         $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        
+        // This is line 22 where the error was happening.
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -20,6 +27,11 @@ function getPdo(): PDO {
     }
     return $pdo;
 }
+
+// ... rest of the functions (getDefaultRelationshipManager, getAllRelationshipManagers, etc.)
+// ... are omitted for brevity, they remain as per the previously corrected version.
+
+// NO CLOSING PHP TAG
 
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
@@ -36,12 +48,17 @@ function getAllRelationshipManagers() {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+/**
+ * Generates a signature block, ensuring data is escaped for safe output.
+ * Uses htmlspecialchars to prevent XSS if this text block is ever inserted into HTML.
+ */
 function generateSignatureBlock(array $rm): string {
-    $rmName        = $rm['name'] ?? 'Relationship Manager';
-    $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
-    $rmMobile      = $rm['mobile'] ?? 'N/A';
-    $rmEmail       = $rm['email'] ?? 'N/A';
-
+    // --- SECURITY FIX: Escape values fetched from DB before use ---
+    $rmName        = htmlspecialchars($rm['name'] ?? 'Relationship Manager');
+    $rmDesignation = htmlspecialchars($rm['designation'] ?? 'Relationship Manager');
+    $rmMobile      = htmlspecialchars($rm['mobile'] ?? 'N/A');
+    $rmEmail       = htmlspecialchars($rm['email'] ?? 'N/A');
+    
     return "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 }
 
@@ -399,6 +416,7 @@ function validateDatabaseConnection(): bool {
         $pdo->query('SELECT 1');
         return true;
     } catch (PDOException $e) {
+        // --- NOTE: This is the logic that *should* catch your initial error ---
         error_log("Database connection failed: " . $e->getMessage());
         return false;
     }
@@ -425,4 +443,3 @@ function checkDatabaseEnvironment(): array {
     
     return $errors;
 }
-// NO CLOSING PHP TAG
