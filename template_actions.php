@@ -1,4 +1,4 @@
-<?php
+git branch -D Chetan<?php
 // template_actions.php
 // Handles all AJAX actions related to RMs and Templates (loading, deleting, etc.).
 

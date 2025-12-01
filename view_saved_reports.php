@@ -54,39 +54,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <title>Stored Client Reports</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
-    <style>
-        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #f7f9fb; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        h1 { margin-bottom: 20px; font-family: 'Poppins', sans-serif; color: #0288D1; }
-        
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        th, td { padding: 12px 15px; font-size: 14px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f1f8e9; color: #333; font-weight: 600; }
-        tr:hover { background: #f9f9f9; }
-        
-        a { text-decoration: none; color: #0056b3; }
-        a:hover { text-decoration: underline; }
-
-        .nav-bar { margin-bottom: 20px; }
-        .nav-button { display: inline-block; margin-right: 10px; padding: 8px 16px; background-color: #0288D1; color: #fff; border-radius: 5px; text-decoration: none; font-size: 14px; font-weight: 500; }
-        .nav-button:hover { background-color: #01579B; }
-
-        .search-box { margin-top: 10px; }
-        .search-box input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 250px; }
-        .search-box button { padding: 8px 15px; background: #0288D1; color: white; border: none; border-radius: 4px; cursor: pointer; }
-
-        .pagination { margin-top: 20px; font-size: 14px; }
-        .pagination a { margin-right: 5px; padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; color: #333; }
-        .pagination strong { padding: 5px 10px; background: #0288D1; color: white; border-radius: 4px; margin-right: 5px; }
-        
-        /* Workflow Status Badges */
-        .badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; border: 1px solid transparent; display: inline-block; min-width: 60px; text-align: center;}
-        .badge-draft { background: #e0e0e0; color: #555; border-color: #ccc; }
-        .badge-ready { background: #fff3cd; color: #856404; border-color: #ffeeba; }
-        .badge-reviewed { background: #d4edda; color: #155724; border-color: #c3e6cb; }
-        .badge-sent { background: #cce5ff; color: #004085; border-color: #b8daff; }
-        .badge-rejected { background: #f8d7da; color: #721c24; border-color: #f5c6cb; cursor: help; }
-    </style>
+    <link rel="stylesheet" href="public/css/view_saved_reports.css">
 </head>
 <body>
 
