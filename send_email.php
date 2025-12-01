@@ -181,8 +181,7 @@ function updateSenderDetails(selectObj) {
 <!-- CSS moved to public/css/send_email.css -->
 
 <div class="email-send-container">
-
-    /* Base and General Styles */
+<style>
     .email-send-container {
         font-family: Arial, sans-serif;
         padding: 0; 

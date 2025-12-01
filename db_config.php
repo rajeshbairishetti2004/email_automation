@@ -1,6 +1,17 @@
 <?php
 // db_config.php
 require_once 'env_loader.php';
+
+// --- IMPORTANT FOR DOCKER USERS ---
+// If running inside Docker and connecting to MySQL on your host (XAMPP):
+// 1. Set DB_HOST=host.docker.internal in your .env file (Windows/Mac).
+//    On Linux, use your host's IP address.
+// 2. Ensure MySQL is listening on 0.0.0.0 (not just localhost).
+//    In my.cnf, set: bind-address = 0.0.0.0
+// 3. Grant privileges for your MySQL user to connect from any host:
+//    Example: GRANT ALL PRIVILEGES ON client_reports.* TO 'root'@'%' IDENTIFIED BY '';
+// 4. Restart MySQL after changes.
+
 // Get database credentials from environment variables
 // These values will now be loaded from your .env file via env_loader.php
 // We use a safe fallback only in case the env file fails to load.
@@ -14,8 +25,9 @@ define('DB_PASS', $_ENV['DB_PASS'] ?? '');
 function getPdo(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        // DB_HOST should now be 'localhost' or '127.0.0.1' from the updated .env file
-        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        // Force 'localhost' to '127.0.0.1' to avoid socket issues in Docker/Linux
+        $host = (DB_HOST === 'localhost') ? '127.0.0.1' : DB_HOST;
+        $dsn = 'mysql:host=' . $host . ';dbname=' . DB_NAME . ';charset=utf8mb4';
         
         // This is line 22 where the error was happening.
 
