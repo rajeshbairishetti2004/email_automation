@@ -1,0 +1,148 @@
+/* ==========================================
+   REGISTER PAGE STYLES
+   ========================================== */
+
+body {
+    background-color: #f7f9fb;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+.register-container {
+    width: 100%;
+    max-width: 450px;
+    padding: 40px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.logo-img {
+    width: 80px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 24px;
+    color: #0288D1;
+    margin-bottom: 30px;
+    font-family: 'Poppins', sans-serif;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    text-align: left;
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.password-container {
+    position: relative;
+}
+
+.password-container input[type="text"],
+.password-container input[type="password"] {
+    padding-right: 40px;
+    margin-bottom: 20px !important;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #aaa;
+    width: 20px;
+    height: 20px;
+}
+
+#username-feedback {
+    font-size: 12px;
+    margin-top: -15px;
+    margin-bottom: 10px;
+    text-align: left;
+    min-height: 15px;
+}
+
+.text-success { 
+    color: #28a745; 
+}
+
+.text-danger { 
+    color: #dc3545; 
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+select {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 2px solid #E3F2FD;
+    border-radius: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+input:focus {
+    border-color: #4FC3F7;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
+}
+
+button[type="submit"] {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
+}
+
+button[type="submit"]:hover {
+    background: linear-gradient(135deg, #29B6F6 0%, #0288D1 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(41, 182, 246, 0.4);
+}
+
+.links {
+    margin-top: 25px;
+    font-size: 14px;
+}
+
+.links a {
+    color: #0288D1;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.links a:hover {
+    color: #4FC3F7;
+}
+
+.flash-error {
+    background-color: #ffdddd;
+    color: #d8000c;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    border: 1px solid #d8000c;
+    font-size: 14px;
+    text-align: left;
+}

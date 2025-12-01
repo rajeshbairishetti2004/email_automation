@@ -178,16 +178,9 @@ function updateSenderDetails(selectObj) {
     </div>
 </div>
 
-<style>
-    /* ... (CSS remains the same) ... */
-    /* New Class to match Client Communication Box (image_a36b79.png) */
-    .communication-box-style {
-        border: 1px solid #c9c9c9; 
-        border-radius: 4px;
-        background-color: #f7f7f7; 
-        padding: 15px;
-        font-family: Arial, sans-serif; 
-    }
+<!-- CSS moved to public/css/send_email.css -->
+
+<div class="email-send-container">
 
     /* Base and General Styles */
     .email-send-container {
@@ -412,3 +405,6 @@ function updateSenderDetails(selectObj) {
         color: white;
     }
 </style>
+
+<!-- CSS moved to public/css/send_email.css -->
+

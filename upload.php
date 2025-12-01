@@ -216,8 +216,7 @@ $stmtGoal = $pdo->prepare("
             <html>
             <head>
                 <title>No Data</title>
-                <link rel="stylesheet" href="public/css/styles.css">
-                <style>body { font-family: Arial, sans-serif; margin: 20px; }</style>
+                <link rel="stylesheet" href="public/css/upload.css">
             </head>
             <body>
             <div class='flash flash-error'>No client data could be extracted. Please check that the correct files were uploaded.</div>
@@ -369,20 +368,7 @@ $stmtGoal = $pdo->prepare("
         <html>
         <head>
             <title>Error - Client Reports</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .flash-error { padding: 10px; border-radius: 4px; background: #ffe6e6; border: 1px solid #b30000; }
-                .nav-button {
-                    display: inline-block;
-                    margin-top: 10px;
-                    padding: 6px 12px;
-                    background-color: #0056b3;
-                    color: #fff;
-                    border-radius: 4px;
-                    text-decoration: none;
-                    font-size: 13px;
-                }
-            </style>
+            <link rel="stylesheet" href="public/css/upload.css">
         </head>
         <body>
         <div class="flash-error">
@@ -407,190 +393,7 @@ $stmtGoal = $pdo->prepare("
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/styles.css">
-    
-    <style>
-        /* General layout adjustments */
-        body { 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f7f9fb;
-            font-family: 'Inter', sans-serif;
-        }
-
-        /* --- FULL WIDTH HEADER BAR --- */
-        .full-width-header-bar {
-            width: 100%;
-            background-color: white; 
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        /* Header content constrained to max-width */
-        .header {
-            max-width: 1200px; 
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px; 
-        }
-        
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-        .header-left img {
-            width: 50px; 
-            height: 50px;
-            margin-right: 15px;
-            object-fit: contain;
-        }
-        .header-left .greeting {
-            font-size: 24px; 
-            font-weight: 700; 
-            color: #0288D1; 
-            font-family: 'Poppins', sans-serif;
-        }
-
-        /* Profile/Logout section styles */
-        .header-right {
-            position: relative; /* Essential for positioning the dropdown */
-            display: flex;
-            align-items: center;
-        }
-        
-        .profile-pic {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background-color: #4FC3F7; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
-            border: 2px solid #0288D1;
-            cursor: pointer; 
-            z-index: 20; /* Ensure it stays on top */
-        }
-
-        /* Dropdown container */
-        .profile-dropdown {
-            position: absolute;
-            top: 100%; /* Position below the profile icon */
-            right: 0;
-            margin-top: 10px; /* Space below icon */
-            width: auto;
-            min-width: 120px;
-            background: white;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border-radius: 6px;
-            overflow: hidden;
-            display: none; /* Initially hidden */
-            z-index: 10;
-        }
-
-        /* Dropdown link styling */
-        .profile-dropdown a {
-            padding: 10px 15px;
-            text-decoration: none;
-            display: block;
-            text-align: right;
-            font-size: 15px;
-            color: #333;
-            transition: background-color 0.1s;
-        }
-        .profile-dropdown a:hover {
-            background-color: #f0f0f0;
-        }
-
-        /* Specific style for Logout link (Red Text) */
-        .profile-dropdown a.logout-link {
-            color: #F44336; /* Red text for logout */
-            font-weight: 600;
-        }
-        
-        /* --- MAIN PAGE CONTENT --- */
-        .main-content {
-            max-width: 800px;
-            margin: 20px auto 40px auto; 
-            padding: 0 20px; 
-            text-align: center; 
-        }
-
-        h1 {
-            color: #0288D1;
-            font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .nav-bar {
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: center; 
-            gap: 10px;
-        }
-        .nav-button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #0288D1;
-            color: #fff;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 15px; 
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .nav-button:hover {
-            background-color: #01579B;
-        }
-        
-        label {
-            display: block;
-            margin-top: 20px;
-            font-weight: 600;
-            color: #0288D1;
-            font-size: 14px;
-            text-align: left; 
-        }
-        
-        input[type="file"],
-        input[type="text"],
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #E3F2FD;
-            border-radius: 8px;
-            font-family: 'Inter', sans-serif;
-            margin-top: 8px;
-            font-size: 14px;
-        }
-        
-        button[type="submit"] {
-            margin-top: 25px;
-            padding: 12px 30px;
-            background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
-        }
-        
-        .form-section {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-            margin-bottom: 20px;
-            text-align: left; 
-        }
-    </style>
+    <link rel="stylesheet" href="public/css/upload.css">
 </head>
 <body>
 
