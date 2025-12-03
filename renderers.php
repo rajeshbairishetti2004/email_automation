@@ -103,15 +103,25 @@ function renderClientReport(
                 <th>Target Amount (Rs)</th>
                 <th>Status</th>
             </tr>
-            <?php foreach ($goals as $g): ?>
+            <?php foreach ($goals as $g): 
+                $status = htmlspecialchars($g['status']);
+                $displayStatus = $status;
+                $statusClass = 'status-on'; // Default to green
+
+                // Check for 'Needs Attention' (old parser) or 'Invest More' (new upload logic)
+                if ($status === 'Needs Attention' || $status === 'Invest More') {
+                    $displayStatus = 'Invest More';
+                    $statusClass = 'status-off'; // Red/Attention color
+                }
+            ?>
                 <tr>
                     <td><?php echo htmlspecialchars($g['goal']); ?></td>
                     <td><?php echo htmlspecialchars(substr($g['goal_date'], -4)); ?></td>
                     <td><?php echo formatAmount($g['current_value']); ?></td>
                     <td><?php echo formatAmount($g['running_sip'] ?? 0); ?></td>
                     <td><?php echo formatAmount($g['target_amount']); ?></td>
-                    <td class="<?php echo ($g['status'] === 'On Track') ? 'status-on' : 'status-off'; ?>">
-                        <?php echo ($g['status'] === 'Needs Attention') ? 'Invest More' : htmlspecialchars($g['status']); ?>
+                    <td class="<?php echo $statusClass; ?>">
+                        <?php echo $displayStatus; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

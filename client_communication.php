@@ -5,30 +5,6 @@
 $communication_flash_container = isset($_GET['template_added']) || isset($_GET['template_add_error']);
 ?>
 
-<style>
-.editor-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.07); overflow: hidden; margin-bottom: 24px; }
-.editor-header { background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); padding: 16px 24px; }
-.editor-title { margin: 0; font-size: 20px; font-weight: 700; color: #fff; font-family: 'Poppins', sans-serif; }
-.editor-toolbar { display: flex; align-items: flex-start; gap: 16px; padding: 16px 24px; background: #f8f9fa; border-bottom: 1px solid #e6e8eb; flex-wrap: wrap; }
-.toolbar-group { display: flex; flex-direction: column; gap: 8px; min-width: 200px; flex: 1; }
-.toolbar-label { font-size: 12px; font-weight: 600; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; }
-.toolbar-controls { display: flex; gap: 6px; align-items: center; }
-.toolbar-select { flex: 1; padding: 8px 10px; font-size: 14px; border: 1px solid #ced4da; border-radius: 6px; background: #fff; color: #495057; cursor: pointer; transition: all 0.2s; }
-.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid #ced4da; border-radius: 6px; background: #fff; color: #495057; cursor: pointer; transition: all 0.2s; font-size: 16px; }
-.btn-icon:hover { background: #007bff; color: #fff; border-color: #007bff; }
-.btn-icon.delete:hover { background: #dc3545; border-color: #dc3545; }
-.seamless-editor-wrapper { border: none; background: #fff; padding: 0; overflow: hidden; }
-.seamless-input { width: 100%; border: none; padding: 16px 24px; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6; resize: vertical; display: block; outline: none; color: #333; box-sizing: border-box; transition: background 0.2s; }
-.greeting-part { min-height: 50px; font-weight: 600; border-bottom: 1px dashed #e6e8eb; color: #007bff; }
-.intro-part { min-height: 200px; border-bottom: 1px dashed #e6e8eb; color: #212529; }
-.closing-part { min-height: 60px; font-style: italic; color: #6c757d; }
-.comm-flash-container { padding: 0 24px; margin: 16px 0; }
-
-/* Modal Styles */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 2000; }
-.modal-box { background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-</style>
-
 <div class="editor-card">
     <div class="editor-header">
         <h3 class="editor-title">Client Communication</h3>

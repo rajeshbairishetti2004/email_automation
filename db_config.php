@@ -2,24 +2,35 @@
 // db_config.php
 require_once 'env_loader.php';
 
-// Helper to read environment variables from $_ENV or getenv with a fallback default
-function getEnvVar(string $key, $default) {
-    $value = $_ENV[$key] ?? getenv($key);
-    return ($value === false || $value === null || $value === '') ? $default : $value;
-}
+// --- IMPORTANT FOR DOCKER USERS ---
+// If running inside Docker and connecting to MySQL on your host (XAMPP):
+// 1. Set DB_HOST=host.docker.internal in your .env file (Windows/Mac).
+//    On Linux, use your host's IP address.
+// 2. Ensure MySQL is listening on 0.0.0.0 (not just localhost).
+//    In my.cnf, set: bind-address = 0.0.0.0
+// 3. Grant privileges for your MySQL user to connect from any host:
+//    Example: GRANT ALL PRIVILEGES ON client_reports.* TO 'root'@'%' IDENTIFIED BY '';
+// 4. Restart MySQL after changes.
 
-// Define connection constants so the rest of the file can rely on them
-define('DB_HOST', getEnvVar('DB_HOST', 'localhost'));
-define('DB_NAME', getEnvVar('DB_NAME', 'client_reports'));
-define('DB_USER', getEnvVar('DB_USER', 'root'));
-define('DB_PASS', getEnvVar('DB_PASS', ''));
-define('DB_PORT', getEnvVar('DB_PORT', '3306'));
+// Get database credentials from environment variables
+// These values will now be loaded from your .env file via env_loader.php
+// We use a safe fallback only in case the env file fails to load.
+define('DB_HOST', $_ENV['DB_HOST'] ?? '127.0.0.1'); // Using 127.0.0.1 as a robust default
+define('DB_NAME', $_ENV['DB_NAME'] ?? 'client_reports');
+// define('DB_USER', $_ENV['DB_USER'] ?? 'MyUser');
+// define('DB_PASS', $_ENV['DB_PASS'] ?? 'MySecurePass123!'); // Empty string for XAMPP root user
+define('DB_USER', $_ENV['DB_USER'] ?? 'root');
+define('DB_PASS', $_ENV['DB_PASS'] ?? ''); 
 
 function getPdo(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $portSegment = DB_PORT ? ';port=' . DB_PORT : '';
-        $dsn = 'mysql:host=' . DB_HOST . $portSegment . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        // Force 'localhost' to '127.0.0.1' to avoid socket issues in Docker/Linux
+        $host = (DB_HOST === 'localhost') ? '127.0.0.1' : DB_HOST;
+        $dsn = 'mysql:host=' . $host . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        
+        // This is line 22 where the error was happening.
+
         $pdo = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -28,6 +39,11 @@ function getPdo(): PDO {
     }
     return $pdo;
 }
+
+// ... rest of the functions (getDefaultRelationshipManager, getAllRelationshipManagers, etc.)
+// ... are omitted for brevity, they remain as per the previously corrected version.
+
+// NO CLOSING PHP TAG
 
 function getDefaultRelationshipManager() {
     $pdo = getPdo();
@@ -44,12 +60,17 @@ function getAllRelationshipManagers() {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+/**
+ * Generates a signature block, ensuring data is escaped for safe output.
+ * Uses htmlspecialchars to prevent XSS if this text block is ever inserted into HTML.
+ */
 function generateSignatureBlock(array $rm): string {
-    $rmName        = $rm['name'] ?? 'Relationship Manager';
-    $rmDesignation = $rm['designation'] ?? 'Relationship Manager';
-    $rmMobile      = $rm['mobile'] ?? 'N/A';
-    $rmEmail       = $rm['email'] ?? 'N/A';
-
+    // --- SECURITY FIX: Escape values fetched from DB before use ---
+    $rmName        = htmlspecialchars($rm['name'] ?? 'Relationship Manager');
+    $rmDesignation = htmlspecialchars($rm['designation'] ?? 'Relationship Manager');
+    $rmMobile      = htmlspecialchars($rm['mobile'] ?? 'N/A');
+    $rmEmail       = htmlspecialchars($rm['email'] ?? 'N/A');
+    
     return "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 }
 
@@ -407,6 +428,7 @@ function validateDatabaseConnection(): bool {
         $pdo->query('SELECT 1');
         return true;
     } catch (PDOException $e) {
+        // --- NOTE: This is the logic that *should* catch your initial error ---
         error_log("Database connection failed: " . $e->getMessage());
         return false;
     }
@@ -433,4 +455,3 @@ function checkDatabaseEnvironment(): array {
     
     return $errors;
 }
-// NO CLOSING PHP TAG

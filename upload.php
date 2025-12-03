@@ -37,20 +37,23 @@ $initials = strtoupper(substr($nameForInitials, 0, 1));
 
 
 /* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
-/* ---------- CONFIG: DEFAULT TEXTS (fallbacks only) ---------- */
-$DEFAULT_GREETING  = $_POST['greeting']       ?? 'Dear Mr.';
-$DEFAULT_INTRO     = $_POST['intro_text']     ?? 'Introduction';
-$DEFAULT_CLOSING   = $_POST['closing_text']   ?? 'Closing remarks';
-$DEFAULT_RATIONALE = $_POST['rationale_text'] ?? 'Rationale for recommendations';
+// --- FIX: Use simple hardcoded defaults for configuration placeholders ---
+$HARDCODED_GREETING  = 'Dear Mr.';
+$HARDCODED_INTRO     = 'Introduction';
+$HARDCODED_CLOSING   = 'Closing remarks';
+$HARDCODED_RATIONALE = 'Rationale for recommendations';
 
 /* ---------- HANDLE FILE UPLOAD AND PROCESSING ---------- */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
-    $greetingBase  = $_POST['greeting']       ?? $DEFAULT_GREETING;
-    $introText     = $_POST['intro_text']     ?? $DEFAULT_INTRO;
-    $closingText   = $_POST['closing_text']   ?? $DEFAULT_CLOSING;
-    $rationaleText = $_POST['rationale_text'] ?? $DEFAULT_RATIONALE;
+    // --- BUG FIX: Correctly determine the text values to be saved ---
+    // If the user has modified the form fields, use the posted value. Otherwise, use the hardcoded default.
+    $greetingBase  = $_POST['greeting']       ?? $HARDCODED_GREETING;
+    $introText     = $_POST['intro_text']     ?? $HARDCODED_INTRO;
+    $closingText   = $_POST['closing_text']   ?? $HARDCODED_CLOSING;
+    $rationaleText = $_POST['rationale_text'] ?? $HARDCODED_RATIONALE;
+    // -----------------------------------------------------------------
 
     // Get upload configuration from environment variables
     $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
@@ -70,49 +73,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
     $fileErrors = [];
 
     try {
-        foreach ($_FILES['client_files']['name'] as $i => $name) {
-            if ($_FILES['client_files']['error'][$i] !== UPLOAD_ERR_OK) {
-                $fileErrors[] = "Error uploading file: " . htmlspecialchars($name);
-                continue;
-            }
+        // --- SECURITY IMPROVEMENT: Check if any files were actually uploaded. ---
+        if (!isset($_FILES['client_files']) || !is_array($_FILES['client_files']['name'])) {
+            // No files were selected, but the form was submitted. Treat as an error or skip file loop.
+            // Continuing might lead to an empty report, which is handled later, but this check is cleaner.
+        } else {
+             foreach ($_FILES['client_files']['name'] as $i => $name) {
+                if ($_FILES['client_files']['error'][$i] !== UPLOAD_ERR_OK) {
+                    $fileErrors[] = "Error uploading file: " . htmlspecialchars($name);
+                    continue;
+                }
 
-            $size = $_FILES['client_files']['size'][$i];
-            if ($size > $maxFileSize) {
-                $maxSizeMB = round($maxFileSize / (1024 * 1024), 1);
-                $fileErrors[] = "File too large (max {$maxSizeMB}MB): " . htmlspecialchars($name);
-                continue;
-            }
+                $size = $_FILES['client_files']['size'][$i];
+                if ($size > $maxFileSize) {
+                    $maxSizeMB = round($maxFileSize / (1024 * 1024), 1);
+                    $fileErrors[] = "File too large (max {$maxSizeMB}MB): " . htmlspecialchars($name);
+                    continue;
+                }
 
-            $tmp    = $_FILES['client_files']['tmp_name'][$i];
-            $ext    = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                $tmp    = $_FILES['client_files']['tmp_name'][$i];
+                $ext    = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
-            if (!in_array($ext, $allowedExt, true)) {
-                $allowedExtList = implode(', ', $allowedExt);
-                $fileErrors[] = "Unsupported file type. Allowed: {$allowedExtList} - " . htmlspecialchars($name);
-                continue;
-            }
+                if (!in_array($ext, $allowedExt, true)) {
+                    $allowedExtList = implode(', ', $allowedExt);
+                    $fileErrors[] = "Unsupported file type. Allowed: {$allowedExtList} - " . htmlspecialchars($name);
+                    continue;
+                }
 
-            $target = $uploadDir . '/' . uniqid() . '_' . basename($name);
-            if (!move_uploaded_file($tmp, $target)) {
-                $fileErrors[] = "Failed to move uploaded file: " . htmlspecialchars($name);
-                continue;
-            }
+                $target = $uploadDir . '/' . uniqid() . '_' . basename($name);
+                if (!move_uploaded_file($tmp, $target)) {
+                    $fileErrors[] = "Failed to move uploaded file: " . htmlspecialchars($name);
+                    continue;
+                }
 
-            if ($ext === 'xlsx' || $ext === 'xls') {
-                if (stripos($name, 'PortfolioValuation') !== false) {
-                    $pvFiles[] = $target;
-                } elseif (stripos($name, 'Allocation Analysis') !== false || stripos($name, 'Allocation_Analysis') !== false) {
-                    $aaFiles[] = $target;
-                } elseif (stripos($name, 'Running Systematic Transactions') !== false) {
-                    $rstFiles[] = $target;
-                } elseif (stripos($name, 'Portfolio Summary') !== false) {
-                    $psFiles[] = $target;
+                if ($ext === 'xlsx' || $ext === 'xls') {
+                    if (stripos($name, 'PortfolioValuation') !== false) {
+                        $pvFiles[] = $target;
+                    } elseif (stripos($name, 'Allocation Analysis') !== false || stripos($name, 'Allocation_Analysis') !== false) {
+                        $aaFiles[] = $target;
+                    } elseif (stripos($name, 'Running Systematic Transactions') !== false) {
+                        $rstFiles[] = $target;
+                    } elseif (stripos($name, 'Portfolio Summary') !== false) {
+                        $psFiles[] = $target;
+                    }
+                } elseif ($ext === 'pdf' && stripos($name, 'GoalStatusReport') !== false) {
+                    $pdfFiles[] = $target;
                 }
             } elseif ($ext === 'pdf') {
                 // Store all PDF files with their original names for annexures
                 $pdfFiles[] = ['path' => $target, 'name' => basename($name)];
             }
         }
+
 
         $pvAll = [];
         foreach ($pvFiles as $f) {
@@ -219,8 +231,7 @@ $stmtGoal = $pdo->prepare("
             <html>
             <head>
                 <title>No Data</title>
-                <link rel="stylesheet" href="public/css/styles.css">
-                <style>body { font-family: Arial, sans-serif; margin: 20px; }</style>
+                <link rel="stylesheet" href="public/css/upload.css">
             </head>
             <body>
             <div class='flash flash-error'>No client data could be extracted. Please check that the correct files were uploaded.</div>
@@ -228,6 +239,12 @@ $stmtGoal = $pdo->prepare("
             </body>
             </html>
             <?php
+            // --- RESOURCE CLEANUP: Delete uploaded files if processing failed early ---
+            foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+                if (file_exists($file)) {
+                    unlink($file);
+                }
+            }
             exit;
         }
 
@@ -257,11 +274,38 @@ $stmtGoal = $pdo->prepare("
             $totalSip         = 0;
             $totalGoalCurrent = 0;
             $totalGoalTarget  = 0;
-            foreach ($goals as $g) {
+            
+            // --- FIX: Recalculate status based on shortfall before saving ---
+            foreach ($goals as &$g) {
+                $shortfall = (float)($g['shortfall'] ?? 0); 
+                $targetAmount = (float)($g['target_amount'] ?? 0); 
+                
+                // DEFAULT: Assume On Track if no issues found
+                $g['status'] = 'On Track'; 
+                
+                // If the shortfall is NEGATIVE (meaning a surplus), it must be 'On Track'.
+                if ($shortfall <= 0) {
+                    $g['status'] = 'On Track'; 
+                } 
+                // If the shortfall is POSITIVE, check if it exceeds the 1% threshold
+                elseif ($targetAmount > 0) {
+                    // Define a 1% threshold of the target amount
+                    $threshold = $targetAmount * 0.01;
+                    
+                    // If shortfall is positive AND greater than the threshold, set to Invest More
+                    if ($shortfall > $threshold) {
+                        $g['status'] = 'Invest More';
+                    } else {
+                         // Shortfall is positive but negligible (within 1% margin)
+                         $g['status'] = 'On Track';
+                    }
+                }
+                
                 $totalSip         += $g['running_sip']   ?? 0;
                 $totalGoalCurrent += $g['current_value'] ?? 0;
                 $totalGoalTarget  += $g['target_amount'] ?? 0;
             }
+            unset($g); // Important to unset the reference
 
             // Build annexures list from uploaded PDF files
             $annexureLinesForClient = [];
@@ -272,6 +316,7 @@ $stmtGoal = $pdo->prepare("
             }
 
             // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
+            // This is a valid strategy for handling re-uploads of the same reporting period.
             if ($asOn !== '') {
                 $delStmt = $pdo->prepare("DELETE FROM clients WHERE name = :name AND as_on = :as_on");
                 $delStmt->execute([':name' => $name, ':as_on' => $asOn]);
@@ -288,10 +333,12 @@ $stmtGoal = $pdo->prepare("
                 ':total_goal_current' => $totalGoalCurrent,
                 ':total_goal_target'  => $totalGoalTarget,
                 ':total_sip'          => $totalSip,
-                ':greeting_prefix'    => $DEFAULT_GREETING,
-                ':intro_text'         => $DEFAULT_INTRO,
-                ':closing_text'       => $DEFAULT_CLOSING,
-                ':rationale_text'     => $DEFAULT_RATIONALE,
+                // --- FIX: Use the calculated variables, not the old, confusing defaults ---
+                ':greeting_prefix'    => $greetingBase,
+                ':intro_text'         => $introText,
+                ':closing_text'       => $closingText,
+                ':rationale_text'     => $rationaleText,
+                // -----------------------------------------------------------------
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
@@ -359,6 +406,13 @@ $stmtGoal = $pdo->prepare("
             }
         }
         
+        // --- RESOURCE CLEANUP: Delete uploaded files after successful processing ---
+        foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        
         // NEW REDIRECT: Redirect to the first generated report for editing
         if ($firstClientId > 0) {
             header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
@@ -373,26 +427,20 @@ $stmtGoal = $pdo->prepare("
         // ------------------
 
     } catch (Throwable $e) {
+        // --- RESOURCE CLEANUP: Delete uploaded files if processing failed ---
+        foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        
         // ... (Error handling block remains the same) ...
         ?>
         <!DOCTYPE html>
         <html>
         <head>
             <title>Error - Client Reports</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .flash-error { padding: 10px; border-radius: 4px; background: #ffe6e6; border: 1px solid #b30000; }
-                .nav-button {
-                    display: inline-block;
-                    margin-top: 10px;
-                    padding: 6px 12px;
-                    background-color: #0056b3;
-                    color: #fff;
-                    border-radius: 4px;
-                    text-decoration: none;
-                    font-size: 13px;
-                }
-            </style>
+            <link rel="stylesheet" href="public/css/upload.css">
         </head>
         <body>
         <div class="flash-error">
@@ -417,190 +465,7 @@ $stmtGoal = $pdo->prepare("
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/styles.css">
-    
-    <style>
-        /* General layout adjustments */
-        body { 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f7f9fb;
-            font-family: 'Inter', sans-serif;
-        }
-
-        /* --- FULL WIDTH HEADER BAR --- */
-        .full-width-header-bar {
-            width: 100%;
-            background-color: white; 
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        /* Header content constrained to max-width */
-        .header {
-            max-width: 1200px; 
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px; 
-        }
-        
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-        .header-left img {
-            width: 50px; 
-            height: 50px;
-            margin-right: 15px;
-            object-fit: contain;
-        }
-        .header-left .greeting {
-            font-size: 24px; 
-            font-weight: 700; 
-            color: #0288D1; 
-            font-family: 'Poppins', sans-serif;
-        }
-
-        /* Profile/Logout section styles */
-        .header-right {
-            position: relative; /* Essential for positioning the dropdown */
-            display: flex;
-            align-items: center;
-        }
-        
-        .profile-pic {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background-color: #4FC3F7; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
-            border: 2px solid #0288D1;
-            cursor: pointer; 
-            z-index: 20; /* Ensure it stays on top */
-        }
-
-        /* Dropdown container */
-        .profile-dropdown {
-            position: absolute;
-            top: 100%; /* Position below the profile icon */
-            right: 0;
-            margin-top: 10px; /* Space below icon */
-            width: auto;
-            min-width: 120px;
-            background: white;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border-radius: 6px;
-            overflow: hidden;
-            display: none; /* Initially hidden */
-            z-index: 10;
-        }
-
-        /* Dropdown link styling */
-        .profile-dropdown a {
-            padding: 10px 15px;
-            text-decoration: none;
-            display: block;
-            text-align: right;
-            font-size: 15px;
-            color: #333;
-            transition: background-color 0.1s;
-        }
-        .profile-dropdown a:hover {
-            background-color: #f0f0f0;
-        }
-
-        /* Specific style for Logout link (Red Text) */
-        .profile-dropdown a.logout-link {
-            color: #F44336; /* Red text for logout */
-            font-weight: 600;
-        }
-        
-        /* --- MAIN PAGE CONTENT --- */
-        .main-content {
-            max-width: 800px;
-            margin: 20px auto 40px auto; 
-            padding: 0 20px; 
-            text-align: center; 
-        }
-
-        h1 {
-            color: #0288D1;
-            font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .nav-bar {
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: center; 
-            gap: 10px;
-        }
-        .nav-button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #0288D1;
-            color: #fff;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 15px; 
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .nav-button:hover {
-            background-color: #01579B;
-        }
-        
-        label {
-            display: block;
-            margin-top: 20px;
-            font-weight: 600;
-            color: #0288D1;
-            font-size: 14px;
-            text-align: left; 
-        }
-        
-        input[type="file"],
-        input[type="text"],
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #E3F2FD;
-            border-radius: 8px;
-            font-family: 'Inter', sans-serif;
-            margin-top: 8px;
-            font-size: 14px;
-        }
-        
-        button[type="submit"] {
-            margin-top: 25px;
-            padding: 12px 30px;
-            background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
-        }
-        
-        .form-section {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-            margin-bottom: 20px;
-            text-align: left; 
-        }
-    </style>
+    <link rel="stylesheet" href="public/css/upload.css">
 </head>
 <body>
 
@@ -631,6 +496,17 @@ $stmtGoal = $pdo->prepare("
     </div>
 
     <h1>Upload Client Data Files</h1>
+    
+    <?php if (!empty($fileErrors)): ?>
+    <div class="flash flash-error" style="text-align: left; margin-bottom: 20px; padding: 15px; border-radius: 8px;">
+        <strong>File Upload Errors:</strong>
+        <ul>
+            <?php foreach ($fileErrors as $error): ?>
+                <li><?= htmlspecialchars($error) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
 
     <div class="form-section">
         <form method="post" enctype="multipart/form-data">
