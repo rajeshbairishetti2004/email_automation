@@ -32,9 +32,12 @@ function parsePortfolioValuation(string $path): array {
     $colXirr     = findColumnByKeywords($headerRow, ['xirr']);
     $colClient   = findColumnByKeywords($headerRow, ['investor name', 'client name', 'holder']);
 
+    // Fallback: If "Client Name" column isn't found in the row, assume the file belongs to the main client from filename.
+    // This aggregates Family holdings (Ganesh + Sudha) into one report if they are in the same file.
     $fallbackClient = clientNameFromFilename($path) ?? 'Client';
-    $data           = [];
-    $grandTotals    = [];
+    
+    $data = [];
+    $grandTotals = [];
 
     foreach ($dataRows as $row) {
         if (!is_array($row)) continue;
@@ -43,7 +46,14 @@ function parsePortfolioValuation(string $path): array {
         if ($scheme === '') continue;
 
         $normScheme = strtolower(trim(preg_replace('/\s+/', ' ', $scheme)));
-        $client     = $colClient !== null ? trim((string)$row[$colClient]) : $fallbackClient;
+        
+        // If colClient is found, use it. Otherwise, group everything under the Fallback Client (Family Head).
+        $client = ($colClient !== null && !empty($row[$colClient])) ? trim((string)$row[$colClient]) : $fallbackClient;
+        
+        // ** AGGREGATION FIX: Force all rows in this file to the single Family Head if requested **
+        // If you want separate reports per person, keep the line above. 
+        // If you want ONE aggregated report for the whole file, uncomment the line below:
+        $client = $fallbackClient; 
 
         if (preg_match('/\([A-Z0-9]{10}\)/', $scheme)) {
             continue;
@@ -54,6 +64,7 @@ function parsePortfolioValuation(string $path): array {
         $cagr     = $colCagr     !== null ? (float)str_replace(['%', ','], '', (string)$row[$colCagr]) : 0.0;
         $xirr     = $colXirr     !== null ? (float)str_replace(['%', ','], '', (string)$row[$colXirr]) : 0.0;
 
+        // Capture Grand Totals
         if (strpos($normScheme, 'grand total') !== false) {
             $grandTotals[$client] = [
                 'current' => $current,
@@ -62,9 +73,11 @@ function parsePortfolioValuation(string $path): array {
             continue;
         }
 
+        // Skip Category/Total rows
         if (strpos($normScheme, 'total') !== false ||
             $normScheme === 'equity' ||
-            $normScheme === 'hybrid') {
+            $normScheme === 'hybrid' || 
+            $normScheme === 'debt') {
             continue;
         }
 
@@ -81,14 +94,31 @@ function parsePortfolioValuation(string $path): array {
             ];
         }
 
-        $data[$client]['schemes'][$scheme] = [
-            'scheme'         => $scheme,
-            'purchase_value' => $purchase,
-            'current_value'  => $current,
-            'cagr'           => $cagr,
-            'xirr'           => $xirr,
-        ];
+        // --- AGGREGATION LOGIC ---
+        // If the scheme already exists for this client, ADD to it.
+        if (isset($data[$client]['schemes'][$scheme])) {
+            $existing = &$data[$client]['schemes'][$scheme];
+            
+            $existing['purchase_value'] += $purchase;
+            $existing['current_value']  += $current;
+            
+            // For CAGR/XIRR, usually we take the value from the larger holding as representative
+            if ($current > ($existing['current_value'] - $current)) {
+                $existing['cagr'] = $cagr;
+                $existing['xirr'] = $xirr;
+            }
+        } else {
+            // New Entry
+            $data[$client]['schemes'][$scheme] = [
+                'scheme'         => $scheme,
+                'purchase_value' => $purchase,
+                'current_value'  => $current,
+                'cagr'           => $cagr,
+                'xirr'           => $xirr,
+            ];
+        }
 
+        // Update Totals
         $data[$client]['totals']['purchase'] += $purchase;
         $data[$client]['totals']['current']  += $current;
         $data[$client]['totals']['profit']   += ($current - $purchase);
@@ -96,14 +126,17 @@ function parsePortfolioValuation(string $path): array {
         $data[$client]['totals']['xirr_sum'] += $xirr * $current;
     }
 
+    // Finalize weighted averages
     foreach ($data as $client => &$info) {
         $cur = max($info['totals']['current'], 1);
         $info['totals']['cagr_weighted'] = $info['totals']['cagr_sum'] / $cur;
         $info['totals']['xirr_weighted'] = $info['totals']['xirr_sum'] / $cur;
 
+        // If Excel had a Grand Total row, prefer that for high-level accuracy
         if (isset($grandTotals[$client])) {
             $info['totals']['current']       = $grandTotals[$client]['current'];
-            $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
+            // Note: We usually keep calculated totals for consistency, but you can uncomment below to overwrite
+            // $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
         }
     }
 

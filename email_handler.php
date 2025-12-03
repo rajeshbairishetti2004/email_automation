@@ -398,9 +398,14 @@ function handleEmailSending($clientId) {
                 <th>Share%</th>
             </tr>
             <?php foreach ($allocations as $a): ?>
+                <?php 
+                    $sharePct = (float)$a['share_pct'];
+                    // Skip if share percentage is 0
+                    if ($sharePct == 0) continue;
+                ?>
                 <tr>
                     <td style="font-weight: 500;"><?php echo htmlspecialchars($a['asset']); ?></td>
-                    <td><?php echo number_format((float)$a['share_pct'], 0); ?></td>
+                    <td><?php echo number_format($sharePct, 0); ?></td>
                 </tr>
             <?php endforeach; ?>
         </table>
