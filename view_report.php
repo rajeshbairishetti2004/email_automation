@@ -210,6 +210,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 // ---------------------------------------------------------------------------------
 
 
+/* ---------- HANDLE AJAX REQUESTS (GOAL STATUS SAVE) ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_status']) && $_POST['ajax_goal_status'] === '1') {
+    header('Content-Type: application/json');
+    $goalId = (int)($_POST['goal_id'] ?? 0);
+    $newStatus = trim($_POST['status'] ?? '');
+    
+    if ($goalId <= 0 || empty($newStatus)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid parameters.']);
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("UPDATE client_goals SET status = :status WHERE id = :id");
+        $stmt->execute([':status' => $newStatus, ':id' => $goalId]);
+        echo json_encode(['success' => true]);
+        exit;
+    } catch (PDOException $e) {
+        error_log("Goal Status Save Error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error.']);
+        exit;
+    }
+}
+
 /* ---------- HANDLE AJAX REQUESTS (SCHEME SAVE) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_POST['ajax_scheme'] === '1') {
     header('Content-Type: application/json');
@@ -295,6 +319,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $step=$_POST['action_step'][$sId]??'Continue';
                         $pdo->prepare("UPDATE client_schemes SET recommended_scheme=:s, recommended_amount=:a, action_step=:st WHERE id=:id")
                             ->execute([':s'=>trim($sName), ':a'=>$amt, ':st'=>$step, ':id'=>$sId]);
+                    }
+                }
+
+                // --- SAVE GOAL STATUSES (From Dropdowns) ---
+                if (isset($_POST['goal_status']) && is_array($_POST['goal_status'])) {
+                    $stmtGoalStatus = $pdo->prepare("UPDATE client_goals SET status = :status WHERE id = :id");
+                    foreach ($_POST['goal_status'] as $gId => $gStatus) {
+                        $gId = (int)$gId;
+                        if ($gId > 0) {
+                            $stmtGoalStatus->execute([':status' => trim($gStatus), ':id' => $gId]);
+                        }
                     }
                 }
 
@@ -797,6 +832,52 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
             <?php require_once 'client_communication.php'; ?>
             
+            <?php
+            // Logic to determine if editing is allowed (Draft or Rejected)
+            $canEditAttachments = ($reportState === 'draft' || $reviewNotOk == 1);
+            
+            // Get existing files
+            $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+            $existingFiles = [];
+            if (is_dir($attDir)) {
+                $scanned = scandir($attDir);
+                foreach ($scanned as $file) {
+                    if ($file !== '.' && $file !== '..') {
+                        $existingFiles[] = $file;
+                    }
+                }
+            }
+            ?>
+            <div class="card" style="margin-top: 20px; border-left: 4px solid #17a2b8;">
+                <label class="card-title">📂 Report Attachments</label>
+                
+                <?php if ($canEditAttachments): ?>
+                    <div style="margin-bottom: 15px; padding: 10px; background: #eefbff; border-radius: 4px;">
+                        <input type="file" id="ajax_attachment_upload" multiple style="width: auto;">
+                        <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 12px;" onclick="uploadAttachment()">Upload</button>
+                        <span id="upload_spinner" style="display:none;">⏳ Uploading...</span>
+                    </div>
+                <?php endif; ?>
+
+                <ul id="attachment_list" style="list-style: none; padding: 0;">
+                    <?php if (empty($existingFiles)): ?>
+                        <li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>
+                    <?php else: ?>
+                        <?php foreach ($existingFiles as $file): ?>
+                            <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;">
+                                <span>📎 <strong><?php echo htmlspecialchars($file); ?></strong></span>
+                                <?php if ($canEditAttachments): ?>
+                                    <a href="#" onclick="deleteAttachment('<?php echo htmlspecialchars($file); ?>'); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
+                                <?php else: ?>
+                                    <span style="font-size: 11px; color: #999;">(Read Only)</span>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </ul>
+                <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
+            </div>
+            
             <h3>1. Current Situation</h3>
             <table class="report-table">
                 <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
@@ -860,8 +941,19 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
                         <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
                         <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
-                        <td class="<?php echo $statusClass; ?>">
-                            <?php echo htmlspecialchars($newStatus); ?>
+                        <?php 
+                            // Use DB status directly. Normalize text for comparison.
+                            $dbStatus = trim($g['status'] ?? 'On Track');
+                            // Determine class based on current DB value
+                            $dropdownClass = ($dbStatus === 'On Track') ? 'status-on' : 'status-off';
+                        ?>
+                        <td style="padding: 0;">
+                            <select name="goal_status[<?php echo (int)$g['id']; ?>]" 
+                                    class="goal-status-dropdown <?php echo $dropdownClass; ?>" 
+                                    data-goal-id="<?php echo (int)$g['id']; ?>">
+                                <option value="On Track" <?php echo ($dbStatus === 'On Track') ? 'selected' : ''; ?>>On Track</option>
+                                <option value="Invest More" <?php echo ($dbStatus === 'Invest More' || $dbStatus === 'Needs Attention') ? 'selected' : ''; ?>>Invest More</option>
+                            </select>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -955,6 +1047,31 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </table>
 
             <?php require_once 'rationale.php'; ?>
+
+            <h3>Annexures</h3>
+            <ul>
+                <?php
+                // NEW: List actual files from the persistent attachment folder
+                $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+                $hasFiles = false;
+                
+                if (is_dir($attDir)) {
+                    $files = scandir($attDir);
+                    foreach ($files as $file) {
+                        if ($file !== '.' && $file !== '..') {
+                            $hasFiles = true;
+                            $filePath = $attDir . '/' . $file;
+                            // Display Filename ONLY
+                            echo "<li>" . htmlspecialchars($file) . "</li>";
+                        }
+                    }
+                }
+                
+                if (!$hasFiles) {
+                    echo "<li>No documents attached.</li>";
+                }
+                ?>
+            </ul>
 
             <?php require_once 'signature.php'; ?>
 
@@ -1069,24 +1186,23 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         return messageParts.join('\n\n');
     }
 
-    // --- FILE NAME DISPLAY LOGIC (NEW) ---
-    document.getElementById('attachments').addEventListener('change', function(e) {
-        const fileListDisplay = document.getElementById('file-list-display');
-        fileListDisplay.innerHTML = ''; // Clear previous files
-
-        if (this.files.length > 0) {
-            Array.from(this.files).forEach(file => {
-                const fileNameSpan = document.createElement('span');
-                fileNameSpan.className = 'file-name-item';
-                fileNameSpan.textContent = file.name;
-                fileListDisplay.appendChild(fileNameSpan);
-            });
-        }
-    });
+    
 
 
     // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
     document.addEventListener('DOMContentLoaded', function() {
+        // --- AUTO-RESIZE TEXTAREA LOGIC ---
+        function autoResizeTextarea(element) {
+            element.style.height = 'auto';
+            element.style.height = (element.scrollHeight + 2) + 'px';
+        }
+
+        const resizableTextareas = document.querySelectorAll('.large-textarea, .seamless-input, .rat-main-textarea');
+        resizableTextareas.forEach(textarea => {
+            autoResizeTextarea(textarea);
+            textarea.addEventListener('input', function() { autoResizeTextarea(this); });
+            window.addEventListener('resize', function() { autoResizeTextarea(textarea); });
+        });
         // Handle disappearing flash messages (Existing logic remains)
         const flashMessages = document.querySelectorAll('.flash-message');
         flashMessages.forEach(function(message) {
@@ -1191,6 +1307,44 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
 
+        // --- GOAL STATUS DROPDOWN LOGIC ---
+        document.querySelectorAll('.goal-status-dropdown').forEach(function(select) {
+            select.addEventListener('change', function() {
+                const goalId = this.getAttribute('data-goal-id');
+                const newStatus = this.value;
+                const self = this;
+
+                // Update visual style immediately
+                if (newStatus === 'On Track') {
+                    self.classList.remove('status-off');
+                    self.classList.add('status-on');
+                } else {
+                    self.classList.remove('status-on');
+                    self.classList.add('status-off');
+                }
+
+                // Save to DB
+                fetch('view_report.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({
+                        ajax_goal_status: '1',
+                        goal_id: goalId,
+                        status: newStatus
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Status updated');
+                    } else {
+                        alert('Failed to save status.');
+                    }
+                })
+                .catch(err => console.error(err));
+            });
+        });
+
         // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
         document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
             const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
@@ -1259,6 +1413,92 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         
         // Submit Form
         document.getElementById('reportForm').submit();
+    }
+
+    // --- ATTACHMENT JS LOGIC ---
+    // --- UPDATED UPLOAD LOGIC (NO RELOAD) ---
+    function uploadAttachment() {
+        const fileInput = document.getElementById('ajax_attachment_upload');
+        const files = fileInput.files; 
+        const clientId = <?php echo (int)$clientId; ?>;
+        const list = document.getElementById('attachment_list');
+
+        if (files.length === 0) { alert("Please select at least one file."); return; }
+
+        // SAFETY: trigger blur on textareas to persist their content
+        document.querySelectorAll('.large-textarea, .seamless-input').forEach(el => {
+            el.dispatchEvent(new Event('blur'));
+        });
+
+        const formData = new FormData();
+        formData.append('ajax_action', 'upload_attachment');
+        formData.append('client_id', clientId);
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files[]', files[i]);
+        }
+
+        document.getElementById('upload_spinner').style.display = 'inline';
+
+        fetch('template_actions.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('upload_spinner').style.display = 'none';
+            if (data.success && data.files) {
+                const emptyMsg = Array.from(list.children).find(li => li.textContent.includes('No attachments'));
+                if (emptyMsg) emptyMsg.remove();
+
+                data.files.forEach(fileName => {
+                    const li = document.createElement('li');
+                    li.style.cssText = "margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;";
+                    li.innerHTML = `
+                        <span>📎 <strong>${fileName}</strong></span>
+                        <a href="#" onclick="deleteAttachment('${fileName}', this); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
+                    `;
+                    list.appendChild(li);
+                });
+
+                fileInput.value = '';
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            document.getElementById('upload_spinner').style.display = 'none';
+            alert('Upload error. Please try again.');
+        });
+    }
+
+    function deleteAttachment(fileName, el) {
+        if(!confirm("Are you sure you want to delete " + fileName + "?")) return;
+        
+        const clientId = <?php echo (int)$clientId; ?>;
+        
+        fetch('template_actions.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: new URLSearchParams({
+                ajax_action: 'delete_attachment',
+                client_id: clientId,
+                file_name: fileName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (el) {
+                    const li = el.closest('li');
+                    if (li) li.remove();
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(err => alert('Delete error.'));
     }
 </script>
 

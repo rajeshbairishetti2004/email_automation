@@ -129,12 +129,32 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 else {
                     $state = $c['report_state'] ?? 'draft'; // Default to draft if null
                     $badgeClass = 'badge-' . $state;
-                    $statusHtml = "<span class='badge $badgeClass'>" . ucfirst($state) . "</span>";
+                    
+                    // Display "Email Sent" for sent state, otherwise capitalize first letter
+                    $displayText = ($state === 'sent') ? 'Email Sent' : ucfirst($state);
+                    
+                    $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
+                }
+
+                // Check for attachments
+                $hasAttachments = false;
+                $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
+                if (is_dir($cDir)) {
+                    // Check if directory has any files (ignoring . and ..)
+                    $files = array_diff(scandir($cDir), ['.', '..']);
+                    if (count($files) > 0) {
+                        $hasAttachments = true;
+                    }
                 }
             ?>
                 <tr>
                     <td><?php echo (int)$c['id']; ?></td>
-                    <td><?php echo htmlspecialchars($c['name']); ?></td>
+                    <td>
+                        <?php echo htmlspecialchars($c['name']); ?>
+                        <?php if($hasAttachments): ?>
+                            <span title="Has Attachments">📎</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
                     <td><?php echo formatRupeesLakhs((float)$c['total_amount']); ?></td>
                     <td><?php echo formatRupeesLakhs((float)$c['profit']); ?></td>

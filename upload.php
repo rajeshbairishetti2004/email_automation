@@ -108,8 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                 } elseif (stripos($name, 'Portfolio Summary') !== false) {
                     $psFiles[] = $target;
                 }
-            } elseif ($ext === 'pdf' && stripos($name, 'GoalStatusReport') !== false) {
-                $pdfFiles[] = $target;
+            } elseif ($ext === 'pdf') {
+                // Store all PDF files with their original names for annexures
+                $pdfFiles[] = ['path' => $target, 'name' => basename($name)];
             }
         }
 
@@ -148,7 +149,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
         if ($pdfFiles) {
             foreach ($pdfFiles as $pdfFile) {
-                $pdfGoal = parseGoalStatusPdf($pdfFile);
+                // Extract the path from the array structure
+                $pdfPath = is_array($pdfFile) ? $pdfFile['path'] : $pdfFile;
+                $pdfGoal = parseGoalStatusPdf($pdfPath);
                 if (!empty($pdfGoal['client_name'])) {
                     $validClientNames[] = $pdfGoal['client_name'];
                 }
@@ -260,14 +263,12 @@ $stmtGoal = $pdo->prepare("
                 $totalGoalTarget  += $g['target_amount'] ?? 0;
             }
 
-            if ($asOn !== '') {
-                $annexureLinesForClient = [
-                    "PDF document showing portfolio performance from inception including redeemed schemes reported on : " . $asOn,
-                    "Current portfolio reported on : " . $asOn,
-                    "Goal report reported on : " . $asOn,
-                ];
-            } else {
-                $annexureLinesForClient = [];
+            // Build annexures list from uploaded PDF files
+            $annexureLinesForClient = [];
+            foreach ($pdfFiles as $pdfInfo) {
+                if (is_array($pdfInfo)) {
+                    $annexureLinesForClient[] = $pdfInfo['name'];
+                }
             }
 
             // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
@@ -302,6 +303,15 @@ $stmtGoal = $pdo->prepare("
             $savedCount++;
 
           foreach ($goals as $g) {
+                // --- CALCULATE INITIAL STATUS (Formula) ---
+                $shortfallVal = (float)($g['shortfall'] ?? 0);
+                $targetVal = (float)($g['target_amount'] ?? 0);
+                $threshold = $targetVal * 0.01;
+
+                // Default logic: If shortfall > 1% of target, it's Invest More. Otherwise On Track.
+                $calculatedStatus = ($shortfallVal > 0 && $shortfallVal > $threshold) ? 'Invest More' : 'On Track';
+                // ------------------------------------------
+
                 $stmtGoal->execute([
                     ':client_id'      => $clientId,
                     ':goal'           => $g['goal']          ?? '',
@@ -310,9 +320,9 @@ $stmtGoal = $pdo->prepare("
                     ':sip_swp'        => $g['running_sip']   ?? 0,
                     ':target_amount'  => $g['target_amount'] ?? 0,
                     ':projected'      => $g['projected']     ?? 0,
-                    ':shortfall'      => $g['shortfall']     ?? 0, // *** ADDED ***
+                    ':shortfall'      => $g['shortfall']     ?? 0,
                     ':completion'     => $g['completion']    ?? 0,
-                    ':status'         => $g['status']        ?? '',
+                    ':status'         => $calculatedStatus, // Use our calculated status
                 ]);
             }
 

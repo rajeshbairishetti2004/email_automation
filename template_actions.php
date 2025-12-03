@@ -1,4 +1,4 @@
-git branch -D Chetan<?php
+<?php
 // template_actions.php
 // Handles all AJAX actions related to RMs and Templates (loading, deleting, etc.).
 
@@ -179,6 +179,59 @@ try {
 				throw new Exception('Database insert failed.');
 			}
 			break;
+
+        /* ------------------------------------------------------------------
+           ATTACHMENT MANAGEMENT (File System Based - No DB Change)
+           ------------------------------------------------------------------ */
+        case 'upload_attachment':
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+
+            $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+            if (!is_dir($baseDir)) {
+                mkdir($baseDir, 0777, true);
+            }
+
+            $savedFiles = [];
+
+            if (isset($_FILES['files']) && is_array($_FILES['files']['name'])) {
+                $count = count($_FILES['files']['name']);
+                
+                for ($i = 0; $i < $count; $i++) {
+                    if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) {
+                        $rawName = basename($_FILES['files']['name'][$i]);
+                        $fileName = preg_replace('/[^a-zA-Z0-9\._-]/', '', $rawName);
+                        $targetPath = $baseDir . '/' . $fileName;
+
+                        if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $targetPath)) {
+                            $savedFiles[] = $fileName;
+                        }
+                    }
+                }
+            }
+
+            if (!empty($savedFiles)) {
+                echo json_encode(['success' => true, 'files' => $savedFiles]);
+            } else {
+                throw new Exception("Upload failed or no valid files.");
+            }
+            break;
+
+        case 'delete_attachment':
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $fileName = basename($_POST['file_name'] ?? '');
+            
+            if ($clientId <= 0 || empty($fileName)) throw new Exception("Invalid parameters.");
+
+            $filePath = __DIR__ . '/uploads/attachments/client_' . $clientId . '/' . $fileName;
+
+            if (file_exists($filePath)) {
+                unlink($filePath);
+                echo json_encode(['success' => true, 'message' => 'File deleted.']);
+            } else {
+                throw new Exception("File not found.");
+            }
+            break;
 
         default:
             // If the action is POST but not one of the specific AJAX actions above, 
