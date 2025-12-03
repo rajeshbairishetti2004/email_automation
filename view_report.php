@@ -833,8 +833,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             <?php require_once 'client_communication.php'; ?>
             
             <?php
-            // Logic to determine if editing is allowed (Draft or Rejected)
-            $canEditAttachments = ($reportState === 'draft' || $reviewNotOk == 1);
+            // Logic to determine if editing is allowed (Draft, Ready for Review, or Rejected)
+            $canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $reviewNotOk == 1);
             
             // Get existing files
             $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
@@ -853,9 +853,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 
                 <?php if ($canEditAttachments): ?>
                     <div style="margin-bottom: 15px; padding: 10px; background: #eefbff; border-radius: 4px;">
-                        <input type="file" id="ajax_attachment_upload" multiple style="width: auto;">
-                        <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 12px;" onclick="uploadAttachment()">Upload</button>
-                        <span id="upload_spinner" style="display:none;">⏳ Uploading...</span>
+                        <input type="file" id="ajax_attachment_upload" multiple style="width: auto;" onchange="uploadAttachment()">
+                        
+                        <span id="upload_spinner" style="display:none; margin-left: 10px; font-weight: bold; color: #0288D1;">
+                            ⏳ Uploading...
+                        </span>
                     </div>
                 <?php endif; ?>
 
@@ -1074,12 +1076,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </ul>
 
             <?php require_once 'signature.php'; ?>
-
-            <div style="margin-top: 30px; text-align: right; padding-bottom: 20px;">
-                <button type="submit" name="save_report" class="btn-primary">
-                    💾 Save
-                </button>
-            </div>
 
         </form>
 

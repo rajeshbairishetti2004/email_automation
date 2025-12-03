@@ -65,34 +65,18 @@ function handleEmailSending($clientId) {
     // Use the dynamic sender email as the sender for PHPMailer
     $smtpFromEmail = $fromEmailSender; 
     
-    // --- ATTACH PERSISTENT FILES (From Draft/Rejected Stages) ---
-    // Define the persistent storage path
-    $persistentAttDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
-    if (is_dir($persistentAttDir)) {
-        $storedFiles = scandir($persistentAttDir);
-        foreach ($storedFiles as $sFile) {
-            if ($sFile !== '.' && $sFile !== '..') {
-                $fullPath = $persistentAttDir . '/' . $sFile;
-                // Add to list of attachments to send
-                // Note: $attachmentPaths is used later in PHPMailer
-                $attachmentPaths[] = $fullPath;
-                // We do NOT add to $attachmentNames for the annexure list 
-                // unless you want them listed in the body text too. 
-                // If yes, uncomment: $attachmentNames[] = $sFile;
-            }
-        }
-    }
-    // ------------------------------------------------------------
     $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports'; 
 
-    // UPDATED: Handle Multiple File Uploads and Track Names
+    // --- 1. Handle New/Temporary Attachments (from the Send Email form) ---
     $attachmentPaths = [];
-    $attachmentNames = []; 
+    $attachmentNames = [];
+    
     $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0777, true);
     }
 
+    // Check if new files were uploaded right now via the email form
     if (isset($_FILES['attachments']) && !empty($_FILES['attachments']['name'][0])) {
         $uploadedFiles = $_FILES['attachments'];
         
@@ -146,38 +130,42 @@ function handleEmailSending($clientId) {
         $stmt->execute([':id' => $clientId]);
         $storedAnnexures = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Merge uploaded files with stored annexures
+        // Initialize Annexures List for the Email Body
         $emailAnnexures = [];
         
-        // Add uploaded files to annexure list
-        foreach ($attachmentNames as $fileName) {
-            $emailAnnexures[] = [
-                'text' => $fileName,
-                'date' => date('d/m/Y')
-            ];
-        }
-        
-        // --- NEW: Add Persistent Attachments (Draft/Rejected uploads) to Annexure List ---
+        // --- 2. Handle Persistent Attachments (Draft/Rejected Uploads) ---
+        // This scans the folder: uploads/attachments/client_{id}/
         $persistentAttDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+        
         if (is_dir($persistentAttDir)) {
             $pFiles = scandir($persistentAttDir);
             foreach ($pFiles as $pf) {
                 if ($pf !== '.' && $pf !== '..') {
+                    $fullPath = $persistentAttDir . '/' . $pf;
+                    
+                    // Add to attachment paths for later use in PHPMailer
+                    $attachmentPaths[] = $fullPath;
+                    
+                    // Add the FILENAME ONLY to the email body list
                     $emailAnnexures[] = [
-                        'text' => $pf,
-                        'date' => date('d/m/Y', filemtime($persistentAttDir . '/' . $pf))
+                        'text' => $pf
                     ];
                 }
             }
         }
-        // ---------------------------------------------------------------------------------
         
-        // Add stored annexures (if no files were uploaded)
-        if (empty($attachmentNames)) {
+        // Also add the new temporary files to the body list
+        foreach ($attachmentNames as $tempName) {
+            $emailAnnexures[] = [
+                'text' => $tempName
+            ];
+        }
+        
+        // Add stored annexures from database (if no new files were uploaded)
+        if (empty($attachmentNames) && empty($emailAnnexures)) {
             foreach ($storedAnnexures as $ax) {
                 $emailAnnexures[] = [
-                    'text' => $ax['line_text'],
-                    'date' => $client['as_on'] ?? date('d/m/Y')
+                    'text' => $ax['line_text']
                 ];
             }
         }
@@ -318,10 +306,10 @@ function handleEmailSending($clientId) {
         <h4>1. Current Situation</h4>
         <table>
             <tr>
-                <th colspan="2">Current Situation</th>
+                <th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th>
             </tr>
             <tr>
-                <td>Total Amount as of <?php echo htmlspecialchars($asOn); ?></td>
+                <td>Total Amount </td>
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
             <tr>
@@ -385,7 +373,7 @@ function handleEmailSending($clientId) {
                     <td style="text-align: center;"></td>
                     <td style="text-align: center;"><?php echo formatAmount($totalGoalCurrent); ?></td>
                     <td style="text-align: center;"><?php echo formatAmount($totalSip); ?></td>
-                    <td style="text-align: center;"><?php echo formatAmount($totalGoalTarget); ?></td>
+                    <td style="text-align: center;"></td>
                     <td></td>
                 </tr>
             </tbody>
@@ -428,6 +416,14 @@ function handleEmailSending($clientId) {
             </thead>
             <tbody>
                 <?php foreach ($schemes as $s): 
+                    // FIX: If all values in the row (SIP and Current Value) are 0, remove the row.
+                    $sipVal = (float)($s['sip_swp'] ?? 0);
+                    $currVal = (float)($s['current_value'] ?? 0);
+                    
+                    if ($sipVal <= 0 && $currVal <= 0) {
+                        continue;
+                    }
+
                     // Color Logic for Action Step
                     $act = strtolower(trim($s['action_step'] ?? ''));
                     $aClass = '';
