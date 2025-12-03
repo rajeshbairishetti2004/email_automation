@@ -138,23 +138,7 @@ function updateSenderDetails(selectObj) {
                 </div>
             </div>
 
-            <div class="file-attachments-section">
-                <strong class="section-title">File Attachments</strong>
-                <div class="file-input-wrapper">
-                    <label for="attachments" class="file-label">
-                        <span class="file-icon">📎</span> Choose Files to Attach (Multiple):
-                    </label>
-                    <input type="file" 
-                            name="attachments[]" 
-                            id="attachments"
-                            accept=".pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif"
-                            multiple
-                            class="file-input">
-                    
-                    <div id="file-list-display" class="file-list-display">
-                        </div>
-                </div>
-            </div>
+            
 
         </div>
         <button type="submit" class="submit-button">

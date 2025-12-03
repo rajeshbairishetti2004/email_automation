@@ -64,6 +64,25 @@ function handleEmailSending($clientId) {
     
     // Use the dynamic sender email as the sender for PHPMailer
     $smtpFromEmail = $fromEmailSender; 
+    
+    // --- ATTACH PERSISTENT FILES (From Draft/Rejected Stages) ---
+    // Define the persistent storage path
+    $persistentAttDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+    if (is_dir($persistentAttDir)) {
+        $storedFiles = scandir($persistentAttDir);
+        foreach ($storedFiles as $sFile) {
+            if ($sFile !== '.' && $sFile !== '..') {
+                $fullPath = $persistentAttDir . '/' . $sFile;
+                // Add to list of attachments to send
+                // Note: $attachmentPaths is used later in PHPMailer
+                $attachmentPaths[] = $fullPath;
+                // We do NOT add to $attachmentNames for the annexure list 
+                // unless you want them listed in the body text too. 
+                // If yes, uncomment: $attachmentNames[] = $sFile;
+            }
+        }
+    }
+    // ------------------------------------------------------------
     $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports'; 
 
     // UPDATED: Handle Multiple File Uploads and Track Names
@@ -138,6 +157,21 @@ function handleEmailSending($clientId) {
             ];
         }
         
+        // --- NEW: Add Persistent Attachments (Draft/Rejected uploads) to Annexure List ---
+        $persistentAttDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+        if (is_dir($persistentAttDir)) {
+            $pFiles = scandir($persistentAttDir);
+            foreach ($pFiles as $pf) {
+                if ($pf !== '.' && $pf !== '..') {
+                    $emailAnnexures[] = [
+                        'text' => $pf,
+                        'date' => date('d/m/Y', filemtime($persistentAttDir . '/' . $pf))
+                    ];
+                }
+            }
+        }
+        // ---------------------------------------------------------------------------------
+        
         // Add stored annexures (if no files were uploaded)
         if (empty($attachmentNames)) {
             foreach ($storedAnnexures as $ax) {
@@ -195,12 +229,94 @@ function handleEmailSending($clientId) {
         ob_start();
         ?>
         <html>
-        <body style="font-family: Arial, sans-serif; font-size: 13px;">
+        <head>
+        <style>
+            /* Typography matching UI */
+            body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 14px; color: #333; }
+            
+            /* Headers matching UI Blue (#0288D1 / #29B6F6 theme) */
+            h4 { 
+                color: #0288D1; 
+                font-family: 'Helvetica', 'Arial', sans-serif; 
+                font-size: 16px; 
+                font-weight: bold;
+                margin-top: 25px; 
+                margin-bottom: 10px; 
+                border-bottom: 2px solid #E3F2FD; 
+                padding-bottom: 5px;
+                text-decoration: none; 
+            }
+
+            /* Clean Table Style */
+            table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; background-color: #ffffff; }
+            
+            /* Table Header: Light Blue background, White text */
+            th { 
+                background-color: #29B6F6; 
+                color: #ffffff; 
+                padding: 12px 10px; 
+                text-align: left; 
+                font-weight: bold; 
+                border: none; /* Removed heavy borders */
+            }
+            
+            /* Table Body: Clean rows with light bottom border */
+            td { 
+                padding: 10px; 
+                border-bottom: 1px solid #f0f0f0; 
+                vertical-align: middle; 
+                color: #333;
+            }
+
+            /* Alignment utilities */
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            
+            /* UI-Match Status Badges */
+            /* Red Badge for 'Invest More' / 'Needs Attention' */
+            .status-off { 
+                background-color: #F44336; 
+                color: white; 
+                font-weight: bold; 
+                text-align: center; 
+                padding: 6px 10px; 
+                border-radius: 4px; /* Works in modern email clients */
+                white-space: nowrap;
+            }
+            
+            /* Green Badge for 'On Track' */
+            .status-on { 
+                background-color: #4CAF50; 
+                color: white; 
+                font-weight: bold; 
+                text-align: center; 
+                padding: 6px 10px; 
+                border-radius: 4px; 
+                white-space: nowrap;
+            }
+
+            /* Action Steps (Schemes) */
+            .action-continue { background-color: #C8E6C9; color: #256029; text-align: center; font-weight: bold; border-radius: 4px; }
+            .action-drop { background-color: #FFCDD2; color: #C62828; text-align: center; font-weight: bold; border-radius: 4px; }
+            .action-switch { background-color: #FFF9C4; color: #FBC02D; text-align: center; font-weight: bold; border-radius: 4px; }
+            .action-redeem { background-color: #F5F5F5; color: #616161; text-align: center; font-weight: bold; border-radius: 4px; }
+        </style>
+        </head>
+        <body>
         
-        <?php echo nl2br(htmlspecialchars($clientMessage)); ?>
+        <div style="font-family: 'Helvetica', 'Arial', sans-serif; font-size: 14px; line-height: 1.6; font-weight: bold; margin-bottom: 15px; color: #333;">
+            <?php echo nl2br(htmlspecialchars($greetingStored)); ?>
+        </div>
+
+        <div style="font-family: 'Helvetica', 'Arial', sans-serif; font-size: 14px; line-height: 1.6; margin-bottom: 20px; color: #333;">
+            <?php echo nl2br(htmlspecialchars($introTextStored)); ?>
+            <br><br>
+            <?php echo nl2br(htmlspecialchars($closingTextStored)); ?>
+        </div>
 
         <h4>1. Current Situation</h4>
-        <table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">
+        <table>
             <tr>
                 <th colspan="2">Current Situation</th>
             </tr>
@@ -224,94 +340,144 @@ function handleEmailSending($clientId) {
             </tr>
         </table>
 
-        <h4>2. Objectives Progress</h4>
-        <table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">
-            <tr>
-                <th>Goal</th>
-                <th>Target Year</th>
-                <th>Current Amount</th>
-                <th>SIP/SWP</th>
-                <th>Target Amount</th>
-                <th>Status</th>
-            </tr>
-            <?php foreach ($goals as $g): ?>
+        <h4>2. Objectives Progress for guiding on appropriate schemes</h4>
+        <table>
+            <thead>
                 <tr>
-                    <td><?php echo htmlspecialchars($g['goal']); ?></td>
-                    <td><?php echo htmlspecialchars(substr((string)$g['goal_date'], -4)); ?></td>
-                    <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
-                    <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
-                    <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
-                    <td><?php echo ($g['status'] === 'Needs Attention') ? 'Invest More' : htmlspecialchars($g['status']); ?></td>
+                    <th>Goal/s</th>
+                    <th>Target Year</th>
+                    <th>Current Amount (Rs)</th>
+                    <th>SIP/SWP</th>
+                    <th>Target Amount (Rs)</th>
+                    <th>Status</th>
                 </tr>
-            <?php endforeach; ?>
+            </thead>
+        <tbody>
+            <?php foreach ($goals as $g): 
+                // Trust the DB status (It handles both initial formula AND manual overrides)
+                $dbStatus = trim($g['status'] ?? '');
+                
+                // Color Logic
+                $bgStyle = '';
+                if ($dbStatus === 'On Track') {
+                    $bgStyle = 'background-color: #00B050; color: black; font-weight: bold;'; // Green
+                } else {
+                    // Default to Invest More/Orange for anything else
+                    $bgStyle = 'background-color: #ED7D31; color: black; font-weight: bold;'; // Orange
+                }
+                
+                // Ensure display text is clean
+                $displayText = ($dbStatus === 'Needs Attention') ? 'Invest More' : $dbStatus;
+            ?>
             <tr>
-                <td><strong>Total</strong></td>
-                <td></td>
-                <td><?php echo formatAmount($totalGoalCurrent); ?></td>
-                <td><?php echo formatAmount($totalSip); ?></td>
-                <td><?php echo formatAmount($totalGoalTarget); ?></td>
-                <td></td>
+                <td style="border: 1px solid #4472C4; padding: 6px;"><?php echo htmlspecialchars($g['goal']); ?></td>
+                <td style="border: 1px solid #4472C4; padding: 6px; text-align: center;"><?php echo htmlspecialchars(substr((string)$g['goal_date'], -4)); ?></td>
+                <td style="border: 1px solid #4472C4; padding: 6px; text-align: center;"><?php echo formatAmount((float)$g['current_amount']); ?></td>
+                <td style="border: 1px solid #4472C4; padding: 6px; text-align: center;"><?php echo formatAmount((float)$g['sip_swp']); ?></td>
+                <td style="border: 1px solid #4472C4; padding: 6px; text-align: center;"><?php echo formatAmount((float)$g['target_amount']); ?></td>
+                
+                <td style="border: 1px solid #4472C4; padding: 6px; text-align: center; <?php echo $bgStyle; ?>">
+                    <?php echo htmlspecialchars($displayText); ?>
+                </td>
             </tr>
+            <?php endforeach; ?>                <tr style="font-weight: bold; background-color: #fafafa;">
+                    <td>Total</td>
+                    <td style="text-align: center;"></td>
+                    <td style="text-align: center;"><?php echo formatAmount($totalGoalCurrent); ?></td>
+                    <td style="text-align: center;"><?php echo formatAmount($totalSip); ?></td>
+                    <td style="text-align: center;"><?php echo formatAmount($totalGoalTarget); ?></td>
+                    <td></td>
+                </tr>
+            </tbody>
         </table>
 
-        <h4>3. Asset Allocation</h4>
-        <table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">
+        <h4>3. Appropriate Product Selection at a macro level</h4>
+        <table style="width: 50%;">
             <tr>
                 <th>Asset</th>
-                <th>Share %</th>
+                <th>Share%</th>
             </tr>
             <?php foreach ($allocations as $a): ?>
+                <?php 
+                    $sharePct = (float)$a['share_pct'];
+                    // Skip if share percentage is 0
+                    if ($sharePct == 0) continue;
+                ?>
                 <tr>
-                    <td><?php echo htmlspecialchars($a['asset']); ?></td>
-                    <td><?php echo number_format((float)$a['share_pct'], 0); ?></td>
+                    <td style="font-weight: 500;"><?php echo htmlspecialchars($a['asset']); ?></td>
+                    <td><?php echo number_format($sharePct, 0); ?></td>
                 </tr>
             <?php endforeach; ?>
         </table>
 
-        <h4>4. Schemes & Recommendations</h4>
-        <table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">
-            <tr>
-                <th colspan="3" style="background-color: #E3F2FD;">Present Schemes</th>
-                <th colspan="3" style="background-color: #FFF3E0;">Recommendations</th>
-            </tr>
-            <tr>
-                <th>Scheme Name</th>
-                <th>SIP/SWP</th>
-                <th>Current Value</th>
-                <th>Action Step</th>
-                <th>Recommended Scheme</th>
-                <th>Amount</th>
-            </tr>
-            <?php foreach ($schemes as $s): ?>
+        <h4>4. Appropriate Scheme Selection</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th colspan="3">Present Schemes</th>
+                    <th rowspan="2" style="width: 100px;">Action Step</th>
+                    <th colspan="2">Recommended Schemes</th>
+                </tr>
+                <tr>
+                    <th>Scheme Name</th>
+                    <th>SIP/SWP</th>
+                    <th>Value as of <?php echo htmlspecialchars($asOn); ?></th>
+                    <th>Scheme Name</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($schemes as $s): 
+                    // Color Logic for Action Step
+                    $act = strtolower(trim($s['action_step'] ?? ''));
+                    $aClass = '';
+                    if ($act == 'continue') $aClass = 'action-continue';
+                    elseif ($act == 'drop') $aClass = 'action-drop';
+                    elseif ($act == 'switch') $aClass = 'action-switch';
+                    elseif (strpos($act, 'redeem') !== false) $aClass = 'action-redeem';
+                ?>
                 <tr>
                     <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
                     <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
                     <td><?php echo formatAmount((float)$s['current_value']); ?></td>
-                    <td><strong><?php echo htmlspecialchars($s['action_step'] ?? 'Continue'); ?></strong></td>
-                    <td><?php echo htmlspecialchars($s['recommended_scheme'] ?? '-'); ?></td>
-                    <td><?php echo !empty($s['recommended_amount']) ? formatAmount((float)$s['recommended_amount']) : '-'; ?></td>
+                    <td class="<?php echo $aClass; ?>"><?php echo htmlspecialchars($s['action_step'] ?? 'Continue'); ?></td>
+                    <td><?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?></td>
+                    <td class="text-center"><?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?></td>
                 </tr>
-            <?php endforeach; ?>
+                <?php endforeach; ?>
+            </tbody>
         </table>
 
         <?php if (trim($rationaleText) !== ''): ?>
-            <h4>Rationale</h4>
-            <p><?php echo nl2br(htmlspecialchars($rationaleText)); ?></p>
+            <div style="margin-top: 20px; border: 1px solid #29B6F6; border-radius: 4px; overflow: hidden;">
+                <table style="margin: 0;">
+                    <tr>
+                        <td style="width: 120px; background-color: #E1F5FE; font-weight: bold; text-align: center; border-right: 1px solid #29B6F6; border-bottom: none;">
+                            Rationale
+                        </td>
+                        <td style="border-bottom: none; padding: 15px;">
+                            <?php echo nl2br(htmlspecialchars($rationaleText)); ?>
+                        </td>
+                    </tr>
+                </table>
+            </div>
         <?php endif; ?>
 
         <?php if (!empty($emailAnnexures)): ?>
             <h4>Annexures</h4>
-            <ul>
+            <ul style="color: #333;">
                 <?php foreach ($emailAnnexures as $annexure): ?>
                     <li>
                         <?php echo htmlspecialchars($annexure['text']); ?>
-                        (uploaded on: <?php echo htmlspecialchars($annexure['date']); ?>)
                     </li>
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
 
-        <p><?php echo nl2br(htmlspecialchars($signatureBlock)); ?></p>
+        <p style="margin-top: 30px; font-family: 'Helvetica', 'Arial', sans-serif;">
+            <?php echo nl2br(htmlspecialchars($signatureBlock)); ?>
+        </p>
+
         </body>
         </html>
         <?php
@@ -402,9 +568,12 @@ function handleEmailSending($clientId) {
                 ':sent_by' => $smtpFromEmail 
             ]);
 
-            // Clean up all uploaded files after sending
+            // Clean up ONLY temporary uploaded files (not the persistent ones)
+            // Persistent files live in /uploads/attachments/, temp files live in /uploads/
+            // We check the path to decide.
             foreach ($attachmentPaths as $file) {
-                if (file_exists($file)) {
+                // Only delete if it is NOT in the attachments folder
+                if (file_exists($file) && strpos($file, '/attachments/client_') === false) {
                     @unlink($file);
                 }
             }
@@ -412,9 +581,9 @@ function handleEmailSending($clientId) {
             header('Location: view_report.php?id=' . $clientId . '&sent=1');
             exit;
         } catch (Exception $e) {
-            // Clean up files even if email fails
+            // Clean up temp files even if email fails (not persistent ones)
             foreach ($attachmentPaths as $file) {
-                if (file_exists($file)) {
+                if (file_exists($file) && strpos($file, '/attachments/client_') === false) {
                     @unlink($file);
                 }
             }
