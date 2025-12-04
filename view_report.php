@@ -1175,14 +1175,14 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
     
 
+    // --- AUTO-GROW TEXTAREA LOGIC (Global Function) ---
+    function autoResizeTextarea(element) {
+        element.style.height = 'auto';
+        element.style.height = (element.scrollHeight + 2) + 'px';
+    }
 
     // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
     document.addEventListener('DOMContentLoaded', function() {
-        // --- AUTO-RESIZE TEXTAREA LOGIC ---
-        function autoResizeTextarea(element) {
-            element.style.height = 'auto';
-            element.style.height = (element.scrollHeight + 2) + 'px';
-        }
 
         const resizableTextareas = document.querySelectorAll('.large-textarea, .seamless-input, .rat-main-textarea');
         resizableTextareas.forEach(textarea => {
