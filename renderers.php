@@ -134,6 +134,9 @@ function renderClientReport(
             <?php
             $sumShare = 0;
             foreach ($allocation as $asset => $share):
+                // FIX: Hide row if value is 0
+                if ($share <= 0) continue;
+
                 $sumShare += $share;
                 ?>
                 <tr>
