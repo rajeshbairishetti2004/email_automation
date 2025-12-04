@@ -11,6 +11,10 @@ services:
       - "8080:80" 
     volumes:
       - ./Report:/var/www/html 
+<<<<<<< HEAD
+=======
+      - uploads_data:/var/www/html/uploads
+>>>>>>> fdeaac0 (docker file)
     env_file:
       - ./Report/.env
     environment:
@@ -50,4 +54,9 @@ services:
       - mysql
 
 volumes:
+<<<<<<< HEAD
   db_data:
+=======
+  db_data:
+  uploads_data:
+>>>>>>> fdeaac0 (docker file)
