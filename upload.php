@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
     $rationaleText = $_POST['rationale_text'] ?? $DEFAULT_RATIONALE;
 
     // Get upload configuration from environment variables
-    $uploadDir = $_ENV['UPLOAD_PATH'] ?? (__DIR__ . '/uploads');
+    $uploadDir = __DIR__ . '/uploads';
     $maxFileSize = $_ENV['UPLOAD_MAX_SIZE'] ?? (10 * 1024 * 1024); // Default 10MB
     $allowedExt = explode(',', $_ENV['ALLOWED_EXTENSIONS'] ?? 'xlsx,xls,pdf');
 
@@ -356,6 +356,30 @@ $stmtGoal = $pdo->prepare("
                     ':client_id' => $clientId,
                     ':line_text' => $line,
                 ]);
+            }
+
+            // --- MOVE ATTACHMENTS TO CLIENT SPECIFIC DIRECTORY ---
+            $clientAttachmentsDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+            if (!is_dir($clientAttachmentsDir)) {
+                mkdir($clientAttachmentsDir, 0777, true);
+            }
+
+            // Move each PDF file to the client-specific directory
+            foreach ($pdfFiles as $pdfInfo) {
+                if (is_array($pdfInfo)) {
+                    $originalPath = $pdfInfo['path'];
+                    $fileName = basename($originalPath);
+                    $newPath = $clientAttachmentsDir . '/' . $fileName;
+
+                    // Rename the file to avoid conflicts, if needed
+                    $counter = 1;
+                    while (file_exists($newPath)) {
+                        $newPath = $clientAttachmentsDir . '/' . $counter++ . '_' . $fileName;
+                    }
+
+                    // Move the file
+                    rename($originalPath, $newPath);
+                }
             }
         }
         
