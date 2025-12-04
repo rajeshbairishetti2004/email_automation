@@ -124,24 +124,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
         exit;
     }
 
+    // Security: Whitelist allowed fields
+    $allowedFields = ['signature_block', 'greeting_prefix', 'intro_text', 'closing_text', 'rationale_text'];
+    
+    if (!in_array($field, $allowedFields)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid field name.']);
+        exit;
+    }
+
     try {
-        if ($field === 'signature_block') {
-            // NOTE: This updates the client's saved signature block, but not the user's master details.
-            $stmt = $pdo->prepare("UPDATE clients SET signature_block = :value WHERE id = :id");
-            $stmt->execute([':value' => $value, ':id' => $clientId]);
-            echo json_encode(['success' => true, 'message' => 'Signature saved.']);
-            exit; 
-        }
-        
-        // General text area save logic (e.g., rationale)
-        // This is only for the live content, not the template.
-        $stmt = $pdo->prepare("UPDATE clients SET {$field}_text = :value WHERE id = :id"); // Assuming field is intro, closing, or rationale
+        // All fields directly map to column names in the clients table
+        $stmt = $pdo->prepare("UPDATE clients SET {$field} = :value WHERE id = :id");
         $stmt->execute([':value' => $value, ':id' => $clientId]);
         
-        // NOTE: The main save button (non-AJAX) handles the parsing of client_message into greeting/intro/closing.
-        // The AJAX handler here should be kept simple as it is not the full save.
-
-        echo json_encode(['success' => true]); 
+        echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved.']); 
         exit; 
     } catch (PDOException $e) {
         error_log("AJAX Save Error: " . $e->getMessage());
