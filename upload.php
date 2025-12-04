@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                 if ($ext === 'pdf') {
                     $pdfFiles[] = ['path' => $target, 'name' => basename($name)];
                 }
-            }
+            }   
         }
 
 
@@ -242,6 +242,7 @@ $stmtGoal = $pdo->prepare("
             <?php
             // --- RESOURCE CLEANUP: Delete uploaded files if processing failed early ---
             foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+                if (is_array($file)) $file = $file['path'];
                 if (file_exists($file)) {
                     unlink($file);
                 }
@@ -409,6 +410,7 @@ $stmtGoal = $pdo->prepare("
         
         // --- RESOURCE CLEANUP: Delete uploaded files after successful processing ---
         foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (is_array($file)) $file = $file['path'];
             if (file_exists($file)) {
                 unlink($file);
             }
@@ -430,6 +432,7 @@ $stmtGoal = $pdo->prepare("
     } catch (Throwable $e) {
         // --- RESOURCE CLEANUP: Delete uploaded files if processing failed ---
         foreach (array_merge($pvFiles, $aaFiles, $rstFiles, $psFiles, $pdfFiles) as $file) {
+            if (is_array($file)) $file = $file['path'];
             if (file_exists($file)) {
                 unlink($file);
             }
