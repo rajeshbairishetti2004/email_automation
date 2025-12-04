@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. PHP/Apache Web Application Service
   app:
@@ -11,8 +9,9 @@ services:
       - "8080:80" 
     volumes:
       - ./Report:/var/www/html 
+      - ./uploads:/var/www/html/uploads
     env_file:
-      - ./Report/.env
+      - ./.env
     environment:
       DB_HOST: mysql
       DB_NAME: client_reports

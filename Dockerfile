@@ -15,6 +15,11 @@ RUN docker-php-ext-install zip
 # Copy the entire contents of the 'Report/' directory into the web root
 COPY . /var/www/html/ 
 
+# Ensure uploads and attachments directories exist and are writable
+RUN mkdir -p /var/www/html/uploads/attachments && \
+    chown -R www-data:www-data /var/www/html/uploads && \
+    chmod -R 775 /var/www/html/uploads
+
 # Add ServerName to suppress the AH00558 warning
 RUN echo "ServerName Localhost" >> /etc/apache2/apache2.conf
 
