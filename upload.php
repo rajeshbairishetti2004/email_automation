@@ -119,9 +119,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
                 } elseif ($ext === 'pdf' && stripos($name, 'GoalStatusReport') !== false) {
                     $pdfFiles[] = $target;
                 }
-            } elseif ($ext === 'pdf') {
                 // Store all PDF files with their original names for annexures
-                $pdfFiles[] = ['path' => $target, 'name' => basename($name)];
+                if ($ext === 'pdf') {
+                    $pdfFiles[] = ['path' => $target, 'name' => basename($name)];
+                }
             }
         }
 
