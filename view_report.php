@@ -402,14 +402,6 @@ $rmEmail       = $currentUser['email'] ?? 'N/A';
 // Get the list of all active user emails for the 'From' dropdown
 $allActiveUsers = getAllActiveUserEmails(); 
 
-
-// Load User-Specific Rationale Templates
-$currentUserId = $currentUser['id'] ?? 0;
-$userRationaleTemplates = [];
-if ($currentUserId > 0) {
-    $userRationaleTemplates = getUserRationaleTemplates($currentUserId);
-} 
-
 // Get ALL RMs and Templates (Generic, for other sections)
 $templates = [
     'greeting' => getReportTemplates('greeting'),
@@ -1121,9 +1113,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         const toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.classList.add('show');
+        
+        // Auto-hide after 3 seconds
         setTimeout(() => {
             toast.classList.remove('show');
-        }, 2000);
+        }, 3000);
     }
 
     // Function to display a contextual flash message
@@ -1134,22 +1128,23 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             return;
         }
 
-        container.innerHTML = '';
+        // Create the message HTML
+        const cssClass = type === 'success' ? 'flash-success' : 'flash-error';
+        const icon = type === 'success' ? '✅' : '❌';
         
-        const div = document.createElement('div');
-        div.className = `flash-message flash-${type}`;
-        div.style.opacity = '1';
-        div.textContent = message;
-        
-        container.appendChild(div);
+        container.innerHTML = `<div class="flash-message ${cssClass}" style="opacity: 1; transition: opacity 0.5s ease;">${icon} ${message}</div>`;
 
+        // Auto-hide after 3 seconds
         setTimeout(() => {
-            div.style.opacity = '0';
-            div.style.marginTop = '-50px'; 
-        }, 3000); 
-        setTimeout(() => {
-            div.remove();
-        }, 3500); 
+            const flashMsg = container.querySelector('.flash-message');
+            if (flashMsg) {
+                flashMsg.style.opacity = '0';
+                // Remove from DOM after fade out
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 500);
+            }
+        }, 3000);
     }
 
     // Function to get the content of a template selector (Needed by Communication and Rationale modules)
