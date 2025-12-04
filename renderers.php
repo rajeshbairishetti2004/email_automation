@@ -132,21 +132,25 @@ function renderClientReport(
                 <th>Share%</th>
             </tr>
             <?php
-            $sumShare = 0;
+            $sumShare = 0.0;
             foreach ($allocation as $asset => $share):
-                // FIX: Hide row if value is 0
-                if ($share <= 0) continue;
+                // 1. Force float conversion to handle strings like "0.34"
+                $shareVal = (float)$share;
 
-                $sumShare += $share;
+                // 2. Hide row ONLY if value is 0 (keep 0.34, 0.01, etc.)
+                if ($shareVal <= 0) continue;
+
+                $sumShare += $shareVal;
                 ?>
                 <tr>
                     <td><?php echo htmlspecialchars($asset); ?></td>
-                    <td><?php echo number_format($share, 2); ?></td>
+                    <td><?php echo number_format($shareVal, 2); ?></td>
                 </tr>
             <?php endforeach; ?>
-            <tr>
-                <td><strong>Total</strong></td>
-                <td><strong><?php echo number_format($sumShare, 2); ?></strong></td>
+            
+            <tr style="font-weight: bold; background-color: #f8f9fa;">
+                <td>Total</td>
+                <td><?php echo number_format($sumShare, 2); ?></td>
             </tr>
         </table>
 
