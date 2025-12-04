@@ -84,11 +84,11 @@ storage/logs/
 /sessions/
 
 # ========== UPLOADED FILES ============
-# User uploaded files (should not be in version control)
-/uploads/
-/public/uploads/
-/storage/uploads/
-!uploads/.gitkeep
+# User uploaded files are now tracked in version control
+# /uploads/
+# /public/uploads/
+# /storage/uploads/
+# !uploads/.gitkeep
 
 # ========== DATABASE ============
 # Database files and dumps
@@ -140,5 +140,4 @@ yarn-error.log*
 # .gitignore
 .env
 /vendor
-/uploads
 .DS_Store
