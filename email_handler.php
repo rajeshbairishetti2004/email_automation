@@ -385,17 +385,29 @@ function handleEmailSending($clientId) {
                 <th>Asset</th>
                 <th>Share%</th>
             </tr>
-            <?php foreach ($allocations as $a): ?>
-                <?php 
-                    $sharePct = (float)$a['share_pct'];
-                    // Skip if share percentage is 0
-                    if ($sharePct == 0) continue;
-                ?>
+            <?php 
+            $totalShare = 0; // Initialize Total
+            foreach ($allocations as $a): 
+                $share = (float)$a['share_pct'];
+                
+                // Skip row if 0, but you might still want to track it? 
+                // Usually if it's 0 it adds nothing to total anyway.
+                if ($share <= 0) {
+                    continue;
+                }
+                
+                $totalShare += $share; // Add to Total
+            ?>
                 <tr>
                     <td style="font-weight: 500;"><?php echo htmlspecialchars($a['asset']); ?></td>
-                    <td><?php echo number_format($sharePct, 0); ?></td>
+                    <td><?php echo number_format($share, 0); ?></td>
                 </tr>
             <?php endforeach; ?>
+            
+            <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <td>Total</td>
+                <td><?php echo number_format($totalShare, 0); ?></td>
+            </tr>
         </table>
 
         <h4>4. Appropriate Scheme Selection</h4>
