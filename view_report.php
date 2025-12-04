@@ -964,18 +964,24 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Share%</th>
                 </tr>
                 <?php
-                $sumShare = 0;
+                $sumShare = 0.0;
                 foreach ($allocations as $a):
-                    $sumShare += (float)$a['share_pct'];
+                    // 1. Force float conversion to handle strings like "0.34"
+                    $shareVal = (float)$a['share_pct'];
+
+                    // 2. Hide row ONLY if value is 0 (keep 0.34, 0.01, etc.)
+                    if ($shareVal <= 0) continue;
+
+                    $sumShare += $shareVal;
                     ?>
                     <tr>
                         <td><?php echo htmlspecialchars($a['asset']); ?></td>
-                        <td><?php echo number_format((float)$a['share_pct'], 0); ?></td>
+                        <td><?php echo number_format($shareVal, 2); ?></td>
                     </tr>
                 <?php endforeach; ?>
-                <tr>
-                    <td><strong>Total</strong></td>
-                    <td><strong><?php echo number_format($sumShare, 0); ?></strong></td>
+                <tr style="font-weight: bold; background-color: #f8f9fa;">
+                    <td>Total</td>
+                    <td><?php echo number_format($sumShare, 2); ?></td>
                 </tr>
             </table>
 
