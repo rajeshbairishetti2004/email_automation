@@ -147,8 +147,7 @@ function parseAllocationAnalysis(string $path): array {
     $spreadsheet = IOFactory::load($path);
     $client      = clientNameFromFilename($path) ?? 'Client';
 
-    $equityPct = null;
-    $debtPct   = null;
+    $allocations = []; // Store calculated percentages here
 
     foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
         $rows = $sheet->toArray(null, true, true, true);
@@ -196,22 +195,25 @@ function parseAllocationAnalysis(string $path): array {
         }
 
         if ($totalAmt > 0) {
-            $equityAmt = $eqAmt + $goldAmt + $globalAmt;
-            $equityPct = ($equityAmt / $totalAmt) * 100.0;
-            $debtPct   = ($debtAmt   / $totalAmt) * 100.0;
-            break;
+            // 1. Equity = Local Equity + Global Equity (Consolidated)
+            $finalEquityAmt = $eqAmt + $globalAmt;
+
+            // 2. Others = Total - (Everything Else)
+            $othersAmt = $totalAmt - ($eqAmt + $globalAmt + $debtAmt + $goldAmt);
+            if ($othersAmt < 0) $othersAmt = 0; // Fix small floating point errors
+
+            // 3. Calculate Percentages
+            if ($finalEquityAmt > 0) $allocations['Equity'] = ($finalEquityAmt / $totalAmt) * 100.0;
+            if ($debtAmt > 0)        $allocations['Debt']   = ($debtAmt / $totalAmt) * 100.0;
+            if ($goldAmt > 0)        $allocations['Gold']   = ($goldAmt / $totalAmt) * 100.0;
+            if ($othersAmt > 0)      $allocations['Others'] = ($othersAmt / $totalAmt) * 100.0;
+            
+            break; // Found our totals, stop looking
         }
     }
 
     $data = [];
-    $data[$client] = ['asset_allocation' => []];
-
-    if ($equityPct !== null) {
-        $data[$client]['asset_allocation']['Equity'] = $equityPct;
-    }
-    if ($debtPct !== null) {
-        $data[$client]['asset_allocation']['Debt']   = $debtPct;
-    }
+    $data[$client] = ['asset_allocation' => $allocations];
 
     return $data;
 }
