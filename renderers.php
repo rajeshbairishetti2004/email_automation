@@ -141,12 +141,12 @@ function renderClientReport(
                 ?>
                 <tr>
                     <td><?php echo htmlspecialchars($asset); ?></td>
-                    <td><?php echo number_format($share, 0); ?></td>
+                    <td><?php echo number_format($share, 2); ?></td>
                 </tr>
             <?php endforeach; ?>
             <tr>
                 <td><strong>Total</strong></td>
-                <td><strong><?php echo number_format($sumShare, 0); ?></strong></td>
+                <td><strong><?php echo number_format($sumShare, 2); ?></strong></td>
             </tr>
         </table>
 

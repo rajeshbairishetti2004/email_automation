@@ -400,13 +400,13 @@ function handleEmailSending($clientId) {
             ?>
                 <tr>
                     <td style="font-weight: 500;"><?php echo htmlspecialchars($a['asset']); ?></td>
-                    <td><?php echo number_format($share, 0); ?></td>
+                    <td><?php echo number_format($share, 2); ?></td>
                 </tr>
             <?php endforeach; ?>
             
             <tr style="font-weight: bold; background-color: #f2f2f2;">
                 <td>Total</td>
-                <td><?php echo number_format($totalShare, 0); ?></td>
+                <td><?php echo number_format($totalShare, 2); ?></td>
             </tr>
         </table>
 
