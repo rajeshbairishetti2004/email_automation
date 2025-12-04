@@ -330,6 +330,7 @@ function parsePortfolioSummary(string $path): array {
 }
 
 // parsers.php - Corrected parseGoalStatusPdf function
+
 function parseGoalStatusPdf(string $path): array {
     $parser = new PdfParser();
     $pdf    = $parser->parseFile($path);
@@ -376,12 +377,9 @@ function parseGoalStatusPdf(string $path): array {
             $completion   = (float)str_replace(['%', ','], '', $rest[1] ?? '0');
             $currentValue = parseIndianNumber($rest[2] ?? '0');
             $runningSip   = parseIndianNumber($rest[3] ?? '0');
-            
-            // *** FIX: Use parseIndianNumber for Projected to handle large values/formats safely ***
-            $projected    = parseIndianNumber($rest[4] ?? '0'); // Correctly implemented
-            
+            $projected    = parseIndianNumber($rest[4] ?? '0');
             // *** CORRECTION: Extract Shortfall ***
-            $shortfall    = parseIndianNumber($rest[5] ?? '0'); 
+            $shortfall    = parseIndianNumber($rest[5] ?? '0'); // Shortfall is the 6th element (index 5)
 
             // Note: Status logic is correctly handled in view_report.php, but we still pass the
             // original status string if the parser extracted it, though we rely on view_report.php for the rule-based status.
@@ -393,8 +391,8 @@ function parseGoalStatusPdf(string $path): array {
                 'target_amount' => $targetAmount,
                 'current_value' => $currentValue,
                 'running_sip'   => $runningSip,
-                'projected'     => $projected, // Will be the correctly parsed number
-                'shortfall'     => $shortfall, 
+                'projected'     => $projected,
+                'shortfall'     => $shortfall, // *** ADDED ***
                 'completion'    => $completion,
                 'status'        => $status,
             ];
@@ -407,7 +405,6 @@ function parseGoalStatusPdf(string $path): array {
         'goals'       => $goals,
     ];
 }
-// The rest of the file is unchanged.
 /* ---------- MERGING ---------- */
 
 function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $pdfGoal): array {

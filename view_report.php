@@ -124,24 +124,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
         exit;
     }
 
+    // Security: Whitelist allowed fields
+    $allowedFields = ['signature_block', 'greeting_prefix', 'intro_text', 'closing_text', 'rationale_text'];
+    
+    if (!in_array($field, $allowedFields)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid field name.']);
+        exit;
+    }
+
     try {
-        if ($field === 'signature_block') {
-            // NOTE: This updates the client's saved signature block, but not the user's master details.
-            $stmt = $pdo->prepare("UPDATE clients SET signature_block = :value WHERE id = :id");
-            $stmt->execute([':value' => $value, ':id' => $clientId]);
-            echo json_encode(['success' => true, 'message' => 'Signature saved.']);
-            exit; 
-        }
-        
-        // General text area save logic (e.g., rationale)
-        // This is only for the live content, not the template.
-        $stmt = $pdo->prepare("UPDATE clients SET {$field}_text = :value WHERE id = :id"); // Assuming field is intro, closing, or rationale
+        // All fields directly map to column names in the clients table
+        $stmt = $pdo->prepare("UPDATE clients SET {$field} = :value WHERE id = :id");
         $stmt->execute([':value' => $value, ':id' => $clientId]);
         
-        // NOTE: The main save button (non-AJAX) handles the parsing of client_message into greeting/intro/closing.
-        // The AJAX handler here should be kept simple as it is not the full save.
-
-        echo json_encode(['success' => true]); 
+        echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved.']); 
         exit; 
     } catch (PDOException $e) {
         error_log("AJAX Save Error: " . $e->getMessage());
@@ -373,7 +369,10 @@ if (!$client) {
     <html>
     <head>
         <title>Report Not Found</title>
-        <link rel="stylesheet" href="public/css/view_report.css">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            a { text-decoration: none; color: #0056b3; }
+        </style>
     </head>
     <body>
         <p>No report found for ID <?php echo htmlspecialchars((string)$clientId); ?>.</p>
@@ -398,14 +397,6 @@ $rmEmail       = $currentUser['email'] ?? 'N/A';
 
 // Get the list of all active user emails for the 'From' dropdown
 $allActiveUsers = getAllActiveUserEmails(); 
-
-
-// Load User-Specific Rationale Templates
-$currentUserId = $currentUser['id'] ?? 0;
-$userRationaleTemplates = [];
-if ($currentUserId > 0) {
-    $userRationaleTemplates = getUserRationaleTemplates($currentUserId);
-} 
 
 // Get ALL RMs and Templates (Generic, for other sections)
 $templates = [
@@ -492,10 +483,199 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/styles.css">
-    <link rel="stylesheet" href="public/css/view_report.css">
-    <link rel="stylesheet" href="public/css/client_communication.css">
-    <link rel="stylesheet" href="public/css/rationale.css">
-    <link rel="stylesheet" href="public/css/send_email.css">
+    
+    <style>
+        /* Global CSS included here for convenience and external files */
+        body { 
+            /* Reset body margins for full-width header */
+            margin: 0; 
+            padding: 0;
+            font-family: Arial, sans-serif; 
+        }
+        
+        /* --- Styles copied from upload.php header --- */
+        .full-width-header-bar {
+            width: 100%;
+            background-color: white; 
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            max-width: 1200px; 
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px; 
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        .header-left img {
+            width: 50px; 
+            height: 50px;
+            margin-right: 15px;
+            object-fit: contain;
+        }
+        .header-left .greeting {
+            font-size: 24px; 
+            font-weight: 700; 
+            color: #0288D1; 
+            font-family: 'Poppins', sans-serif;
+        }
+        .header-right {
+            position: relative; 
+            display: flex;
+            align-items: center;
+        }
+        .profile-pic {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background-color: #4FC3F7; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            border: 2px solid #0288D1;
+            cursor: pointer; 
+            z-index: 20;
+        }
+        .profile-dropdown {
+            position: absolute;
+            top: 100%; 
+            right: 0;
+            margin-top: 10px; 
+            width: auto;
+            min-width: 120px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            display: none; 
+            z-index: 10;
+        }
+        .profile-dropdown a {
+            padding: 10px 15px;
+            text-decoration: none;
+            display: block;
+            text-align: right;
+            font-size: 15px;
+            color: #333;
+            transition: background-color 0.1s;
+        }
+        .profile-dropdown a.logout-link {
+            color: #F44336; 
+            font-weight: 600;
+        }
+        
+        /* --- Report Specific Styles --- */
+        .main-content {
+            max-width: 1200px; /* Use wide width for report tables */
+            margin: 20px auto 40px auto; 
+            padding: 0 20px; 
+        }
+        
+        .report-table {
+            width: 100%; /* Use full width in report view */
+            margin: 0 auto 20px 0;
+        }
+        .report-table.small {
+            width: 40%;
+        }
+        
+        .client-report {
+            page-break-after: always;
+        }
+        /* ... (rest of the CSS remains the same) ... */
+        .flash-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            opacity: 1;
+            transition: opacity 0.5s ease-out, margin-top 0.5s ease-out;
+            margin-top: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .flash-message.flash-success {
+            background: #e6ffe6;
+            border: 1px solid #00b300;
+        }
+        .flash-message.flash-error {
+            background: #ffe6e6;
+            border: 1px solid #b30000;
+        }
+        /* ... (all button/list styles remain the same) ... */
+        .email-attachment-wrapper {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            align-items: flex-start;
+        }
+        .email-recipients-section,
+        .file-attachments-section {
+            flex: 1 1 48%; 
+            padding: 0;
+        }
+        
+        /* WORKFLOW STYLES */
+        .workflow-bar {
+            background: #fff;
+            padding: 15px 20px;
+            margin: 0 auto 20px auto;
+            max-width: 1200px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 5px solid #ccc;
+        }
+        .workflow-status-badge {
+            font-size: 14px;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        .status-draft { background: #e0e0e0; color: #555; border-left-color: #999; }
+        .status-ready { background: #fff3cd; color: #856404; border-left-color: #ffc107; }
+        .status-reviewed { background: #d4edda; color: #155724; border-left-color: #28a745; }
+        .status-sent { background: #cce5ff; color: #004085; border-left-color: #007bff; }
+        .status-rejected { background: #f8d7da; color: #721c24; border-left-color: #dc3545; cursor: pointer; }
+
+        .workflow-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .wf-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        .btn-draft { background: #6c757d; color: white; }
+        .btn-ready { background: #ffc107; color: #333; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+        
+        /* Modal for Rejection */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-box {
+            background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+    </style>
 </head>
 <body>
 
@@ -726,11 +906,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     $shortfall = (float)($g['shortfall'] ?? 0); 
                     $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
 
-                    // Define a 1% threshold of the target amount
+                    // Calculate the 1% threshold
                     $threshold = $targetAmount * 0.01;
                     
-                    if ($shortfall > $threshold) { // Check if shortfall is positive and significant
-                        // Condition: Shortfall is positive AND greater than the threshold. Major deficit.
+                    if ($shortfall > 0 && $shortfall > $threshold) {
+                        // Condition: Shortfall is positive AND greater than 1% of target. Major deficit.
                         $newStatus = 'Invest More';
                         $statusClass = 'status-off'; // Red background
                     } else {
@@ -929,9 +1109,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         const toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.classList.add('show');
+        
+        // Auto-hide after 3 seconds
         setTimeout(() => {
             toast.classList.remove('show');
-        }, 2000);
+        }, 3000);
     }
 
     // Function to display a contextual flash message
@@ -942,22 +1124,23 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             return;
         }
 
-        container.innerHTML = '';
+        // Create the message HTML
+        const cssClass = type === 'success' ? 'flash-success' : 'flash-error';
+        const icon = type === 'success' ? '✅' : '❌';
         
-        const div = document.createElement('div');
-        div.className = `flash-message flash-${type}`;
-        div.style.opacity = '1';
-        div.textContent = message;
-        
-        container.appendChild(div);
+        container.innerHTML = `<div class="flash-message ${cssClass}" style="opacity: 1; transition: opacity 0.5s ease;">${icon} ${message}</div>`;
 
+        // Auto-hide after 3 seconds
         setTimeout(() => {
-            div.style.opacity = '0';
-            div.style.marginTop = '-50px'; 
-        }, 3000); 
-        setTimeout(() => {
-            div.remove();
-        }, 3500); 
+            const flashMsg = container.querySelector('.flash-message');
+            if (flashMsg) {
+                flashMsg.style.opacity = '0';
+                // Remove from DOM after fade out
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 500);
+            }
+        }, 3000);
     }
 
     // Function to get the content of a template selector (Needed by Communication and Rationale modules)
