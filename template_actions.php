@@ -172,8 +172,8 @@ try {
 				throw new Exception('Missing required fields (section, name, or content).');
 			}
 
-			$stmt = $pdo->prepare('INSERT INTO report_templates (name, section_type, content) VALUES (:name, :section, :content)');
-			if ($stmt->execute([':name' => $name, ':section' => $section, ':content' => $content])) {
+			$stmt = $pdo->prepare('INSERT INTO report_templates (name, section_type, content) VALUES (:name, :section_type, :content)');
+			if ($stmt->execute([':name' => $name, ':section_type' => $section, ':content' => $content])) {
 				echo json_encode(['success' => true]);
 			} else {
 				throw new Exception('Database insert failed.');
