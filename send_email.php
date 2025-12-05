@@ -15,6 +15,7 @@ $clientId = (int)($clientId ?? 0);
 $clientMailOptions = [];
 $rmMailOptions = [];
 $generalCCMailOptions = [];
+$sendAsEmails = array_keys($sendAsProfiles);
 
 try {
     $clientMailOptions = getEmailContacts('CLIENT', $clientId);
@@ -24,8 +25,8 @@ try {
     // Silent fail if DB issue, dropdowns will just be empty
 }
 
-// Combine for CC suggestions
-$allEmails = array_unique(array_merge($rmMailOptions, $clientMailOptions, $generalCCMailOptions));
+// Combine for CC suggestions (includes Finance Doctor profiles too)
+$allEmails = array_unique(array_merge($rmMailOptions, $clientMailOptions, $generalCCMailOptions, $sendAsEmails));
 ?>
 
 <script>
@@ -64,6 +65,131 @@ function updateSenderDetails(selectObj) {
 
     const hiddenSigField = document.getElementById('custom_signature_for_email');
     if (hiddenSigField) { hiddenSigField.value = newSignature; }
+    filterCcOptionsBySender();
+}
+</script>
+<script>
+// Keep CC text input in sync with multi-select selections
+function syncCcFromSelect() {
+    const select = document.getElementById('cc_multi_select');
+    const input  = document.getElementById('cc_emails');
+    const selectAll = document.getElementById('cc_select_all');
+    if (!select || !input) return;
+    const selected = Array.from(select.selectedOptions).map(o => o.value).filter(Boolean);
+    input.value = selected.join(', ');
+    updateCcSummary(selected);
+
+    if (selectAll) {
+        const total = select.options.length;
+        selectAll.checked = total > 0 && selected.length === total;
+    }
+
+    syncCheckboxesFromSelect();
+}
+
+// Filter CC options to exclude the currently selected sender
+function filterCcOptionsBySender() {
+    const senderSelect = document.getElementById('from_email');
+    const senderEmail  = senderSelect ? senderSelect.value.toLowerCase() : '';
+    const select = document.getElementById('cc_multi_select');
+    const datalist = document.getElementById('all-emails');
+    const checkboxList = document.getElementById('cc_checkbox_list');
+    if (!select || !datalist) return;
+
+    const existingSelected = new Set(Array.from(select.selectedOptions).map(o => o.value));
+
+    // Merge any newly added options with the cached list
+    const mergedOptions = Array.from(new Set([
+        ...(window.allCcOptions || []),
+        ...Array.from(datalist.options).map(o => o.value),
+        ...Array.from(select.options).map(o => o.value)
+    ].filter(Boolean)));
+    window.allCcOptions = mergedOptions;
+
+    select.innerHTML = '';
+    datalist.innerHTML = '';
+    if (checkboxList) {
+        checkboxList.innerHTML = '';
+    }
+
+    mergedOptions.forEach(email => {
+        if (!email) return;
+        if (email.toLowerCase() === senderEmail) return; // exclude current sender
+
+        const opt1 = document.createElement('option');
+        opt1.value = email;
+        opt1.textContent = email;
+        if (existingSelected.has(email)) opt1.selected = true;
+        select.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = email;
+        datalist.appendChild(opt2);
+
+        if (checkboxList) {
+            const label = document.createElement('label');
+            label.className = 'cc-checkbox-item';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = email;
+            checkbox.checked = existingSelected.has(email);
+            checkbox.addEventListener('change', onCcCheckboxChange);
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(email));
+            checkboxList.appendChild(label);
+        }
+    });
+
+    syncCcFromSelect();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Cache all CC options from the initial PHP render
+    const select = document.getElementById('cc_multi_select');
+    if (select) {
+        window.allCcOptions = Array.from(select.options).map(o => o.value).filter(Boolean);
+    }
+    filterCcOptionsBySender();
+});
+
+function toggleCcSelectAll() {
+    const select = document.getElementById('cc_multi_select');
+    const selectAll = document.getElementById('cc_select_all');
+    if (!select || !selectAll) return;
+
+    Array.from(select.options).forEach(opt => { opt.selected = selectAll.checked; });
+    syncCcFromSelect();
+}
+
+function onCcCheckboxChange(event) {
+    const select = document.getElementById('cc_multi_select');
+    if (!select) return;
+    const email = event.target.value;
+    const option = Array.from(select.options).find(o => o.value === email);
+    if (option) {
+        option.selected = event.target.checked;
+    }
+    syncCcFromSelect();
+}
+
+function syncCheckboxesFromSelect() {
+    const select = document.getElementById('cc_multi_select');
+    const checkboxList = document.getElementById('cc_checkbox_list');
+    if (!select || !checkboxList) return;
+    const selectedSet = new Set(Array.from(select.selectedOptions).map(o => o.value));
+    checkboxList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = selectedSet.has(cb.value);
+    });
+}
+
+// Lightweight summary of selected CCs for quick glance
+function updateCcSummary(selectedEmails) {
+    const summaryEl = document.getElementById('cc_summary');
+    if (!summaryEl) return;
+    const list = (selectedEmails || []).filter(Boolean);
+    summaryEl.textContent = list.length ? `Selected: ${list.join(', ')}` : 'Selected: none';
 }
 </script>
 
@@ -116,24 +242,38 @@ function updateSenderDetails(selectObj) {
                         </datalist>
                     </div>
 
-                    <div class="email-field-group">
-                        <div class="input-with-buttons">
-                            <label for="cc_emails">CC (Multiple, comma separated):</label>
+                    <div class="email-field-group cc-panel">
+                        <div class="input-with-buttons cc-label-row">
+                            <div>
+                                <label for="cc_multi_select">CC</label>
+                                <span class="cc-hint">Pick one or many; selected items flow into the box.</span>
+                                <label class="cc-select-all"><input type="checkbox" id="cc_select_all" onchange="toggleCcSelectAll()"> Select all</label>
+                            </div>
                             <div class="manage-buttons-group">
                                 <button type="button" class="manage-btn add-btn" title="Add Email" onclick="addEmail('all-emails', 'CC Options', 'CC')">➕</button>
                                 <button type="button" class="manage-btn delete-btn" title="Delete Email" onclick="openDeleteModal('all-emails', 'CC Options', 'cc_emails', 'CC')">➖</button>
                             </div>
                         </div>
+
+                        <select id="cc_multi_select" multiple size="6" class="styled-input cc-multi-select" onchange="syncCcFromSelect()">
+                            <?php foreach ($allEmails as $email): ?>
+                                <option value="<?php echo htmlspecialchars($email); ?>"><?php echo htmlspecialchars($email); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <div class="cc-checkboxes" id="cc_checkbox_list" aria-label="CC options checklist"></div>
+
                         <input type="text" name="cc_emails" id="cc_emails"
-                               placeholder="Enter multiple emails (e.g., mail1@dom, mail2@dom)"
+                               placeholder="Enter or paste emails (comma separated)"
                                list="all-emails"
-                               class="styled-input">
+                               class="styled-input cc-text-input">
 
                         <datalist id="all-emails">
                             <?php foreach ($allEmails as $email): ?>
                                 <option value="<?php echo htmlspecialchars($email); ?>">
                             <?php endforeach; ?>
                         </datalist>
+                        <div class="cc-summary" id="cc_summary">Selected: none</div>
                     </div>
                 </div>
             </div>
@@ -247,6 +387,95 @@ function updateSenderDetails(selectObj) {
     .delete-btn:hover {
         border-color: #dc3545; 
         color: #dc3545;
+    }
+    .cc-panel {
+        border: 1px solid #d8d8d8;
+        border-radius: 6px;
+        padding: 12px;
+        background: linear-gradient(135deg, #fafafa 0%, #f3f5f8 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+    .cc-label-row {
+        align-items: baseline;
+    }
+    .cc-label-row label {
+        display: block;
+        font-size: 12px;
+        color: #444;
+        font-weight: 700;
+    }
+    .cc-hint {
+        display: block;
+        font-size: 11px;
+        color: #6a6a6a;
+        margin-top: 2px;
+    }
+    .cc-select-all {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: #444;
+        margin-top: 6px;
+        user-select: none;
+    }
+    .cc-select-all input {
+        margin: 0;
+    }
+    .cc-multi-select {
+        min-height: 140px;
+        border-radius: 6px;
+        border-color: #c7ced6;
+        background: #fff;
+        font-size: 13px;
+        padding: 6px;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .cc-multi-select:focus {
+        border-color: #4c8bf5;
+        box-shadow: 0 0 0 3px rgba(76,139,245,0.2);
+        outline: none;
+    }
+    .cc-text-input {
+        margin-top: 8px;
+        border-radius: 6px;
+        border-color: #c7ced6;
+        background: #fff;
+    }
+    .cc-text-input:focus {
+        border-color: #4c8bf5;
+        box-shadow: 0 0 0 3px rgba(76,139,245,0.2);
+        outline: none;
+    }
+    .cc-checkboxes {
+        margin-top: 8px;
+        max-height: 140px;
+        overflow-y: auto;
+        padding: 6px 8px;
+        border: 1px solid #d8d8d8;
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .cc-checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 12px;
+        color: #333;
+    }
+    .cc-checkbox-item input {
+        margin: 0;
+    }
+    .cc-summary {
+        margin-top: 8px;
+        font-size: 11.5px;
+        color: #444;
+        background: #eef3fb;
+        border: 1px solid #cddbf5;
+        border-radius: 5px;
+        padding: 6px 8px;
     }
     
     .styled-input {
