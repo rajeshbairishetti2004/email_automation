@@ -141,4 +141,5 @@ yarn-error.log*
 .env
 /vendor
 /uploads
+/uploads
 .DS_Store
