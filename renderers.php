@@ -63,6 +63,14 @@ function renderClientReport(
     $signature_block = $DEFAULT_SIGNATURE;
 
     ?>
+    <?php
+    $asOnFormatted = $asOn;
+    $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn);
+    if ($asOnDate instanceof DateTime) {
+        $asOnFormatted = $asOnDate->format('F jS Y');
+    }
+    ?>
+
     <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
 
         <div class="card">
@@ -72,9 +80,9 @@ function renderClientReport(
 
         <h3>1. Current Situation</h3>
         <table class="report-table">
-            <tr><th colspan="2">Current Situation</th></tr>
+            <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
             <tr>
-                <td>Total Amount as of <?php echo htmlspecialchars($asOn); ?></td>
+                <td>Total Amount</td>
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
             <tr>

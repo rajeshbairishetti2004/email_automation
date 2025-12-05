@@ -303,10 +303,18 @@ function handleEmailSending($clientId) {
             <?php echo nl2br(htmlspecialchars($closingTextStored)); ?>
         </div>
 
+        <?php
+        $asOnFormatted = $asOn;
+        $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn);
+        if ($asOnDate instanceof DateTime) {
+            $asOnFormatted = $asOnDate->format('F jS Y');
+        }
+        ?>
+
         <h4>1. Current Situation</h4>
         <table>
             <tr>
-                <th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th>
+                <th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th>
             </tr>
             <tr>
                 <td>Total Amount </td>
