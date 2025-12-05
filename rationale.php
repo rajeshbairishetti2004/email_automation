@@ -78,116 +78,110 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteBtn = document.getElementById('rationale_delete_btn');
     const saveForm = document.getElementById('rationale_save_form');
 
-    // 1. Auto-Load on Selection
+    // 1. Auto-Load Template on Selection
     selector.addEventListener('change', function() {
         const selectedOption = selector.options[selector.selectedIndex];
         const content = selectedOption.getAttribute('data-content');
         
+        // Ignore the "Select Template" default option
         if (selector.value !== '0' && content) {
             if(confirm("Replace current text with this template?")) {
+                
+                // A. Update the Text Box Value
                 input.value = content;
-                // Auto-Resize
-                if (typeof autoResizeTextarea === 'function') autoResizeTextarea(input);
-                // Auto-Save Report
+                
+                // B. Force Auto-Resize (Visual Adjustment)
+                if (typeof autoResizeTextarea === 'function') {
+                    autoResizeTextarea(input);
+                }
+                
+                // C. Force Auto-Save to Database (Trigger Blur)
                 input.dispatchEvent(new Event('blur'));
                 
+                // D. Show Success Message
                 if (typeof showContextualFlash === 'function') {
-                    showContextualFlash('success', 'Rationale template loaded!', 'rationale_flash_container');
+                    showContextualFlash('success', 'Rationale loaded & saved!', 'rationale_flash_container');
                 }
             }
         }
     });
 
-    // 2. Toggle Save/Edit Form
-    saveToggle.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        if (saveContainer.style.display === 'block') {
-            saveContainer.style.display = 'none';
-            return;
-        }
-
-        const selectedOption = selector.options[selector.selectedIndex];
-        const updateId = document.getElementById('rationale_update_id');
-        const nameField = document.getElementById('rationale_template_name');
-        const contentField = document.getElementById('rationale_template_content');
-
-        // Pre-fill form
-        if (selector.value !== '0') {
-            // Edit Mode
-            updateId.value = selector.value;
-            nameField.value = selectedOption.getAttribute('data-name');
-            contentField.value = selectedOption.getAttribute('data-content');
-        } else {
-            // New Mode (Take content from main textarea)
-            updateId.value = '0';
-            nameField.value = '';
-            contentField.value = input.value;
-        }
-
-        saveContainer.style.display = 'block';
-    });
-
-    // 3. Submit Save Form (AJAX)
-    saveForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const name = document.getElementById('rationale_template_name').value.trim();
-        const content = document.getElementById('rationale_template_content').value.trim();
-        const updateId = document.getElementById('rationale_update_id').value;
-
-        if (!name || !content) {
-            alert("Name and Content are required.");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('ajax_action', 'save_template'); // Uses GENERIC template action
-        formData.append('section_type', 'rationale');
-        formData.append('template_name', name);
-        formData.append('template_content', content);
-        if (updateId !== '0') {
-            formData.append('template_id', updateId);
-        }
-
-        fetch('template_actions.php', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                saveContainer.style.display = 'none';
-                if (typeof showContextualFlash === 'function') {
-                    showContextualFlash('success', 'Template saved successfully!', 'rationale_flash_container');
+    // 2. Toggle Save Form
+    if (saveToggle) {
+        saveToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            saveContainer.style.display = (saveContainer.style.display === 'block') ? 'none' : 'block';
+            
+            // Pre-fill form if needed
+            if (saveContainer.style.display === 'block') {
+                const isEdit = selector.value !== '0';
+                document.getElementById('rationale_update_id').value = isEdit ? selector.value : '0';
+                document.getElementById('rationale_template_content').value = input.value; // Grab current text
+                
+                if (isEdit) {
+                    const opt = selector.options[selector.selectedIndex];
+                    document.getElementById('rationale_template_name').value = opt.getAttribute('data-name');
+                } else {
+                    document.getElementById('rationale_template_name').value = '';
                 }
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                alert('Error: ' + data.error);
             }
         });
-    });
+    }
+
+    // 3. Submit New Template (AJAX)
+    if (saveForm) {
+        saveForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('rationale_template_name').value.trim();
+            const content = document.getElementById('rationale_template_content').value.trim();
+            const updateId = document.getElementById('rationale_update_id').value;
+
+            if (!name || !content) { alert("Name and Content required."); return; }
+
+            const formData = new FormData();
+            formData.append('ajax_action', 'save_template');
+            formData.append('section_type', 'rationale');
+            formData.append('template_name', name);
+            formData.append('template_content', content);
+            if (updateId !== '0') formData.append('template_id', updateId);
+
+            fetch('template_actions.php', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    saveContainer.style.display = 'none';
+                    if (typeof showContextualFlash === 'function') showContextualFlash('success', 'Template saved!', 'rationale_flash_container');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        });
+    }
 
     // 4. Delete Template
-    deleteBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        if (selector.value === '0') return;
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (selector.value === '0') return;
+            if (!confirm("Delete this template?")) return;
 
-        if (!confirm("Delete this template permanently?")) return;
+            const formData = new FormData();
+            formData.append('ajax_action', 'delete_template');
+            formData.append('template_id', selector.value);
 
-        const formData = new FormData();
-        formData.append('ajax_action', 'delete_template'); // Uses GENERIC delete action
-        formData.append('template_id', selector.value);
-
-        fetch('template_actions.php', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                if (typeof showContextualFlash === 'function') {
-                    showContextualFlash('success', 'Template deleted.', 'rationale_flash_container');
+            fetch('template_actions.php', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (typeof showContextualFlash === 'function') showContextualFlash('success', 'Deleted!', 'rationale_flash_container');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    alert('Error: ' + data.error);
                 }
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                alert('Error: ' + data.error);
-            }
+            });
         });
-    });
+    }
 });
 </script>
