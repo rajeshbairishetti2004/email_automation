@@ -147,7 +147,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (updateId !== '0') formData.append('template_id', updateId);
 
             fetch('template_actions.php', { method: 'POST', body: formData })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 if (data.success) {
                     saveContainer.style.display = 'none';
@@ -156,6 +159,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     alert('Error: ' + data.error);
                 }
+            })
+            .catch(err => {
+                console.error('Template save error:', err);
+                alert('Error saving template: ' + err.message);
             });
         });
     }
@@ -172,7 +179,10 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('template_id', selector.value);
 
             fetch('template_actions.php', { method: 'POST', body: formData })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 if (data.success) {
                     if (typeof showContextualFlash === 'function') showContextualFlash('success', 'Deleted!', 'rationale_flash_container');
@@ -180,6 +190,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     alert('Error: ' + data.error);
                 }
+            })
+            .catch(err => {
+                console.error('Template delete error:', err);
+                alert('Error deleting template: ' + err.message);
             });
         });
     }
