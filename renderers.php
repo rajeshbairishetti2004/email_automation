@@ -67,7 +67,8 @@ function renderClientReport(
     $asOnFormatted = $asOn;
     $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn);
     if ($asOnDate instanceof DateTime) {
-        $asOnFormatted = $asOnDate->format('F jS Y');
+        // Display as "17th November 2025"
+        $asOnFormatted = $asOnDate->format('jS F Y');
     }
     ?>
 
