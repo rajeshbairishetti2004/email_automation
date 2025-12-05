@@ -78,39 +78,51 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteBtn = document.getElementById('rationale_delete_btn');
     const saveForm = document.getElementById('rationale_save_form');
 
+    console.log('Rationale Script Loaded');
+    console.log('selector:', selector);
+    console.log('input:', input);
+    console.log('saveContainer:', saveContainer);
+    console.log('saveToggle:', saveToggle);
+    console.log('deleteBtn:', deleteBtn);
+    console.log('saveForm:', saveForm);
+
     // 1. Auto-Load Template on Selection
-    selector.addEventListener('change', function() {
-        const selectedOption = selector.options[selector.selectedIndex];
-        const content = selectedOption.getAttribute('data-content');
-        
-        // Ignore the "Select Template" default option
-        if (selector.value !== '0' && content) {
-            if(confirm("Replace current text with this template?")) {
-                
-                // A. Update the Text Box Value
-                input.value = content;
-                
-                // B. Force Auto-Resize (Visual Adjustment)
-                if (typeof autoResizeTextarea === 'function') {
-                    autoResizeTextarea(input);
-                }
-                
-                // C. Force Auto-Save to Database (Trigger Blur)
-                input.dispatchEvent(new Event('blur'));
-                
-                // D. Show Success Message
-                if (typeof showContextualFlash === 'function') {
-                    showContextualFlash('success', 'Rationale loaded & saved!', 'rationale_flash_container');
+    if (selector) {
+        selector.addEventListener('change', function() {
+            const selectedOption = selector.options[selector.selectedIndex];
+            const content = selectedOption.getAttribute('data-content');
+            
+            // Ignore the "Select Template" default option
+            if (selector.value !== '0' && content) {
+                if(confirm("Replace current text with this template?")) {
+                    
+                    // A. Update the Text Box Value
+                    input.value = content;
+                    
+                    // B. Force Auto-Resize (Visual Adjustment)
+                    if (typeof autoResizeTextarea === 'function') {
+                        autoResizeTextarea(input);
+                    }
+                    
+                    // C. Force Auto-Save to Database (Trigger Blur)
+                    input.dispatchEvent(new Event('blur'));
+                    
+                    // D. Show Success Message
+                    if (typeof showContextualFlash === 'function') {
+                        showContextualFlash('success', 'Rationale loaded & saved!', 'rationale_flash_container');
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     // 2. Toggle Save Form
     if (saveToggle) {
         saveToggle.addEventListener('click', function(e) {
             e.preventDefault();
+            console.log('Save/Edit button clicked');
             saveContainer.style.display = (saveContainer.style.display === 'block') ? 'none' : 'block';
+            console.log('Save container display:', saveContainer.style.display);
             
             // Pre-fill form if needed
             if (saveContainer.style.display === 'block') {
@@ -124,20 +136,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     document.getElementById('rationale_template_name').value = '';
                 }
+                console.log('Form pre-filled');
             }
         });
     }
 
     // 3. Submit New Template (AJAX)
     if (saveForm) {
+        console.log('Save form event listener attached');
         saveForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            console.log('Form submitted');
             
             const name = document.getElementById('rationale_template_name').value.trim();
             const content = document.getElementById('rationale_template_content').value.trim();
             const updateId = document.getElementById('rationale_update_id').value;
 
-            if (!name || !content) { alert("Name and Content required."); return; }
+            console.log('Form data:', { name, content, updateId });
+
+            if (!name || !content) { 
+                alert("Name and Content required."); 
+                return; 
+            }
 
             const formData = new FormData();
             formData.append('ajax_action', 'save_template');
@@ -146,12 +166,16 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('template_content', content);
             if (updateId !== '0') formData.append('template_id', updateId);
 
+            console.log('Sending fetch request to template_actions.php');
+
             fetch('template_actions.php', { method: 'POST', body: formData })
             .then(r => {
+                console.log('Response status:', r.status);
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             })
             .then(data => {
+                console.log('Response data:', data);
                 if (data.success) {
                     saveContainer.style.display = 'none';
                     if (typeof showContextualFlash === 'function') showContextualFlash('success', 'Template saved!', 'rationale_flash_container');
@@ -165,6 +189,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Error saving template: ' + err.message);
             });
         });
+    } else {
+        console.error('saveForm not found!');
     }
 
     // 4. Delete Template
