@@ -868,9 +868,21 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
             </div>
             
+            <?php
+                $asOnFormatted = $asOn;
+                $asOnDate = DateTime::createFromFormat('d/m/Y', (string)$asOn);
+                if (!$asOnDate instanceof DateTime) {
+                    $asOnDate = DateTime::createFromFormat('d-m-Y', (string)$asOn);
+                }
+                if ($asOnDate instanceof DateTime) {
+                    // Display as day first, e.g., 17th November 2025
+                    $asOnFormatted = $asOnDate->format('jS F Y');
+                }
+            ?>
+
             <h3>1. Current Situation</h3>
             <table class="report-table">
-                <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
+                <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
                 <tr>
                     <td>Total Amount </td>
                     <td><?php echo formatAmount($totalAmount); ?></td>

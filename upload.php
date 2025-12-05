@@ -369,6 +369,12 @@ $stmtGoal = $pdo->prepare("
                 if (is_array($pdfInfo)) {
                     $originalPath = $pdfInfo['path'];
                     $fileName = basename($originalPath);
+
+                    // Keep GoalStatusReport PDFs in the general uploads folder (not under attachments)
+                    if (stripos($fileName, 'GoalStatusReport') !== false) {
+                        continue;
+                    }
+
                     $newPath = $clientAttachmentsDir . '/' . $fileName;
 
                     // Rename the file to avoid conflicts, if needed
