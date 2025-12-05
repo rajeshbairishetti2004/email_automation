@@ -130,11 +130,10 @@ function handleEmailSending($clientId) {
         $stmt->execute([':id' => $clientId]);
         $storedAnnexures = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Initialize Annexures List for the Email Body
+        // Initialize Annexures List for the Email Body (must mirror report attachments shown in View Report)
         $emailAnnexures = [];
         
-        // --- 2. Handle Persistent Attachments (Draft/Rejected Uploads) ---
-        // This scans the folder: uploads/attachments/client_{id}/
+        // --- 2. Use only persistent Report Attachments (uploads/attachments/client_{id}) ---
         $persistentAttDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
         
         if (is_dir($persistentAttDir)) {
@@ -146,7 +145,7 @@ function handleEmailSending($clientId) {
                     // Add to attachment paths for later use in PHPMailer
                     $attachmentPaths[] = $fullPath;
                     
-                    // Add the FILENAME ONLY to the email body list
+                    // Add the FILENAME ONLY to the email body list (matches report attachments UI)
                     $emailAnnexures[] = [
                         'text' => $pf
                     ];
@@ -154,21 +153,7 @@ function handleEmailSending($clientId) {
             }
         }
         
-        // Also add the new temporary files to the body list
-        foreach ($attachmentNames as $tempName) {
-            $emailAnnexures[] = [
-                'text' => $tempName
-            ];
-        }
-        
-        // Add stored annexures from database (if no new files were uploaded)
-        if (empty($attachmentNames) && empty($emailAnnexures)) {
-            foreach ($storedAnnexures as $ax) {
-                $emailAnnexures[] = [
-                    'text' => $ax['line_text']
-                ];
-            }
-        }
+        // Note: Do NOT add stored DB annexure defaults or temp upload names; annexures should reflect the report attachments list only.
 
         // Fetch RM Details (using centralized function from db_config)
         $rmData = getDefaultRelationshipManager(); // Rename to avoid conflict with $rm variable
@@ -306,8 +291,11 @@ function handleEmailSending($clientId) {
         <?php
         $asOnFormatted = $asOn;
         $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn);
+        if (!$asOnDate instanceof DateTime) {
+            $asOnDate = DateTime::createFromFormat('d-m-Y', $asOn);
+        }
         if ($asOnDate instanceof DateTime) {
-            // Display as "17th November 2025"
+            // Display as day first, e.g., 17th November 2025
             $asOnFormatted = $asOnDate->format('jS F Y');
         }
         ?>

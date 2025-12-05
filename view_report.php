@@ -868,9 +868,21 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
             </div>
             
+            <?php
+                $asOnFormatted = $asOn;
+                $asOnDate = DateTime::createFromFormat('d/m/Y', (string)$asOn);
+                if (!$asOnDate instanceof DateTime) {
+                    $asOnDate = DateTime::createFromFormat('d-m-Y', (string)$asOn);
+                }
+                if ($asOnDate instanceof DateTime) {
+                    // Display as day first, e.g., 17th November 2025
+                    $asOnFormatted = $asOnDate->format('jS F Y');
+                }
+            ?>
+
             <h3>1. Current Situation</h3>
             <table class="report-table">
-                <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOn); ?></th></tr>
+                <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
                 <tr>
                     <td>Total Amount </td>
                     <td><?php echo formatAmount($totalAmount); ?></td>
@@ -902,19 +914,14 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Status</th>
                 </tr>
                 <?php foreach ($goals as $g): 
-                    // DYNAMIC STATUS CALCULATION (Ignoring the static $g['status'] field)
-                    $shortfall = (float)($g['shortfall'] ?? 0); 
+                    // DYNAMIC STATUS CALCULATION (based on Projected vs Target)
+                    $projected    = (float)($g['projected'] ?? 0);
                     $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
 
-                    // Calculate the 1% threshold
-                    $threshold = $targetAmount * 0.01;
-                    
-                    if ($shortfall > 0 && $shortfall > $threshold) {
-                        // Condition: Shortfall is positive AND greater than 1% of target. Major deficit.
+                    if ($projected < $targetAmount) {
                         $newStatus = 'Invest More';
                         $statusClass = 'status-off'; // Red background
                     } else {
-                        // Condition: Shortfall is negative (surplus), zero, or a minor positive deficit (<= 1% of target).
                         $newStatus = 'On Track';
                         $statusClass = 'status-on'; // Green background
                     }
