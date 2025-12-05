@@ -303,13 +303,12 @@ $stmtGoal = $pdo->prepare("
             $savedCount++;
 
           foreach ($goals as $g) {
-                // --- CALCULATE INITIAL STATUS (Formula) ---
-                $shortfallVal = (float)($g['shortfall'] ?? 0);
-                $targetVal = (float)($g['target_amount'] ?? 0);
-                $threshold = $targetVal * 0.01;
+                // --- CALCULATE INITIAL STATUS (Projected vs Target) ---
+                $projectedVal = (float)($g['projected'] ?? 0);
+                $targetVal    = (float)($g['target_amount'] ?? 0);
 
-                // Default logic: If shortfall > 1% of target, it's Invest More. Otherwise On Track.
-                $calculatedStatus = ($shortfallVal > 0 && $shortfallVal > $threshold) ? 'Invest More' : 'On Track';
+                // If projected value is below target, flag as Invest More; else On Track
+                $calculatedStatus = ($projectedVal < $targetVal) ? 'Invest More' : 'On Track';
                 // ------------------------------------------
 
                 $stmtGoal->execute([
@@ -318,11 +317,11 @@ $stmtGoal = $pdo->prepare("
                     ':goal_date'      => $g['goal_date']     ?? '',
                     ':current_amount' => $g['current_value'] ?? 0,
                     ':sip_swp'        => $g['running_sip']   ?? 0,
-                    ':target_amount'  => $g['target_amount'] ?? 0,
-                    ':projected'      => $g['projected']     ?? 0,
+                    ':target_amount'  => $targetVal,
+                    ':projected'      => $projectedVal,
                     ':shortfall'      => $g['shortfall']     ?? 0,
                     ':completion'     => $g['completion']    ?? 0,
-                    ':status'         => $calculatedStatus, // Use our calculated status
+                    ':status'         => $calculatedStatus, // Use projected vs target status
                 ]);
             }
 
