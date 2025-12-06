@@ -205,6 +205,7 @@ function handleEmailSending($clientId) {
             if ($inceptionFile) {
                 $fullPath = $persistentAttDir . '/' . $inceptionFile;
                 $attachmentPaths[] = $fullPath;
+                $attachmentNames[] = $inceptionFile; // Store original filename
                 $emailAnnexures[] = [
                     'text' => formatAnnexureLabel($inceptionFile, $client['name'] ?? '')
                 ];
@@ -214,6 +215,7 @@ function handleEmailSending($clientId) {
             foreach ($sortedFiles as $pf) {
                 $fullPath = $persistentAttDir . '/' . $pf;
                 $attachmentPaths[] = $fullPath;
+                $attachmentNames[] = $pf; // Store original filename
                 $emailAnnexures[] = [
                     'text' => formatAnnexureLabel($pf, $client['name'] ?? '')
                 ];
@@ -449,18 +451,27 @@ function handleEmailSending($clientId) {
                 <th>Asset</th>
                 <th>Share%</th>
             </tr>
+            <?php
+            // Ensure Gold always exists in allocations
+            $hasGold = false;
+            foreach ($allocations as $a) {
+                if (stripos($a['asset'], 'Gold') !== false) {
+                    $hasGold = true;
+                    break;
+                }
+            }
+            if (!$hasGold) {
+                $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
+            }
+            ?>
             <?php 
             $totalShare = 0; // Initialize Total
             foreach ($allocations as $a): 
                 $share = (float)$a['share_pct'];
                 $assetName = $a['asset'];
                 
-                // Always show Gold even if 0, but hide Others if 0
+                // Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
                 if ($share <= 0 && stripos($assetName, 'Gold') === false) {
-                    continue;
-                }
-                // Hide Others specifically if 0
-                if ($share <= 0 && stripos($assetName, 'Others') !== false) {
                     continue;
                 }
                 
@@ -616,9 +627,11 @@ function handleEmailSending($clientId) {
             $mail->Body = $emailHtml;
 
             // Attach All Uploaded Files (Unlimited)
-            foreach ($attachmentPaths as $file) {
+            foreach ($attachmentPaths as $index => $file) {
                 if (file_exists($file)) {
-                    $mail->addAttachment($file, basename($file));
+                    // Use original filename if available, otherwise use basename
+                    $displayName = isset($attachmentNames[$index]) ? $attachmentNames[$index] : basename($file);
+                    $mail->addAttachment($file, $displayName);
                 }
             }
 

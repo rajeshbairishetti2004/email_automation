@@ -1018,16 +1018,28 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Share%</th>
                 </tr>
                 <?php
+                // Ensure Gold always exists in allocations
+                $hasGold = false;
+                foreach ($allocations as $a) {
+                    if (stripos($a['asset'], 'Gold') !== false) {
+                        $hasGold = true;
+                        break;
+                    }
+                }
+                if (!$hasGold) {
+                    $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
+                }
+                
                 $sumShare = 0.0;
                 foreach ($allocations as $a):
                     // 1. Force float conversion to handle strings like "0.34";
                     $shareVal = (float)$a['share_pct'];
                     $assetName = $a['asset'];
 
-                    // 2. Always show Gold even if 0, but hide Others if 0
-                    if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) continue;
-                    // 3. Hide Others specifically if 0
-                    if ($shareVal <= 0 && stripos($assetName, 'Others') !== false) continue;
+                    // 2. Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
+                    if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) {
+                        continue;
+                    }
 
                     $sumShare += $shareVal;
                     ?>

@@ -200,7 +200,8 @@ try {
                 for ($i = 0; $i < $count; $i++) {
                     if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) {
                         $rawName = basename($_FILES['files']['name'][$i]);
-                        $fileName = preg_replace('/[^a-zA-Z0-9\._-]/', '', $rawName);
+                        // Keep spaces and common filename characters
+                        $fileName = preg_replace('/[^\w\s\._-]/u', '', $rawName);
                         $targetPath = $baseDir . '/' . $fileName;
 
                         if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $targetPath)) {
