@@ -107,6 +107,53 @@ function handleEmailSending($clientId) {
     $stmt->execute([':id' => $clientId]);
     $client = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    if (!function_exists('formatAnnexureLabel')) {
+        // Map filenames to descriptive labels with dates
+        function formatAnnexureLabel($filename, $clientName = '') {
+            $name = pathinfo($filename, PATHINFO_FILENAME);
+            $nameLower = strtolower($name);
+            
+            // Extract date from filename (e.g., 4Dec25 or 04Dec2025)
+            $dateStr = '';
+            if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
+                $day = ltrim($dateMatch[1], '0');
+                $mon = ucfirst(strtolower($dateMatch[2]));
+                $yearRaw = $dateMatch[3];
+                $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
+                $dateStr = $mon . ' ' . $day . ', ' . $year;
+            }
+            
+            // Map known filename patterns to descriptive labels
+            if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
+                preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
+                return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
+            }
+            
+            if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
+                return 'Current portfolio ' . $dateStr;
+            }
+            
+            if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
+                return 'Goal report ' . $dateStr;
+            }
+            
+            if (preg_match('/portfolio.*performance.*between/i', $nameLower) || 
+                preg_match('/portfolio.*performance.*from/i', $nameLower)) {
+                // Extract date range if present
+                if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
+                    return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
+                }
+                return 'Portfolio Performance from 1 Mar25- 4Dec25';
+            }
+            
+            // Fallback: clean up the filename
+            $name = str_replace('_', ' ', $name);
+            $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name); // Remove trailing client name
+            $name = preg_replace('/\s+/', ' ', trim($name));
+            return $name . ($dateStr ? ' ' . $dateStr : '');
+        }
+    }
+
     if ($client) {
         $stmt = $pdo->prepare("SELECT * FROM client_goals WHERE client_id = :id ORDER BY id ASC");
         $stmt->execute([':id' => $clientId]);
@@ -138,18 +185,38 @@ function handleEmailSending($clientId) {
         
         if (is_dir($persistentAttDir)) {
             $pFiles = scandir($persistentAttDir);
+            $sortedFiles = [];
+            $inceptionFile = null;
+            
+            // Separate inception portfolio file from others
             foreach ($pFiles as $pf) {
-                if ($pf !== '.' && $pf !== '..') {
-                    $fullPath = $persistentAttDir . '/' . $pf;
-                    
-                    // Add to attachment paths for later use in PHPMailer
-                    $attachmentPaths[] = $fullPath;
-                    
-                    // Add the FILENAME ONLY to the email body list (matches report attachments UI)
-                    $emailAnnexures[] = [
-                        'text' => $pf
-                    ];
+                if ($pf === '.' || $pf === '..') continue;
+                
+                $nameLower = strtolower($pf);
+                if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
+                    preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
+                    $inceptionFile = $pf;
+                } else {
+                    $sortedFiles[] = $pf;
                 }
+            }
+            
+            // Add inception file first if it exists
+            if ($inceptionFile) {
+                $fullPath = $persistentAttDir . '/' . $inceptionFile;
+                $attachmentPaths[] = $fullPath;
+                $emailAnnexures[] = [
+                    'text' => formatAnnexureLabel($inceptionFile, $client['name'] ?? '')
+                ];
+            }
+            
+            // Add remaining files
+            foreach ($sortedFiles as $pf) {
+                $fullPath = $persistentAttDir . '/' . $pf;
+                $attachmentPaths[] = $fullPath;
+                $emailAnnexures[] = [
+                    'text' => formatAnnexureLabel($pf, $client['name'] ?? '')
+                ];
             }
         }
         
@@ -386,17 +453,21 @@ function handleEmailSending($clientId) {
             $totalShare = 0; // Initialize Total
             foreach ($allocations as $a): 
                 $share = (float)$a['share_pct'];
+                $assetName = $a['asset'];
                 
-                // Skip row if 0, but you might still want to track it? 
-                // Usually if it's 0 it adds nothing to total anyway.
-                if ($share <= 0) {
+                // Always show Gold even if 0, but hide Others if 0
+                if ($share <= 0 && stripos($assetName, 'Gold') === false) {
+                    continue;
+                }
+                // Hide Others specifically if 0
+                if ($share <= 0 && stripos($assetName, 'Others') !== false) {
                     continue;
                 }
                 
                 $totalShare += $share; // Add to Total
             ?>
                 <tr>
-                    <td style="font-weight: 500;"><?php echo htmlspecialchars($a['asset']); ?></td>
+                    <td style="font-weight: 500;"><?php echo htmlspecialchars($assetName); ?></td>
                     <td><?php echo number_format($share, 2); ?></td>
                 </tr>
             <?php endforeach; ?>

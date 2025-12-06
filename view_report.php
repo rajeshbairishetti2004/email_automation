@@ -93,6 +93,53 @@ if (!function_exists('getClientAnnexures')) {
     }
 }
 
+if (!function_exists('formatAnnexureLabel')) {
+    // Map filenames to descriptive labels with dates
+    function formatAnnexureLabel($filename, $clientName = '') {
+        $name = pathinfo($filename, PATHINFO_FILENAME);
+        $nameLower = strtolower($name);
+        
+        // Extract date from filename (e.g., 4Dec25 or 04Dec2025)
+        $dateStr = '';
+        if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
+            $day = ltrim($dateMatch[1], '0');
+            $mon = ucfirst(strtolower($dateMatch[2]));
+            $yearRaw = $dateMatch[3];
+            $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
+            $dateStr = $mon . ' ' . $day . ', ' . $year;
+        }
+        
+        // Map known filename patterns to descriptive labels
+        if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
+            preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
+            return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
+        }
+        
+        if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
+            return 'Current portfolio ' . $dateStr;
+        }
+        
+        if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
+            return 'Goal report ' . $dateStr;
+        }
+        
+        if (preg_match('/portfolio.*performance.*between/i', $nameLower) || 
+            preg_match('/portfolio.*performance.*from/i', $nameLower)) {
+            // Extract date range if present
+            if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
+                return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
+            }
+            return 'Portfolio Performance from 1 Mar25- 4Dec25';
+        }
+        
+        // Fallback: clean up the filename
+        $name = str_replace('_', ' ', $name);
+        $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name); // Remove trailing client name
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        return $name . ($dateStr ? ' ' . $dateStr : '');
+    }
+}
+
 if (!function_exists('getPrevClientId')) {
     function getPrevClientId($clientId) {
         $pdo = getPdo();
@@ -975,14 +1022,17 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 foreach ($allocations as $a):
                     // 1. Force float conversion to handle strings like "0.34"
                     $shareVal = (float)$a['share_pct'];
+                    $assetName = $a['asset'];
 
-                    // 2. Hide row ONLY if value is 0 (keep 0.34, 0.01, etc.)
-                    if ($shareVal <= 0) continue;
+                    // 2. Always show Gold even if 0, but hide Others if 0
+                    if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) continue;
+                    // 3. Hide Others specifically if 0
+                    if ($shareVal <= 0 && stripos($assetName, 'Others') !== false) continue;
 
                     $sumShare += $shareVal;
                     ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($a['asset']); ?></td>
+                        <td><?php echo htmlspecialchars($assetName); ?></td>
                         <td><?php echo number_format($shareVal, 2); ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -1060,13 +1110,33 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 
                 if (is_dir($attDir)) {
                     $files = scandir($attDir);
+                    $sortedFiles = [];
+                    
+                    // Separate inception portfolio file from others
+                    $inceptionFile = null;
                     foreach ($files as $file) {
-                        if ($file !== '.' && $file !== '..') {
-                            $hasFiles = true;
-                            $filePath = $attDir . '/' . $file;
-                            // Display Filename ONLY
-                            echo "<li>" . htmlspecialchars($file) . "</li>";
+                        if ($file === '.' || $file === '..') continue;
+                        $hasFiles = true;
+                        
+                        $nameLower = strtolower($file);
+                        if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
+                            preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
+                            $inceptionFile = $file;
+                        } else {
+                            $sortedFiles[] = $file;
                         }
+                    }
+                    
+                    // Display inception file first if it exists
+                    if ($inceptionFile) {
+                        $label = formatAnnexureLabel($inceptionFile, $client['name'] ?? '');
+                        echo "<li>" . htmlspecialchars($label) . "</li>";
+                    }
+                    
+                    // Display remaining files
+                    foreach ($sortedFiles as $file) {
+                        $label = formatAnnexureLabel($file, $client['name'] ?? '');
+                        echo "<li>" . htmlspecialchars($label) . "</li>";
                     }
                 }
                 
