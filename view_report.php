@@ -1020,7 +1020,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <?php
                 $sumShare = 0.0;
                 foreach ($allocations as $a):
-                    // 1. Force float conversion to handle strings like "0.34"
+                    // 1. Force float conversion to handle strings like "0.34";
                     $shareVal = (float)$a['share_pct'];
                     $assetName = $a['asset'];
 
