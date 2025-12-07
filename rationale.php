@@ -4,69 +4,40 @@
 // Features: Shared System Templates, Inline Save/Edit Form
 
 // 1. Fetch ONLY Rationale Templates
-$rationaleTemplates = getReportTemplates('rationale');
+$rationaleTemplates = $templates['rationale'] ?? [];
 
 // 2. Current Rationale Text
-$currentRationale = $rationaleText ?? ''; 
+$currentRationale = $rationaleStored ?? ''; 
+$clientId = isset($clientId) ? (int)$clientId : (int)($_POST['client_id'] ?? 0);
 ?>
 
-<div class="card">
+<div class="card rationale-card" style="margin-top:20px;">
     <label class="card-title">Rationale</label>
-    
-    <div id="rationale_flash_container" class="signature-flash-container"></div>
 
-    <div class="template-selector-group" style="margin-bottom: 10px; position: relative; background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px dashed #ddd;">
-        <label style="font-weight: 600; font-size: 13px; margin-right: 10px;">Select Rationale Template:</label>
-        
-        <select id="rationale_template_selector" style="width: 250px; padding: 6px; border-radius: 4px; border: 1px solid #ccc;">
-            <option value="0">--- Custom / Standard ---</option>
+    <div id="rationale_controls" class="rationale-controls">
+        <select id="rationale_template_selector" class="styled-input">
+            <option value="0" data-content="">--- Select Rationale Template ---</option>
             <?php foreach ($rationaleTemplates as $tpl): ?>
-                <option value="<?php echo (int)$tpl['id']; ?>" 
-                        data-content="<?php echo htmlspecialchars($tpl['content']); ?>" 
-                        data-name="<?php echo htmlspecialchars($tpl['name']); ?>">
+                <option value="<?php echo (int)$tpl['id']; ?>" data-content="<?php echo htmlspecialchars($tpl['content']); ?>">
                     <?php echo htmlspecialchars($tpl['name']); ?>
                 </option>
             <?php endforeach; ?>
         </select>
-        
-        <a href="#" id="rationale_save_toggle" class="action-link-button" style="margin-left: 10px;" title="Save current text as a template">
-            💾 Save/Edit
-        </a>
-        
-        <a href="#" id="rationale_delete_btn" class="delete-template-btn" style="margin-left: 5px;" title="Delete selected template">🗑️</a>
 
-        <div id="rationale_save_container" class="template-save-form" style="display: none; padding: 15px; border: 1px solid #0288D1; margin-top: 10px; position: absolute; background: white; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 400px; max-width: 80vw; border-radius: 8px;">
-            <div id="rationale_save_form_container">
-                <input type="hidden" name="template_id_to_update" id="rationale_update_id" value="0">
-                
-                <h5 class="template-form-title" style="margin-top: 0; margin-bottom: 10px; color: #0288D1;">Save Rationale Template</h5>
-                
-                <label style="font-size: 12px; font-weight: bold;">Template Name:</label>
-                <input type="text" id="rationale_template_name" placeholder="e.g. Aggressive Profile" required style="margin-bottom: 10px; width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-                
-                <label style="font-size: 12px; font-weight: bold;">Content:</label>
-                <textarea id="rationale_template_content" required rows="4" style="margin-bottom: 10px; width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-family: inherit;"></textarea>
-                
-                <div style="text-align: right;">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('rationale_save_container').style.display='none'" style="margin-right: 5px; cursor:pointer;">Cancel</button>
-                    <button type="button" id="rationale_save_submit_btn" class="btn-primary" style="padding: 6px 12px; font-size: 12px; cursor:pointer;">
-                        Save Template
-                    </button>
-                </div>
-            </div>
-        </div>
+        <input type="text" id="rationale_template_name" placeholder="Template name (for save)" class="styled-input" style="display:none;">
+
+        <!-- Three separate buttons: Edit, Save, Delete -->
+        <button type="button" id="rationale_edit_btn" class="rationale-btn">Edit</button>
+        <button type="button" id="rationale_save_btn" class="rationale-btn primary" disabled>Save</button>
+        <button type="button" id="rationale_delete_btn" class="rationale-btn danger" disabled>Delete</button>
     </div>
 
-    <textarea name="rationale_text" 
-              id="rationale_input" 
-              class="large-textarea" 
-              data-field="rationale_text" 
-              data-client-id="<?php echo (int)$clientId; ?>" 
-              placeholder="Explain why these schemes were selected..."><?php echo htmlspecialchars($currentRationale); ?></textarea>
-              
-    <p style="font-size: 12px; color: #666; margin-top: 8px;">
-        💡 <strong>Note:</strong> Changes to this text box are saved automatically to the report.
-    </p>
+    <div id="rationale_flash_container"></div>
+
+    <textarea id="rationale_textarea" name="rationale" data-client-id="<?php echo $clientId; ?>" data-field="rationale_text" class="large-textarea" rows="8" placeholder="Write your rationale here..." readonly><?php echo htmlspecialchars($currentRationale); ?></textarea>
+
+    <p class="rationale-hint">Changes saved automatically when you leave the textarea (or use Save for templates).</p>
 </div>
 
+<link rel="stylesheet" href="public/css/rationale.css">
 <script src="public/js/rationale.js"></script>

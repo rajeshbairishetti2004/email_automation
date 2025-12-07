@@ -18,8 +18,8 @@ $communication_flash_container = isset($_GET['template_added']) || isset($_GET['
         <div class="toolbar-group">
             <label class="toolbar-label">Greeting</label>
             <div class="toolbar-controls">
-                <select id="greeting_template_selector" class="toolbar-select">
-                    <option value="0">-- Select --</option>
+                <select name="greeting_template_selector" id="greeting_template_selector" class="toolbar-select">
+                    <option value="0" data-content="">--- Select Greeting Template ---</option>
                     <?php foreach ($templates['greeting'] as $t): ?>
                         <?php
                             $templateName = htmlspecialchars($t['template_name'] ?? $t['name'] ?? 'Untitled Template');
@@ -38,8 +38,8 @@ $communication_flash_container = isset($_GET['template_added']) || isset($_GET['
         <div class="toolbar-group" style="flex: 2;">
             <label class="toolbar-label">Intro Body</label>
             <div class="toolbar-controls">
-                <select id="intro_template_selector" class="toolbar-select">
-                    <option value="0">-- Select --</option>
+                <select name="intro_template_selector" id="intro_template_selector" class="toolbar-select">
+                    <option value="0" data-content="">--- Select Intro Template ---</option>
                     <?php foreach ($templates['intro'] as $t): ?>
                         <?php
                             $templateName = htmlspecialchars($t['template_name'] ?? $t['name'] ?? 'Untitled Template');
@@ -58,8 +58,8 @@ $communication_flash_container = isset($_GET['template_added']) || isset($_GET['
         <div class="toolbar-group">
             <label class="toolbar-label">Closing</label>
             <div class="toolbar-controls">
-                <select id="closing_template_selector" class="toolbar-select">
-                    <option value="0">-- Select --</option>
+                <select name="closing_template_selector" id="closing_template_selector" class="toolbar-select">
+                    <option value="0" data-content="">--- Select Closing Template ---</option>
                     <?php foreach ($templates['closing'] as $t): ?>
                         <?php
                             $templateName = htmlspecialchars($t['template_name'] ?? $t['name'] ?? 'Untitled Template');
@@ -77,9 +77,9 @@ $communication_flash_container = isset($_GET['template_added']) || isset($_GET['
     </div>
 
     <div class="seamless-editor-wrapper">
-        <textarea name="greeting" id="greeting_input" class="seamless-input greeting-part" data-field="greeting" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Greeting..."><?php echo htmlspecialchars($greetingStored ?? ''); ?></textarea>
-        <textarea name="intro" id="intro_input" class="seamless-input intro-part" data-field="intro" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Write the introduction here..."><?php echo htmlspecialchars($introTextStored ?? ''); ?></textarea>
-        <textarea name="closing" id="closing_input" class="seamless-input closing-part" data-field="closing" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Closing remarks..."><?php echo htmlspecialchars($closingTextStored ?? ''); ?></textarea>
+        <textarea name="greeting" id="greeting_textarea" class="seamless-input greeting-part large-textarea" data-field="greeting" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Greeting..."><?php echo htmlspecialchars($greetingStored ?? ''); ?></textarea>
+        <textarea name="intro" id="intro_textarea" class="seamless-input intro-part large-textarea" data-field="intro" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Write the introduction here..."><?php echo htmlspecialchars($introTextStored ?? ''); ?></textarea>
+        <textarea name="closing" id="closing_textarea" class="seamless-input closing-part large-textarea" data-field="closing" data-client-id="<?php echo (int)$clientId; ?>" placeholder="Closing remarks..."><?php echo htmlspecialchars($closingTextStored ?? ''); ?></textarea>
     </div>
 </div>
 

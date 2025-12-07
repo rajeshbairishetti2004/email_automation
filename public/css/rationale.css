@@ -250,6 +250,47 @@
     margin-bottom: 16px;
 }
 
+/* Button Styles */
+.rationale-btn {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.rationale-btn.primary {
+    background: #0288D1;
+    color: #fff;
+    border-color: #0288D1;
+}
+
+.rationale-btn.danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+/* Input Styles */
+.rationale-card .styled-input {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+#rationale_template_name { padding: 8px; }
+
+#rationale_flash_container .flash-message { margin-top:8px; }
+
+.rationale-controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+
+.rationale-hint { font-size:12px; color:#666; margin-top:8px; }
+
+.flash-success { background:#e6ffed; border:1px solid #8fd19e; color:#116633; padding:8px; }
+
+.flash-error { background:#ffe6e6; border:1px solid #d18686; color:#6b1f1f; padding:8px; }
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .rat-controls-bar {

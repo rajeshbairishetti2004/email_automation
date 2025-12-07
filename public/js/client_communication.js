@@ -46,4 +46,19 @@ document.addEventListener('DOMContentLoaded', function() {
             message.remove();
         }, 3500); 
     });
+
+    function bindTemplate(selectorId, textareaId) {
+        const selector = document.getElementById(selectorId);
+        const textarea = document.getElementById(textareaId);
+        if (!selector || !textarea) return;
+        selector.addEventListener('change', function() {
+            const content = (selector.options[selector.selectedIndex] || {}).getAttribute('data-content') || '';
+            textarea.value = content;
+            textarea.dispatchEvent(new Event('input'));
+        });
+    }
+
+    bindTemplate('greeting_template_selector', 'greeting_textarea');
+    bindTemplate('intro_template_selector', 'intro_textarea');
+    bindTemplate('closing_template_selector', 'closing_textarea');
 });

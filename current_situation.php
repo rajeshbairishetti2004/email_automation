@@ -1,4 +1,5 @@
 <?php
+$asOnFormatted = $asOnFormatted ?? '';
 // ...existing code for $asOnFormatted...
 ?>
 <h3>1. Current Situation</h3>

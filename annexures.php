@@ -1,5 +1,6 @@
 <?php
-// ...existing code for $attDir, $client...
+$attDir = $attDir ?? '';
+// ...existing code for $client...
 ?>
 <h3>Annexures</h3>
 <ul class="annexures-list">

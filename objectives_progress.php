@@ -44,7 +44,7 @@
         <td></td>
         <td><?php echo formatAmount($totalGoalCurrent); ?></td>
         <td><?php echo formatAmount($totalSip); ?></td>
-        <td><?php echo formatAmount($totalGoalTarget); ?></td>
+        <td><!-- intentionally left blank: aggregate Target Amount not shown --></td>
         <td></td>
     </tr>
 </table>

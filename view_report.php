@@ -210,24 +210,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         if ($_POST['ajax_action'] === 'save_user_template') {
             $templateName = trim($_POST['template_name'] ?? '');
             $content = $_POST['template_content'] ?? '';
-            // FIX: Read the ID correctly and cast as integer
-            $templateId = (int)($_POST['template_id_to_update'] ?? 0); 
+            $templateId = (int)($_POST['template_id_to_update'] ?? 0);
             
             if (empty($templateName) || empty($content)) {
                 throw new Exception("Template name and content are required.");
             }
-            
-            // saveUserRationaleTemplate is defined in db_config.php
-            // If templateId > 0, it updates; otherwise, it inserts.
-            $success = saveUserRationaleTemplate($userId, $templateName, $content, $templateId > 0 ? $templateId : null);
-            
-            // FIX: Add check for DB failure in the save function
-            if (!$success) {
-                 throw new Exception("Database failed to save or update the template.");
+
+            // If updating existing template
+            if ($templateId > 0) {
+                $stmtUpdate = $pdo->prepare("UPDATE report_templates SET name = :name, content = :content WHERE id = :id");
+                $ok = $stmtUpdate->execute([':name' => $templateName, ':content' => $content, ':id' => $templateId]);
+                if (!$ok) throw new Exception("Database failed to update the template.");
+                echo json_encode(['success' => true, 'template_id' => $templateId, 'message' => 'Template updated successfully.']);
+                exit;
             }
 
-            echo json_encode(['success' => $success, 'message' => 'Template saved/updated successfully.']);
-            exit; 
+            // Insert new template and return its id
+            $stmtInsert = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (:name, 'rationale', :content)");
+            $ok = $stmtInsert->execute([':name' => $templateName, ':content' => $content]);
+            if (!$ok) throw new Exception("Database failed to save the template.");
+            $newId = (int)$pdo->lastInsertId();
+            echo json_encode(['success' => true, 'template_id' => $newId, 'message' => 'Template saved successfully.']);
+            exit;
 
         } elseif ($_POST['ajax_action'] === 'delete_user_template') {
             $templateId = (int)($_POST['template_id'] ?? 0);
@@ -245,7 +249,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     } catch (Exception $e) {
         error_log("User Rationale Template Error: " . $e->getMessage());
         http_response_code(500); 
-        // Pass the specific error message from the exception to the frontend for better debugging
         echo json_encode(['success' => false, 'error' => $e->getMessage()]); 
         exit; 
     }
@@ -539,6 +542,7 @@ $absoluteReturn = isset($client['absolute_return']) && $client['absolute_return'
     <link rel="stylesheet" href="public/css/scheme_selection.css">
     <link rel="stylesheet" href="public/css/report_attachments.css">
     <link rel="stylesheet" href="public/css/annexures.css">
+    <link rel="stylesheet" href="public/css/rationale.css">
 </head>
 <body>
 
@@ -681,13 +685,37 @@ $absoluteReturn = isset($client['absolute_return']) && $client['absolute_return'
             <input type="hidden" name="review_comment" id="reviewCommentInput" value="">
             <?php require_once 'client_communication.php'; ?>
 
-            <?php require_once 'report_attachments.php'; ?>
-            <?php require_once 'current_situation.php'; ?>
+            <?php
+            // Before including report_attachments.php
+            $canEditAttachments = true; // or set based on user role/logic
+
+            require_once 'report_attachments.php'; 
+            ?>
+
+            <?php
+            // Before including current_situation.php
+            $asOnFormatted = '';
+            if (!empty($asOn)) {
+                $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn) ?: DateTime::createFromFormat('d-m-Y', $asOn);
+                if ($asOnDate instanceof DateTime) {
+                    $asOnFormatted = $asOnDate->format('jS F Y');
+                } else {
+                    $asOnFormatted = $asOn;
+                }
+            }
+
+            require_once 'current_situation.php'; 
+            ?>
             <?php require_once 'objectives_progress.php'; ?>
             <?php require_once 'product_selection.php'; ?>
             <?php require_once 'scheme_selection.php'; ?>
             <?php require_once 'rationale.php'; ?>
-            <?php require_once 'annexures.php'; ?>
+            <?php
+            // Before including annexures.php
+            $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+
+            require_once 'annexures.php'; 
+            ?>
             <?php require_once 'signature.php'; ?>
         </form>
 
@@ -699,16 +727,16 @@ $absoluteReturn = isset($client['absolute_return']) && $client['absolute_return'
 
 <!-- Add modular JS includes -->
 <script src="public/js/global_utils.js"></script>
+<script src="public/js/view_report.js"></script>
 <script src="public/js/header_dropdown.js"></script>
 <script src="public/js/client_communication.js"></script>
 <script src="public/js/report_attachments.js"></script>
-<script src="public/js/current_situation.js"></script>
 <script src="public/js/objectives_progress.js"></script>
 <script src="public/js/product_selection.js"></script>
 <script src="public/js/scheme_selection.js"></script>
+<script src="public/js/template_actions.js"></script>
+<script src="public/js/email_handler.js"></script>
+<script src="public/js/workflow.js"></script> <!-- workflow functions -->
 <script src="public/js/rationale.js"></script>
-<script src="public/js/annexures.js"></script>
-<script src="public/js/signature.js"></script>
-<script src="public/js/workflow.js"></script>
 </body>
 </html>
