@@ -31,6 +31,7 @@ function parsePortfolioValuation(string $path): array {
     $colCagr     = findColumnByKeywords($headerRow, ['cagr']);
     $colXirr     = findColumnByKeywords($headerRow, ['xirr']);
     $colClient   = findColumnByKeywords($headerRow, ['investor name', 'client name', 'holder']);
+    $colAbsReturn = findColumnByKeywords($headerRow, ['absolute return', 'abs return', 'abs. return']);
 
     // Fallback: If "Client Name" column isn't found in the row, assume the file belongs to the main client from filename.
     // This aggregates Family holdings (Ganesh + Sudha) into one report if they are in the same file.
@@ -38,7 +39,6 @@ function parsePortfolioValuation(string $path): array {
     
     $data = [];
     $grandTotals = [];
-
     foreach ($dataRows as $row) {
         if (!is_array($row)) continue;
 
@@ -69,6 +69,7 @@ function parsePortfolioValuation(string $path): array {
             $grandTotals[$client] = [
                 'current' => $current,
                 'cagr'    => $cagr,
+                'absolute_return' => $colAbsReturn !== null ? parseIndianNumber((string)$row[$colAbsReturn]) : null,
             ];
             continue;
         }
@@ -137,6 +138,7 @@ function parsePortfolioValuation(string $path): array {
             $info['totals']['current']       = $grandTotals[$client]['current'];
             // Note: We usually keep calculated totals for consistency, but you can uncomment below to overwrite
             // $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
+            $info['totals']['absolute_return'] = $grandTotals[$client]['absolute_return'] ?? null;
         }
     }
 
@@ -433,6 +435,10 @@ function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $
         }
         $clients[$client]['schemes']           = $info['schemes'];
         $clients[$client]['current']['totals'] = $info['totals'];
+        // Pass absolute_return up to top level for DB save
+        if (isset($info['totals']['absolute_return'])) {
+            $clients[$client]['absolute_return'] = $info['totals']['absolute_return'];
+        }
     }
 
     foreach ($aa as $client => $info) {

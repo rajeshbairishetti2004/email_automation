@@ -520,7 +520,11 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
 // Use stored signature if saved, otherwise use the dynamically generated default.
 $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATURE; 
 
-
+// ----- CURRENT SITUATION EXTRA FIELDS -----
+$isOlderThan1Year = isset($client['is_older_than_1_year']) ? (int)$client['is_older_than_1_year'] : 1;
+$absoluteReturn = isset($client['absolute_return']) && $client['absolute_return'] !== null
+    ? (float)$client['absolute_return']
+    : null;
 ?>
 <!DOCTYPE html>
 <html>
@@ -636,7 +640,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         .client-report {
             page-break-after: always;
         }
-        /* ... (rest of the CSS remains the same) ... */
+
         .flash-message {
             padding: 10px;
             border-radius: 4px;
@@ -655,7 +659,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             background: #ffe6e6;
             border: 1px solid #b30000;
         }
-        /* ... (all button/list styles remain the same) ... */
+
         .email-attachment-wrapper {
             display: flex;
             gap: 20px;
@@ -904,7 +908,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                             <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;">
                                 <span>📎 <strong><?php echo htmlspecialchars($file); ?></strong></span>
                                 <?php if ($canEditAttachments): ?>
-                                    <a href="#" onclick="deleteAttachment('<?php echo htmlspecialchars($file); ?>'); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
+                                    <a href="#" onclick="deleteAttachment('<?php echo htmlspecialchars($file); ?>', this); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
                                 <?php else: ?>
                                     <span style="font-size: 11px; color: #999;">(Read Only)</span>
                                 <?php endif; ?>
@@ -922,11 +926,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     $asOnDate = DateTime::createFromFormat('d-m-Y', (string)$asOn);
                 }
                 if ($asOnDate instanceof DateTime) {
-                    // Display as day first, e.g., 17th November 2025
                     $asOnFormatted = $asOnDate->format('jS F Y');
                 }
             ?>
 
+            <!-- --- CURRENT SITUATION TABLE (LOGIC MATCHES EMAIL/REFERENCE) --- -->
             <h3>1. Current Situation</h3>
             <table class="report-table">
                 <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
@@ -934,14 +938,29 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td>Total Amount </td>
                     <td><?php echo formatAmount($totalAmount); ?></td>
                 </tr>
-                <tr>
-                    <td>CAGR of current schemes</td>
-                    <td><?php echo formatPercent($cagr); ?></td>
-                </tr>
-                <?php if ($xirr != 0): ?>
+                <?php if ($isOlderThan1Year): ?>
                     <tr>
-                        <td>XIRR of all schemes since inception</td>
-                        <td><?php echo formatPercent($xirr); ?></td>
+                        <td>CAGR of current schemes</td>
+                        <td><?php echo formatPercent($cagr); ?></td>
+                    </tr>
+                    <?php if ($xirr != 0): ?>
+                        <tr>
+                            <td>XIRR of all schemes since inception</td>
+                            <td><?php echo formatPercent($xirr); ?></td>
+                        </tr>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <tr>
+                        <td>Absolute Return of Schemes</td>
+                        <td>
+                            <?php
+                            if ($absoluteReturn !== null) {
+                                echo formatAmount($absoluteReturn);
+                            } else {
+                                echo 'N/A';
+                            }
+                            ?>
+                        </td>
                     </tr>
                 <?php endif; ?>
                 <tr>
@@ -949,6 +968,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td><?php echo formatAmount($profit); ?></td>
                 </tr>
             </table>
+            <!-- --- END CURRENT SITUATION TABLE --- -->
 
             <h3>2. Objectives Progress for guiding on appropriate schemes</h3>
             <table class="report-table">
@@ -1268,8 +1288,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         return messageParts.join('\n\n');
     }
 
-    
-
     // --- AUTO-GROW TEXTAREA LOGIC (Global Function) ---
     function autoResizeTextarea(element) {
         element.style.height = 'auto';
@@ -1346,8 +1364,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
         
-        // NOTE: RM logic has been stripped out of this general JS block.
-
         // Auto-save textareas on blur
         document.querySelectorAll('.large-textarea').forEach(function(textarea) {
             textarea.addEventListener('blur', function() {

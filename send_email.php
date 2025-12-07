@@ -193,13 +193,14 @@ function updateCcSummary(selectedEmails) {
 }
 </script>
 
-<div class="email-send-container">
-    <form method="post" enctype="multipart/form-data" class="email-form">
+<div class="card" style="margin-bottom: 20px;">
+    <label class="card-title" style="font-weight: 600; font-size: 16px; color: #17a2b8; display: block; margin-bottom: 10px;">Send Report by Email</label>
+    <form method="POST" enctype="multipart/form-data" id="sendEmailForm">
         <input type="hidden" name="send_email" value="1">
         <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
         <input type="hidden" name="from_name" id="from_name" value="Finance Doctor">
         <input type="hidden" name="custom_signature" id="custom_signature_for_email" value="">
-        <div class="email-attachment-wrapper communication-box-style">
+        <div class="email-attachment-wrapper" style="margin-bottom: 15px;">
             <div class="email-recipients-section">
                 <strong class="section-title">Email Recipients</strong>
                 <div class="email-fields-container">
@@ -278,14 +279,14 @@ function updateCcSummary(selectedEmails) {
                 </div>
             </div>
 
-            
-
+            <div class="file-attachments-section">
+                <label style="font-weight: 500;">Attach Additional Files (optional):</label>
+                <input type="file" name="attachments[]" id="email_attachments_input" multiple onchange="updateAttachmentList()">
+                <ul id="selected_attachment_list" style="list-style: none; padding: 0; margin-top: 8px;"></ul>
+                <p style="font-size: 11px; color: #666;">Note: All report attachments will be sent automatically. Files selected here are additional.</p>
+            </div>
         </div>
-        <button type="submit" class="submit-button">
-            Send Report by Email
-        </button>
-        
-
+        <button type="submit" class="btn btn-primary">Send Email</button>
     </form>
 </div>
 
@@ -625,3 +626,32 @@ function updateCcSummary(selectedEmails) {
         color: white;
     }
 </style>
+
+<script>
+function updateAttachmentList() {
+    const input = document.getElementById('email_attachments_input');
+    const list = document.getElementById('selected_attachment_list');
+    list.innerHTML = '';
+    Array.from(input.files).forEach((file, idx) => {
+        const li = document.createElement('li');
+        li.style.cssText = "margin-bottom: 6px; display: flex; align-items: center;";
+        li.innerHTML = `<span>📎 <strong>${file.name}</strong></span>
+            <a href="#" style="color:red; margin-left:10px; font-size:12px;" onclick="removeSelectedFile(${idx});return false;">🗑 Remove</a>`;
+        list.appendChild(li);
+    });
+}
+
+// Remove file from input (by recreating FileList)
+function removeSelectedFile(idx) {
+    const input = document.getElementById('email_attachments_input');
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((file, i) => {
+        if (i !== idx) dt.items.add(file);
+    });
+    input.files = dt.files;
+    updateAttachmentList();
+}
+
+// Initialize list on page load (in case browser remembers files)
+document.addEventListener('DOMContentLoaded', updateAttachmentList);
+</script>

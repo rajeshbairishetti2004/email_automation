@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 // upload.php
 // - Upload Excel/PDF files
 // - Parse and build per-client reports
@@ -171,11 +174,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             INSERT INTO clients
                 (name, as_on, total_amount, profit, cagr, xirr,
                  total_goal_current, total_goal_target, total_sip,
-                 greeting_prefix, intro_text, closing_text, rationale_text)
+                 greeting_prefix, intro_text, closing_text, rationale_text,
+                 is_older_than_1_year, absolute_return)
             VALUES
                 (:name, :as_on, :total_amount, :profit, :cagr, :xirr,
                  :total_goal_current, :total_goal_target, :total_sip,
-                 :greeting_prefix, :intro_text, :closing_text, :rationale_text)
+                 :greeting_prefix, :intro_text, :closing_text, :rationale_text,
+                 :is_older_than_1_year, :absolute_return)
         ");
 
 $stmtGoal = $pdo->prepare("
@@ -253,6 +258,7 @@ $stmtGoal = $pdo->prepare("
             $profit      = $summary['profit'] ?? $totals['profit'];
             $cagr        = $totals['cagr_weighted'];
             $xirr        = $summary['xirr'] ?? $totals['xirr_weighted'];
+            $absoluteReturn = isset($data['absolute_return']) ? $data['absolute_return'] : null;
 
             $totalSip         = 0;
             $totalGoalCurrent = 0;
@@ -292,6 +298,8 @@ $stmtGoal = $pdo->prepare("
                 ':intro_text'         => $DEFAULT_INTRO,
                 ':closing_text'       => $DEFAULT_CLOSING,
                 ':rationale_text'     => $DEFAULT_RATIONALE,
+                ':is_older_than_1_year' => (isset($_POST['portfolio_older_than_1_year']) && $_POST['portfolio_older_than_1_year'] === 'no') ? 0 : 1,
+                ':absolute_return'      => $absoluteReturn,
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
@@ -629,6 +637,22 @@ $stmtGoal = $pdo->prepare("
             margin-bottom: 20px;
             text-align: left; 
         }
+
+        /* --- NEW STYLES FOR RADIO BUTTONS --- */
+        .form-group {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            font-weight: 600;
+            color: #0288D1;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .form-group input[type="radio"] {
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -665,6 +689,16 @@ $stmtGoal = $pdo->prepare("
         <form method="post" enctype="multipart/form-data">
             <label for="client_files">Select Excel &amp; PDF files (multiple allowed):</label>
             <input type="file" name="client_files[]" id="client_files" multiple required>
+            
+            <!-- Radio just above the "Create Reports" button -->
+            <div class="form-group">
+                <label>Is client portfolio older than 1 year?</label><br>
+                <input type="radio" id="portfolio_yes" name="portfolio_older_than_1_year" value="yes" checked>
+                <label for="portfolio_yes">Yes</label>
+                <input type="radio" id="portfolio_no" name="portfolio_older_than_1_year" value="no">
+                <label for="portfolio_no">No</label>
+            </div>
+
             <button type="submit">Create Reports</button>
         </form>
     </div>

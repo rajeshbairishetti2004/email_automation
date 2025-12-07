@@ -378,14 +378,36 @@ function handleEmailSending($clientId) {
                 <td>Total Amount </td>
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
-            <tr>
-                <td>CAGR of current schemes</td>
-                <td><?php echo formatPercent($cagr); ?></td>
-            </tr>
-            <?php if ($xirr != 0): ?>
+            <?php
+            // Fix: Show correct rows based on portfolio age (match view_report.php logic)
+            $isOlderThan1Year = isset($client['is_older_than_1_year']) ? (int)$client['is_older_than_1_year'] : 1;
+            $absoluteReturn = isset($client['absolute_return']) && $client['absolute_return'] !== null
+                ? (float)$client['absolute_return']
+                : null;
+            ?>
+            <?php if ($isOlderThan1Year): ?>
                 <tr>
-                    <td>XIRR of all schemes since inception</td>
-                    <td><?php echo formatPercent($xirr); ?></td>
+                    <td>CAGR of current schemes</td>
+                    <td><?php echo formatPercent($cagr); ?></td>
+                </tr>
+                <?php if ($xirr != 0): ?>
+                    <tr>
+                        <td>XIRR of all schemes since inception</td>
+                        <td><?php echo formatPercent($xirr); ?></td>
+                    </tr>
+                <?php endif; ?>
+            <?php else: ?>
+                <tr>
+                    <td>Absolute Return</td>
+                    <td>
+                        <?php
+                        if ($absoluteReturn !== null) {
+                            echo formatAmount($absoluteReturn);
+                        } else {
+                            echo 'N/A';
+                        }
+                        ?>
+                    </td>
                 </tr>
             <?php endif; ?>
             <tr>
