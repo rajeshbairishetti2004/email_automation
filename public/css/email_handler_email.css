@@ -1,0 +1,67 @@
+/* Typography matching UI */
+body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 14px; color: #333; }
+
+/* Headers matching UI Blue (#0288D1 / #29B6F6 theme) */
+h4 { 
+    color: #0288D1; 
+    font-family: 'Helvetica', 'Arial', sans-serif; 
+    font-size: 16px; 
+    font-weight: bold;
+    margin-top: 25px; 
+    margin-bottom: 10px; 
+    border-bottom: 2px solid #E3F2FD; 
+    padding-bottom: 5px;
+    text-decoration: none; 
+}
+
+/* Clean Table Style */
+table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; background-color: #ffffff; }
+
+/* Table Header: Light Blue background, White text */
+th { 
+    background-color: #29B6F6; 
+    color: #ffffff; 
+    padding: 12px 10px; 
+    text-align: left; 
+    font-weight: bold; 
+    border: none;
+}
+
+/* Table Body: Clean rows with light bottom border */
+td { 
+    padding: 10px; 
+    border-bottom: 1px solid #f0f0f0; 
+    vertical-align: middle; 
+    color: #333;
+}
+
+/* Alignment utilities */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.font-bold { font-weight: bold; }
+
+/* UI-Match Status Badges */
+.status-off { 
+    background-color: #F44336; 
+    color: white; 
+    font-weight: bold; 
+    text-align: center; 
+    padding: 6px 10px; 
+    border-radius: 4px;
+    white-space: nowrap;
+}
+.status-on { 
+    background-color: #4CAF50; 
+    color: white; 
+    font-weight: bold; 
+    text-align: center; 
+    padding: 6px 10px; 
+    border-radius: 4px; 
+    white-space: nowrap;
+}
+
+/* Action Steps (Schemes) */
+.action-continue { background-color: #C8E6C9; color: #256029; text-align: center; font-weight: bold; border-radius: 4px; }
+.action-drop { background-color: #FFCDD2; color: #C62828; text-align: center; font-weight: bold; border-radius: 4px; }
+.action-switch { background-color: #FFF9C4; color: #FBC02D; text-align: center; font-weight: bold; border-radius: 4px; }
+.action-redeem { background-color: #F5F5F5; color: #616161; text-align: center; font-weight: bold; border-radius: 4px; }

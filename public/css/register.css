@@ -43,6 +43,7 @@ label {
     font-size: 14px;
 }
 
+/* Password container style */
 .password-container {
     position: relative;
 }
@@ -64,6 +65,7 @@ label {
     height: 20px;
 }
 
+/* Username Feedback */
 #username-feedback {
     font-size: 12px;
     margin-top: -15px;

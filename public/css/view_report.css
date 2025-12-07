@@ -9,23 +9,12 @@ body {
     font-family: Arial, sans-serif; 
 }
 
-.main-content {
-    max-width: 1200px;
-    margin: 20px auto 40px auto; 
-    padding: 0 20px; 
-}
-
-.client-report {
-    page-break-after: always;
-}
-
-/* --- HEADER STYLES --- */
+/* --- Styles copied from upload.php header --- */
 .full-width-header-bar {
     width: 100%;
     background-color: white; 
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
-
 .header {
     max-width: 1200px; 
     margin: 0 auto;
@@ -34,32 +23,27 @@ body {
     align-items: center;
     padding: 15px 20px; 
 }
-
 .header-left {
     display: flex;
     align-items: center;
 }
-
 .header-left img {
     width: 50px; 
     height: 50px;
     margin-right: 15px;
     object-fit: contain;
 }
-
 .header-left .greeting {
     font-size: 24px; 
     font-weight: 700; 
     color: #0288D1; 
     font-family: 'Poppins', sans-serif;
 }
-
 .header-right {
     position: relative; 
     display: flex;
     align-items: center;
 }
-
 .profile-pic {
     width: 38px;
     height: 38px;
@@ -75,7 +59,6 @@ body {
     cursor: pointer; 
     z-index: 20;
 }
-
 .profile-dropdown {
     position: absolute;
     top: 100%; 
@@ -90,7 +73,6 @@ body {
     display: none; 
     z-index: 10;
 }
-
 .profile-dropdown a {
     padding: 10px 15px;
     text-decoration: none;
@@ -100,23 +82,30 @@ body {
     color: #333;
     transition: background-color 0.1s;
 }
-
 .profile-dropdown a.logout-link {
     color: #F44336; 
     font-weight: 600;
 }
 
-/* --- TABLES --- */
+/* --- Report Specific Styles --- */
+.main-content {
+    max-width: 1200px;
+    margin: 20px auto 40px auto; 
+    padding: 0 20px; 
+}
+
 .report-table {
     width: 100%;
     margin: 0 auto 20px 0;
 }
-
 .report-table.small {
     width: 40%;
 }
 
-/* --- FLASH MESSAGES --- */
+.client-report {
+    page-break-after: always;
+}
+
 .flash-message {
     padding: 10px;
     border-radius: 4px;
@@ -127,32 +116,28 @@ body {
     width: 100%;
     box-sizing: border-box;
 }
-
 .flash-message.flash-success {
     background: #e6ffe6;
     border: 1px solid #00b300;
 }
-
 .flash-message.flash-error {
     background: #ffe6e6;
     border: 1px solid #b30000;
 }
 
-/* --- EMAIL ATTACHMENTS --- */
 .email-attachment-wrapper {
     display: flex;
     gap: 20px;
     margin-bottom: 15px;
     align-items: flex-start;
 }
-
 .email-recipients-section,
 .file-attachments-section {
     flex: 1 1 48%; 
     padding: 0;
 }
 
-/* --- WORKFLOW STYLES --- */
+/* WORKFLOW STYLES */
 .workflow-bar {
     background: #fff;
     padding: 15px 20px;
@@ -165,7 +150,6 @@ body {
     justify-content: space-between;
     border-left: 5px solid #ccc;
 }
-
 .workflow-status-badge {
     font-size: 14px;
     font-weight: 700;
@@ -174,43 +158,16 @@ body {
     text-transform: uppercase;
     display: inline-block;
 }
-
-.status-draft { 
-    background: #e0e0e0; 
-    color: #555; 
-    border-left-color: #999; 
-}
-
-.status-ready { 
-    background: #fff3cd; 
-    color: #856404; 
-    border-left-color: #ffc107; 
-}
-
-.status-reviewed { 
-    background: #d4edda; 
-    color: #155724; 
-    border-left-color: #28a745; 
-}
-
-.status-sent { 
-    background: #cce5ff; 
-    color: #004085; 
-    border-left-color: #007bff; 
-}
-
-.status-rejected { 
-    background: #f8d7da; 
-    color: #721c24; 
-    border-left-color: #dc3545; 
-    cursor: pointer; 
-}
+.status-draft { background: #e0e0e0; color: #555; border-left-color: #999; }
+.status-ready { background: #fff3cd; color: #856404; border-left-color: #ffc107; }
+.status-reviewed { background: #d4edda; color: #155724; border-left-color: #28a745; }
+.status-sent { background: #cce5ff; color: #004085; border-left-color: #007bff; }
+.status-rejected { background: #f8d7da; color: #721c24; border-left-color: #dc3545; cursor: pointer; }
 
 .workflow-actions {
     display: flex;
     gap: 10px;
 }
-
 .wf-btn {
     padding: 8px 16px;
     border: none;
@@ -220,46 +177,17 @@ body {
     transition: all 0.2s;
     font-size: 13px;
 }
+.btn-draft { background: #6c757d; color: white; }
+.btn-ready { background: #ffc107; color: #333; }
+.btn-approve { background: #28a745; color: white; }
+.btn-reject { background: #dc3545; color: white; }
 
-.btn-draft { 
-    background: #6c757d; 
-    color: white; 
-}
-
-.btn-ready { 
-    background: #ffc107; 
-    color: #333; 
-}
-
-.btn-approve { 
-    background: #28a745; 
-    color: white; 
-}
-
-.btn-reject { 
-    background: #dc3545; 
-    color: white; 
-}
-
-/* --- MODAL STYLES --- */
+/* Modal for Rejection */
 .modal-overlay {
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 100%; 
-    height: 100%;
-    background: rgba(0,0,0,0.5); 
-    display: none; 
-    justify-content: center; 
-    align-items: center; 
-    z-index: 1000;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;
 }
-
 .modal-box {
-    background: white; 
-    padding: 25px; 
-    border-radius: 8px; 
-    width: 400px; 
-    max-width: 90%;
+    background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%;
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
