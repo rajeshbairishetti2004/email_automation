@@ -692,11 +692,13 @@ $stmtGoal = $pdo->prepare("
             
             <!-- Radio just above the "Create Reports" button -->
             <div class="form-group">
-                <label>Is client portfolio older than 1 year?</label><br>
-                <input type="radio" id="portfolio_yes" name="portfolio_older_than_1_year" value="yes" checked>
-                <label for="portfolio_yes">Yes</label>
-                <input type="radio" id="portfolio_no" name="portfolio_older_than_1_year" value="no">
-                <label for="portfolio_no">No</label>
+                <label>Is client portfolio older than 1 year?</label>
+                <div style="display: flex; gap: 24px; align-items: center; margin-top: 8px;">
+                    <input type="radio" id="portfolio_yes" name="portfolio_older_than_1_year" value="yes" checked style="width:22px; height:22px; accent-color:#0288D1;">
+                    <label for="portfolio_yes" style="font-size: 16px; margin-right: 10px;">Yes</label>
+                    <input type="radio" id="portfolio_no" name="portfolio_older_than_1_year" value="no" style="width:22px; height:22px; accent-color:#0288D1;">
+                    <label for="portfolio_no" style="font-size: 16px;">No</label>
+                </div>
             </div>
 
             <button type="submit">Create Reports</button>
