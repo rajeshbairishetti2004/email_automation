@@ -1,0 +1,10 @@
+.annexures-list {
+    list-style: none;
+    padding: 0;
+}
+
+.annexures-list li {
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}

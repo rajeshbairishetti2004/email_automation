@@ -54,7 +54,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <title>Stored Client Reports</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
-    <link rel="stylesheet" href="public/css/view_saved_report.css">
+    <link rel="stylesheet" href="public/css/view_saved_reports.css">
 </head>
 <body>
 
@@ -150,5 +150,6 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <?php endif; ?>
 </div>
 
+<script src="public/js/view_saved_reports.js"></script>
 </body>
 </html>

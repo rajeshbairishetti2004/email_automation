@@ -453,6 +453,7 @@ $stmtGoal = $pdo->prepare("
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
     <link rel="stylesheet" href="public/css/upload.css">
+    <script src="public/js/upload.js"></script>
 </head>
 <body>
 
@@ -504,38 +505,6 @@ $stmtGoal = $pdo->prepare("
         </form>
     </div>
 </div>
-
-<script>
-    function toggleDropdown() {
-        const dropdown = document.getElementById('profileDropdown');
-        const isVisible = dropdown.style.display === 'block';
-        
-        // Hide all open dropdowns first (if any)
-        document.querySelectorAll('.profile-dropdown').forEach(d => {
-            d.style.display = 'none';
-        });
-
-        // Toggle visibility of the current dropdown
-        if (!isVisible) {
-            dropdown.style.display = 'block';
-        }
-    }
-
-    // Close the dropdown if the user clicks anywhere outside of it
-    document.addEventListener('click', function(event) {
-        const profilePic = document.querySelector('.profile-pic');
-        const dropdown = document.getElementById('profileDropdown');
-
-        if (profilePic && dropdown) {
-            const isClickInsidePic = profilePic.contains(event.target);
-            const isClickInsideDropdown = dropdown.contains(event.target);
-
-            if (!isClickInsidePic && !isClickInsideDropdown) {
-                dropdown.style.display = 'none';
-            }
-        }
-    });
-</script>
 
 </body>
 </html>

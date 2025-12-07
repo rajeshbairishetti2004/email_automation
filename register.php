@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
     <link rel="stylesheet" href="public/css/register.css">
+    <script src="public/js/register.js"></script>
 </head>
 <body>
 
@@ -110,62 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Already have an account? <a href="login.php">Sign In</a>
     </div>
 </div>
-
-<script>
-    function togglePasswordVisibility(fieldId) {
-        const field = document.getElementById(fieldId);
-        if (field.type === 'password') {
-            field.type = 'text';
-        } else {
-            field.type = 'password';
-        }
-    }
-
-    const usernameInput = document.getElementById('username');
-    const feedbackDiv = document.getElementById('username-feedback');
-    const availableInput = document.getElementById('username_available');
-    let typingTimer;
-    const doneTypingInterval = 500; // 0.5 seconds
-
-    usernameInput.addEventListener('keyup', () => {
-        clearTimeout(typingTimer);
-        if (usernameInput.value) {
-            typingTimer = setTimeout(checkUsernameAvailability, doneTypingInterval);
-        } else {
-            feedbackDiv.textContent = '';
-            availableInput.value = 'false';
-        }
-    });
-
-    function checkUsernameAvailability() {
-        const username = usernameInput.value.trim();
-        if (username.length < 3) {
-            feedbackDiv.innerHTML = '<span class="text-danger">Username must be at least 3 characters.</span>';
-            availableInput.value = 'false';
-            return;
-        }
-
-        feedbackDiv.innerHTML = 'Checking...';
-
-        // Send AJAX request to auth.php to check availability
-        fetch(`auth.php?action=check_username&username=${encodeURIComponent(username)}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.available) {
-                    feedbackDiv.innerHTML = '<span class="text-success">' + data.message + '</span>';
-                    availableInput.value = 'true';
-                } else {
-                    feedbackDiv.innerHTML = '<span class="text-danger">' + data.message + '</span>';
-                    availableInput.value = 'false';
-                }
-            })
-            .catch(error => {
-                feedbackDiv.innerHTML = '<span class="text-danger">Error checking username.</span>';
-                availableInput.value = 'false';
-                console.error('AJAX Error:', error);
-            });
-    }
-</script>
 
 </body>
 </html>

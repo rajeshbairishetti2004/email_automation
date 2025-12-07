@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
     <link rel="stylesheet" href="public/css/reset_password.css">
+    <script src="public/js/reset_password.js"></script>
 </head>
 <body>
 

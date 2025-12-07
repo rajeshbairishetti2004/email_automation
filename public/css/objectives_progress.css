@@ -1,0 +1,14 @@
+/* Objectives Progress Table Styles */
+.objectives-progress-table {
+    width: 100%;
+    margin: 0 auto 20px 0;
+    border-collapse: collapse;
+}
+.objectives-progress-table th,
+.objectives-progress-table td {
+    padding: 8px 12px;
+    border: 1px solid #eee;
+    text-align: left;
+}
+.goal-status-dropdown.status-on { background: #d4edda; }
+.goal-status-dropdown.status-off { background: #f8d7da; }

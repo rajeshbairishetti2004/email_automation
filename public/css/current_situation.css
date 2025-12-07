@@ -1,0 +1,12 @@
+/* Current Situation Table Styles */
+.current-situation-table {
+    width: 100%;
+    margin: 0 auto 20px 0;
+    border-collapse: collapse;
+}
+.current-situation-table th,
+.current-situation-table td {
+    padding: 8px 12px;
+    border: 1px solid #eee;
+    text-align: left;
+}

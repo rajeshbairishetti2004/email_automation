@@ -31,3 +31,5 @@ if (empty(trim($signatureBlock))) {
         💡 You can edit this signature for this specific report. It will auto-save when you click outside.
     </p>
 </div>
+
+<script src="public/js/signature.js"></script>
