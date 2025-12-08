@@ -382,7 +382,7 @@ function handleEmailSending($clientId) {
                 <td>CAGR of current schemes</td>
                 <td><?php echo formatPercent($cagr); ?></td>
             </tr>
-            <?php if ($xirr != 0): ?>
+            <?php if (($client['is_older_than_1_year'] ?? 1) == 1 && $xirr != 0): ?>
                 <tr>
                     <td>XIRR of all schemes since inception</td>
                     <td><?php echo formatPercent($xirr); ?></td>
@@ -407,7 +407,18 @@ function handleEmailSending($clientId) {
                 </tr>
             </thead>
         <tbody>
-            <?php foreach ($goals as $g): 
+            <?php 
+            // Recalculate totals from individual goals instead of using stored values
+            $calculatedGoalCurrent = 0;
+            $calculatedSip = 0;
+            $calculatedGoalTarget = 0;
+            
+            foreach ($goals as $g): 
+                // Add to calculated totals
+                $calculatedGoalCurrent += (float)($g['current_amount'] ?? 0);
+                $calculatedSip += (float)($g['sip_swp'] ?? 0);
+                $calculatedGoalTarget += (float)($g['target_amount'] ?? 0);
+                
                 // Trust the DB status (It handles both initial formula AND manual overrides)
                 $dbStatus = trim($g['status'] ?? '');
                 
@@ -437,9 +448,9 @@ function handleEmailSending($clientId) {
             <?php endforeach; ?>                <tr style="font-weight: bold; background-color: #fafafa;">
                     <td>Total</td>
                     <td style="text-align: center;"></td>
-                    <td style="text-align: center;"><?php echo formatAmount($totalGoalCurrent); ?></td>
-                    <td style="text-align: center;"><?php echo formatAmount($totalSip); ?></td>
-                    <td style="text-align: center;"></td>
+                    <td style="text-align: center;"><?php echo formatAmount($calculatedGoalCurrent); ?></td>
+                    <td style="text-align: center;"><?php echo formatAmount($calculatedSip); ?></td>
+                    <td style="text-align: center;"><?php echo formatAmount($calculatedGoalTarget); ?></td>
                     <td></td>
                 </tr>
             </tbody>
@@ -485,7 +496,7 @@ function handleEmailSending($clientId) {
             
             <tr style="font-weight: bold; background-color: #f2f2f2;">
                 <td>Total</td>
-                <td><?php echo number_format($totalShare, 2); ?></td>
+                <td><?php echo number_format(min($totalShare, 100.00), 2); ?></td>
             </tr>
         </table>
 

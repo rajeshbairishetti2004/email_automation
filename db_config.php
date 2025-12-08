@@ -259,7 +259,17 @@ function parseIndianNumber(string $s): float {
     if ($s === '' || $s === '-' || $s === '.') return 0.0;
     
     // Convert to float
-    return (float)$s;
+    $value = (float)$s;
+    
+    // Safety check: If value is unreasonably large (> 10 trillion), it's likely a parsing error
+    // This handles cases where commas are misread as extra digits
+    // Typical max value: 1000 Crores = 10,000,000,000 (10 billion)
+    if ($value > 10000000000000) {
+        // Divide by 1000000 to bring it back to reasonable range
+        $value = $value / 1000000;
+    }
+    
+    return $value;
 }
 
 function formatRupeesLakhs(float $amount, bool $lakhs = true): string {

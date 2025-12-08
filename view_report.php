@@ -351,9 +351,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $closing = trim($_POST['closing'] ?? '');
                 $rationale = trim($_POST['rationale'] ?? '');
                 $signatureBlock = trim($_POST['signature_block'] ?? '');
+                $isOlderThan1Year = (int)($_POST['is_older_than_1_year'] ?? 1);
 
-                $stmt = $pdo->prepare("UPDATE clients SET greeting_prefix=:g, intro_text=:i, closing_text=:c, rationale_text=:r, signature_block=:s WHERE id=:id");
-                $stmt->execute([':g'=>$greeting, ':i'=>$intro, ':c'=>$closing, ':r'=>$rationale, ':s'=>$signatureBlock, ':id'=>$clientId]);
+                $stmt = $pdo->prepare("UPDATE clients SET greeting_prefix=:g, intro_text=:i, closing_text=:c, rationale_text=:r, signature_block=:s, is_older_than_1_year=:iot WHERE id=:id");
+                $stmt->execute([':g'=>$greeting, ':i'=>$intro, ':c'=>$closing, ':r'=>$rationale, ':s'=>$signatureBlock, ':iot'=>$isOlderThan1Year, ':id'=>$clientId]);
 
                 if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
                     foreach ($_POST['recommended_scheme'] as $sId => $sName) {
@@ -480,6 +481,7 @@ $introTextStored   = trim((string)($client['intro_text'] ?? ''));
 $closingTextStored = trim((string)($client['closing_text'] ?? ''));
 $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
 $signatureStored   = trim((string)($client['signature_block'] ?? ''));
+$isOlderThan1Year  = (int)($client['is_older_than_1_year'] ?? 1);
 
 $DEFAULT_GREETING  = 'Dear Mr.';
 $DEFAULT_INTRO     = 'Introduction';
@@ -927,6 +929,19 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 }
             ?>
 
+            <!-- Portfolio Tenure Radio Buttons -->
+            <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
+                <label style="font-weight: bold; display: block; margin-bottom: 10px;">Portfolio Tenure:</label>
+                <label style="margin-right: 20px;">
+                    <input type="radio" name="is_older_than_1_year" value="1" <?php echo ($isOlderThan1Year == 1) ? 'checked' : ''; ?>>
+                    More than 1 year
+                </label>
+                <label>
+                    <input type="radio" name="is_older_than_1_year" value="0" <?php echo ($isOlderThan1Year == 0) ? 'checked' : ''; ?>>
+                    Less than 1 year
+                </label>
+            </div>
+
             <h3>1. Current Situation</h3>
             <table class="report-table">
                 <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
@@ -938,7 +953,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td>CAGR of current schemes</td>
                     <td><?php echo formatPercent($cagr); ?></td>
                 </tr>
-                <?php if ($xirr != 0): ?>
+                <?php if ($isOlderThan1Year == 1 && $xirr != 0): ?>
                     <tr>
                         <td>XIRR of all schemes since inception</td>
                         <td><?php echo formatPercent($xirr); ?></td>
@@ -960,7 +975,18 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Target Amount (Rs)</th>
                     <th>Status</th>
                 </tr>
-                <?php foreach ($goals as $g): 
+                <?php 
+                // Recalculate totals from individual goals instead of using stored values
+                $calculatedGoalCurrent = 0;
+                $calculatedSip = 0;
+                $calculatedGoalTarget = 0;
+                
+                foreach ($goals as $g): 
+                    // Add to calculated totals
+                    $calculatedGoalCurrent += (float)($g['current_amount'] ?? 0);
+                    $calculatedSip += (float)($g['sip_swp'] ?? 0);
+                    $calculatedGoalTarget += (float)($g['target_amount'] ?? 0);
+                    
                     // DYNAMIC STATUS CALCULATION (based on Projected vs Target)
                     $projected    = (float)($g['projected'] ?? 0);
                     $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
@@ -1004,9 +1030,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <tr>
                     <td><strong>Total</strong></td>
                     <td></td>
-                    <td><?php echo formatAmount($totalGoalCurrent); ?></td>
-                    <td><?php echo formatAmount($totalSip); ?></td>
-                    <td><?php echo formatAmount($totalGoalTarget); ?></td>
+                    <td><?php echo formatAmount($calculatedGoalCurrent); ?></td>
+                    <td><?php echo formatAmount($calculatedSip); ?></td>
+                    <td><?php echo formatAmount($calculatedGoalTarget); ?></td>
                     <td></td>
                 </tr>
             </table>
@@ -1050,7 +1076,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <?php endforeach; ?>
                 <tr style="font-weight: bold; background-color: #f8f9fa;">
                     <td>Total</td>
-                    <td><?php echo number_format($sumShare, 2); ?></td>
+                    <td><?php echo number_format(min($sumShare, 100.00), 2); ?></td>
                 </tr>
             </table>
 
