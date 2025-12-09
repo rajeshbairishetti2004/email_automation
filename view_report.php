@@ -950,7 +950,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td><?php echo formatAmount($totalAmount); ?></td>
                 </tr>
                 <tr>
-                    <td>CAGR of current schemes</td>
+                    <td><?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
                     <td><?php echo formatPercent($cagr); ?></td>
                 </tr>
                 <?php if ($isOlderThan1Year == 1 && $xirr != 0): ?>
@@ -1038,47 +1038,92 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </table>
 
             <h3>3. Appropriate Product Selection at a macro level</h3>
-            <table class="report-table small">
-                <tr>
-                    <th>Asset</th>
-                    <th>Share%</th>
-                </tr>
-                <?php
-                // Ensure Gold always exists in allocations
-                $hasGold = false;
-                foreach ($allocations as $a) {
-                    if (stripos($a['asset'], 'Gold') !== false) {
-                        $hasGold = true;
-                        break;
+            <div style="max-width: 100%; margin: 20px auto; display: flex; justify-content: center;">
+                <canvas id="allocationChart" style="max-height: 300px; max-width: 100%;"></canvas>
+            </div>
+
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                // Asset allocation data for pie chart
+                const allocationData = <?php 
+                    $hasGold = false;
+                    foreach ($allocations as $a) {
+                        if (stripos($a['asset'], 'Gold') !== false) {
+                            $hasGold = true;
+                            break;
+                        }
                     }
-                }
-                if (!$hasGold) {
-                    $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
-                }
+                    if (!$hasGold) {
+                        $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
+                    }
+                    
+                    $chartLabels = [];
+                    $chartValues = [];
+                    $chartColors = [];
+                    
+                    foreach ($allocations as $a) {
+                        $shareVal = (float)$a['share_pct'];
+                        $assetName = $a['asset'];
+                        
+                        if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) {
+                            continue;
+                        }
+                        
+                        $chartLabels[] = $assetName . ' (' . number_format($shareVal, 2) . '%)';
+                        $chartValues[] = $shareVal;
+                        
+                        if (stripos($assetName, 'Equity') !== false) {
+                            $chartColors[] = '#36A2EB';
+                        } elseif (stripos($assetName, 'Debt') !== false) {
+                            $chartColors[] = '#2eb85c';
+                        } elseif (stripos($assetName, 'Gold') !== false) {
+                            $chartColors[] = '#f9b115';
+                        } else {
+                            $chartColors[] = '#e55353';
+                        }
+                    }
+                    
+                    echo json_encode([
+                        'labels' => $chartLabels,
+                        'values' => $chartValues,
+                        'colors' => $chartColors
+                    ]);
+                ?>;
                 
-                $sumShare = 0.0;
-                foreach ($allocations as $a):
-                    // 1. Force float conversion to handle strings like "0.34";
-                    $shareVal = (float)$a['share_pct'];
-                    $assetName = $a['asset'];
-
-                    // 2. Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
-                    if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) {
-                        continue;
+                const ctx = document.getElementById('allocationChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: allocationData.labels,
+                        datasets: [{
+                            data: allocationData.values,
+                            backgroundColor: allocationData.colors,
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    boxWidth: 12,
+                                    padding: 15,
+                                    font: {
+                                        size: 13
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                enabled: true
+                            }
+                        }
                     }
-
-                    $sumShare += $shareVal;
-                    ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($assetName); ?></td>
-                        <td><?php echo number_format($shareVal, 2); ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                <tr style="font-weight: bold; background-color: #f8f9fa;">
-                    <td>Total</td>
-                    <td><?php echo number_format(min($sumShare, 100.00), 2); ?></td>
-                </tr>
-            </table>
+                });
+            </script>
 
             <h3>4. Appropriate Scheme Selection</h3>
             <table class="report-table">

@@ -379,7 +379,7 @@ function handleEmailSending($clientId) {
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
             <tr>
-                <td>CAGR of current schemes</td>
+                <td><?php echo (($client['is_older_than_1_year'] ?? 1) == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
                 <td><?php echo formatPercent($cagr); ?></td>
             </tr>
             <?php if (($client['is_older_than_1_year'] ?? 1) == 1 && $xirr != 0): ?>
@@ -457,47 +457,77 @@ function handleEmailSending($clientId) {
         </table>
 
         <h4>3. Appropriate Product Selection at a macro level</h4>
-        <table style="width: 50%;">
-            <tr>
-                <th>Asset</th>
-                <th>Share%</th>
-            </tr>
-            <?php
-            // Ensure Gold always exists in allocations
-            $hasGold = false;
-            foreach ($allocations as $a) {
-                if (stripos($a['asset'], 'Gold') !== false) {
-                    $hasGold = true;
-                    break;
-                }
+        <?php
+        // Ensure Gold always exists in allocations
+        $hasGold = false;
+        foreach ($allocations as $a) {
+            if (stripos($a['asset'], 'Gold') !== false) {
+                $hasGold = true;
+                break;
             }
-            if (!$hasGold) {
-                $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
-            }
-            ?>
-            <?php 
-            $totalShare = 0; // Initialize Total
-            foreach ($allocations as $a): 
-                $share = (float)$a['share_pct'];
-                $assetName = $a['asset'];
-                
-                // Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
-                if ($share <= 0 && stripos($assetName, 'Gold') === false) {
-                    continue;
-                }
-                
-                $totalShare += $share; // Add to Total
-            ?>
-                <tr>
-                    <td style="font-weight: 500;"><?php echo htmlspecialchars($assetName); ?></td>
-                    <td><?php echo number_format($share, 2); ?></td>
-                </tr>
-            <?php endforeach; ?>
+        }
+        if (!$hasGold) {
+            $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
+        }
+        
+        // Build chart data for QuickChart.io with formatted labels
+        $chartLabels = [];
+        $chartValues = [];
+        $chartColors = [];
+        
+        foreach ($allocations as $a) {
+            $share = (float)$a['share_pct'];
+            $assetName = $a['asset'];
             
-            <tr style="font-weight: bold; background-color: #f2f2f2;">
-                <td>Total</td>
-                <td><?php echo number_format(min($totalShare, 100.00), 2); ?></td>
-            </tr>
+            // Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
+            if ($share <= 0 && stripos($assetName, 'Gold') === false) {
+                continue;
+            }
+            
+            $chartLabels[] = $assetName . ' (' . number_format($share, 2) . '%)';
+            $chartValues[] = $share;
+            
+            if (stripos($assetName, 'Equity') !== false) {
+                $chartColors[] = '#36A2EB';
+            } elseif (stripos($assetName, 'Debt') !== false) {
+                $chartColors[] = '#2eb85c';
+            } elseif (stripos($assetName, 'Gold') !== false) {
+                $chartColors[] = '#f9b115';
+            } else {
+                $chartColors[] = '#e55353';
+            }
+        }
+        
+        // Construct QuickChart.io URL
+        $chartConfig = [
+            'type' => 'pie',
+            'data' => [
+                'labels' => $chartLabels,
+                'datasets' => [[
+                    'data' => $chartValues,
+                    'backgroundColor' => $chartColors,
+                    'borderColor' => '#fff',
+                    'borderWidth' => 2
+                ]]
+            ],
+            'options' => [
+                'responsive' => true,
+                'plugins' => [
+                    'legend' => [
+                        'position' => 'bottom'
+                    ],
+                    'datalabels' => [
+                        'display' => false
+                    ]
+                ]
+            ]
+        ];
+        
+        $chartUrl = 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig));
+        ?>
+        <div style="text-align: center; margin: 20px 0;">
+            <img src="<?php echo htmlspecialchars($chartUrl); ?>" alt="Asset Allocation" style="max-width: 100%; max-height: 300px; width: auto; height: auto; border: none; border-radius: 4px;">
+        </div>
         </table>
 
         <h4>4. Appropriate Scheme Selection</h4>
