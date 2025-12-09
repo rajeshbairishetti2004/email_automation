@@ -349,7 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $greeting = trim($_POST['greeting'] ?? '');
                 $intro = trim($_POST['intro'] ?? '');
                 $closing = trim($_POST['closing'] ?? '');
-                $rationale = trim($_POST['rationale'] ?? '');
+                $rationale = trim($_POST['rationale_text'] ?? '');
                 $signatureBlock = trim($_POST['signature_block'] ?? '');
                 $isOlderThan1Year = (int)($_POST['is_older_than_1_year'] ?? 1);
 
