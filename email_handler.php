@@ -512,10 +512,16 @@ function handleEmailSending($clientId) {
             ],
             'options' => [
                 'responsive' => true,
+                'legend' => [
+                    'position' => 'right',
+                    'align' => 'center',
+                    'labels' => [
+                        'padding' => 10,
+                        'boxWidth' => 15,
+                        'fontSize' => 13
+                    ]
+                ],
                 'plugins' => [
-                    'legend' => [
-                        'position' => 'bottom'
-                    ],
                     'datalabels' => [
                         'display' => false
                     ]

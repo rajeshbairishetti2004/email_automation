@@ -1107,11 +1107,12 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         maintainAspectRatio: true,
                         plugins: {
                             legend: {
-                                position: 'bottom',
+                                position: 'right',
+                                align: 'center',
                                 labels: {
                                     usePointStyle: true,
-                                    boxWidth: 12,
-                                    padding: 15,
+                                    boxWidth: 15,
+                                    padding: 10,
                                     font: {
                                         size: 13
                                     }
