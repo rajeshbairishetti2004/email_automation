@@ -17,14 +17,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
     } else {
-        $result = startPasswordReset($email);
-        
+        // If startPasswordReset() exists use it, otherwise fallback to a safe session-based OTP
+        if (function_exists('startPasswordReset')) {
+            $result = startPasswordReset($email);
+        } else {
+            // Fallback: set static OTP (for local/dev) and persist email in session to be verified on otp_verification.php
+            // NOTE: replace with a real implementation in production.
+            $_SESSION['reset_email'] = $email;
+            $_SESSION['otp'] = '1234';
+            $result = true;
+        }
+
         if ($result === true) {
+            // Persist email for the verification step (used by otp_verification.php)
+            if (empty($_SESSION['reset_email'])) $_SESSION['reset_email'] = $email;
             $_SESSION['message'] = 'An OTP has been sent to your registered email (Static OTP: 1234). Please enter it to proceed.';
             header('Location: otp_verification.php');
             exit;
         } else {
-            $error = $result; // Error message from startPasswordReset
+            // If startPasswordReset returned an error string, show that
+            $error = is_string($result) ? $result : 'Failed to send OTP. Please try again later.';
         }
     }
 }
@@ -141,9 +153,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="flash-error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <form method="post">
+    <form method="post" autocomplete="on" aria-describedby="emailHelp">
         <label for="email">Email Address</label>
-        <input type="email" name="email" id="email" required value="<?= htmlspecialchars($email) ?>">
+        <input type="email" name="email" id="email" required value="<?= htmlspecialchars($email) ?>" autocomplete="email" aria-label="Email address">
         
         <button type="submit">Send OTP</button>
     </form>
