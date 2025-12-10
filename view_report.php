@@ -198,56 +198,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['aj
 
 /* ---------- HANDLE AJAX REQUESTS (USER RATIONALE TEMPLATE MANAGEMENT) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
-    header('Content-Type: application/json');
-    $userId = (int)($currentUser['id'] ?? 0);
+    header('Content-Type: application/json; charset=UTF-8');
 
+    $userId = (int)($currentUser['id'] ?? 0);
     if ($userId <= 0) {
         echo json_encode(['success' => false, 'error' => 'User not authenticated.']);
         exit;
     }
-    
+
     try {
-        if ($_POST['ajax_action'] === 'save_user_template') {
+        $action = $_POST['ajax_action'];
+
+        if ($action === 'save_user_template') {
             $templateName = trim($_POST['template_name'] ?? '');
             $content = $_POST['template_content'] ?? '';
-            // FIX: Read the ID correctly and cast as integer
-            $templateId = (int)($_POST['template_id_to_update'] ?? 0); 
-            
-            if (empty($templateName) || empty($content)) {
-                throw new Exception("Template name and content are required.");
-            }
-            
-            // saveUserRationaleTemplate is defined in db_config.php
-            // If templateId > 0, it updates; otherwise, it inserts.
-            $success = saveUserRationaleTemplate($userId, $templateName, $content, $templateId > 0 ? $templateId : null);
-            
-            // FIX: Add check for DB failure in the save function
-            if (!$success) {
-                 throw new Exception("Database failed to save or update the template.");
+            $templateIdToUpdate = isset($_POST['template_id_to_update']) ? (int)$_POST['template_id_to_update'] : 0;
+
+            if ($templateName === '' || trim($content) === '') {
+                echo json_encode(['success' => false, 'error' => 'Template name and content are required.']);
+                exit;
             }
 
-            echo json_encode(['success' => $success, 'message' => 'Template saved/updated successfully.']);
-            exit; 
+            if ($templateIdToUpdate > 0) {
+                // update existing template in report_templates
+                $ok = updateReportTemplate($templateIdToUpdate, $templateName, $content);
+                if (!$ok) {
+                    echo json_encode(['success' => false, 'error' => 'Failed to update template.']);
+                    exit;
+                }
+                echo json_encode(['success' => true, 'template_id' => $templateIdToUpdate, 'message' => 'Template updated.']);
+                exit;
+            } else {
+                // insert new template into report_templates as 'rationale'
+                $newId = addNewTemplate($templateName, 'rationale', $content);
+                if (!$newId) {
+                    echo json_encode(['success' => false, 'error' => 'Failed to create template.']);
+                    exit;
+                }
+                echo json_encode(['success' => true, 'template_id' => (int)$newId, 'message' => 'Template created.']);
+                exit;
+            }
 
-        } elseif ($_POST['ajax_action'] === 'delete_user_template') {
+        } elseif ($action === 'delete_user_template') {
             $templateId = (int)($_POST['template_id'] ?? 0);
-            
             if ($templateId <= 0) {
-                throw new Exception("Invalid template ID for deletion.");
+                echo json_encode(['success' => false, 'error' => 'Invalid template ID for deletion.']);
+                exit;
             }
-            
-            // deleteUserRationaleTemplate is defined in db_config.php
-            $success = deleteUserRationaleTemplate($userId, $templateId);
 
-            echo json_encode(['success' => $success, 'message' => 'Template deleted successfully.']);
-            exit; 
+            // delete from report_templates
+            $ok = deleteTemplate($templateId);
+            if (!$ok) {
+                echo json_encode(['success' => false, 'error' => 'Failed to delete template.']);
+                exit;
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Template deleted successfully.']);
+            exit;
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Unknown ajax_action.']);
+            exit;
         }
     } catch (Exception $e) {
-        error_log("User Rationale Template Error: " . $e->getMessage());
-        http_response_code(500); 
-        // Pass the specific error message from the exception to the frontend for better debugging
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]); 
-        exit; 
+        error_log("User Rationale Template AJAX Error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Server error.']);
+        exit;
     }
 }
 // ---------------------------------------------------------------------------------
@@ -451,7 +467,6 @@ $templates = [
     'greeting' => getReportTemplates('greeting'),
     'intro' => getReportTemplates('intro'),
     'closing' => getReportTemplates('closing'),
-    // Note: 'rationale' here is now unused in rationale.php but kept for completeness
     'rationale' => getReportTemplates('rationale'), 
 ];
 
@@ -943,22 +958,25 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </div>
 
             <h3>1. Current Situation</h3>
-            <table class="report-table">
+            <table class="report-table" id="currentSituationTable">
                 <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
                 <tr>
                     <td>Total Amount </td>
-                    <td><?php echo formatAmount($totalAmount); ?></td>
+                    <td id="totalAmountCell"><?php echo formatAmount($totalAmount); ?></td>
                 </tr>
                 <tr>
-                    <td><?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
-                    <td><?php echo formatPercent($cagr); ?></td>
+                    <!-- label switched dynamically by JS -->
+                    <td id="returnLabel"><?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
+                    <td id="returnValueCell"><?php echo formatPercent($cagr); ?></td>
                 </tr>
-                <?php if ($isOlderThan1Year == 1 && $xirr != 0): ?>
-                    <tr>
-                        <td>XIRR of all schemes since inception</td>
-                        <td><?php echo formatPercent($xirr); ?></td>
-                    </tr>
-                <?php endif; ?>
+                <?php
+                    // XIRR row is present but may be hidden initially depending on server state
+                    $showXirr = ($isOlderThan1Year == 1 && $xirr != 0);
+                ?>
+                <tr id="xirrRow" style="<?php echo $showXirr ? '' : 'display:none;'; ?>">
+                    <td>XIRR of all schemes since inception</td>
+                    <td id="xirrValueCell"><?php echo formatPercent($xirr); ?></td>
+                </tr>
                 <tr>
                     <td>Profit since inception</td>
                     <td><?php echo formatAmount($profit); ?></td>
@@ -1032,7 +1050,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td></td>
                     <td><?php echo formatAmount($calculatedGoalCurrent); ?></td>
                     <td><?php echo formatAmount($calculatedSip); ?></td>
-                    <td><?php echo formatAmount($calculatedGoalTarget); ?></td>
+                    <td></td> <!-- intentionally left blank per request -->
                     <td></td>
                 </tr>
             </table>
@@ -1186,7 +1204,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             <?php require_once 'rationale.php'; ?>
 
             <h3>Annexures</h3>
-            <ul>
+            <ul id="annexures_list">
                 <?php
                 // NEW: List actual files from the persistent attachment folder
                 $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
@@ -1396,7 +1414,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
                     body: new URLSearchParams({
-                        ajax_action: 'delete_template',
+                        ajax_action: 'delete_user_template',
                         template_id: templateId
                     })
                 })
@@ -1406,7 +1424,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         showContextualFlash('success', `Template "${templateName}" deleted. Reloading...`, `${templateSection}_flash_container`);
                         
                         // FIX: Use window.location.href to force a non-cached reload
-                        window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1'; 
+                        window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1#rationale_module'; 
 
                     } else {
                         showContextualFlash('error', `❌ Failed to delete template: ${data.error}`, `${templateSection}_flash_container`);
@@ -1524,16 +1542,70 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     })
                     .then(response => response.json())
                     .then(data => {
-                        if (data.success) {
+                        if (data && data.success) {
                             showToast('Saved ' + (field === 'action_step' ? 'action step' : field.replace('_', ' ')));
                         } else {
-                            alert('Save failed: ' + (data.error || 'Unknown error'));
+                            alert('Save failed: ' + (data && data.error ? data.error : 'Unknown error'));
                         }
                     })
                     .catch(err => console.error(err));
                 }
             });
         });
+
+        // Immediately-responding Portfolio Tenure handler (improved: swaps label and value)
+        (function() {
+            const returnLabel = document.getElementById('returnLabel');
+            const returnValueCell = document.getElementById('returnValueCell');
+            const xirrRow = document.getElementById('xirrRow');
+            const xirrValue = <?php echo json_encode((float)$xirr); ?>;
+
+            // Preformatted server-side strings to avoid client-side number formatting differences
+            const cagrText = <?php echo json_encode(formatPercent($cagr)); ?>;
+            const absoluteReturnText = <?php
+                // If absolute_return is present, format using existing helper; fallback to raw number
+                $absVal = isset($client['absolute_return']) && $client['absolute_return'] !== null ? (float)$client['absolute_return'] : null;
+                echo json_encode($absVal !== null ? formatRupeesLakhs($absVal, true) : 'N/A');
+            ?>;
+
+            window.updateCurrentSituation = function() {
+                try {
+                    const selected = document.querySelector('input[name="is_older_than_1_year"]:checked');
+                    if (!selected) return;
+                    const val = selected.value;
+                    if (val === '0') {
+                        // Less than 1 year: show Absolute Return and hide XIRR
+                        if (returnLabel) returnLabel.textContent = 'Absolute Return of schemes';
+                        if (returnValueCell) returnValueCell.textContent = absoluteReturnText;
+                        if (xirrRow) xirrRow.style.display = 'none';
+                    } else {
+                        // More than 1 year: show CAGR and show XIRR only if non-zero
+                        if (returnLabel) returnLabel.textContent = 'CAGR of current schemes';
+                        if (returnValueCell) returnValueCell.textContent = cagrText;
+                        if (xirrRow) {
+                            if (xirrValue && !isNaN(xirrValue) && Number(xirrValue) !== 0) {
+                                xirrRow.style.display = '';
+                            } else {
+                                xirrRow.style.display = 'none';
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('updateCurrentSituation error', e);
+                }
+            };
+
+            // Attach listeners to radio inputs and via delegated change to capture dynamic changes
+            document.querySelectorAll('input[name="is_older_than_1_year"]').forEach(function(r) {
+                r.addEventListener('change', window.updateCurrentSituation);
+            });
+            document.addEventListener('change', function(e) {
+                if (e.target && e.target.name === 'is_older_than_1_year') window.updateCurrentSituation();
+            });
+
+            // Initialize UI once
+            window.updateCurrentSituation();
+        })();
     });
     
     // --- PATCH 4: NEW WORKFLOW JS FUNCTIONS ---
@@ -1573,9 +1645,10 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     // --- UPDATED UPLOAD LOGIC (NO RELOAD) ---
     function uploadAttachment() {
         const fileInput = document.getElementById('ajax_attachment_upload');
-        const files = fileInput.files; 
+        const files = fileInput.files;
         const clientId = <?php echo (int)$clientId; ?>;
         const list = document.getElementById('attachment_list');
+        const annexList = document.getElementById('annexures_list');
 
         if (files.length === 0) { alert("Please select at least one file."); return; }
 
@@ -1584,6 +1657,35 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             el.dispatchEvent(new Event('blur'));
         });
 
+        // Create provisional preview entries immediately
+        const provisionalIds = [];
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            const tempId = 'temp_' + Date.now() + '_' + i;
+            provisionalIds.push(tempId);
+
+            // Attachment list provisional LI
+            const li = document.createElement('li');
+            li.id = 'prov_attach_' + tempId;
+            li.className = 'provisional';
+            li.style.cssText = "margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between; opacity:0.85;";
+            li.innerHTML = `
+                <span>📎 <strong>${escapeHtml(f.name)}</strong> <em style="color:#666; font-size:12px;">(pending upload)</em></span>
+                <span style="font-size:12px; color:#0288D1;">⏳</span>
+            `;
+            list.appendChild(li);
+
+            // Annexures list provisional LI (mirror)
+            if (annexList) {
+                const ali = document.createElement('li');
+                ali.id = 'prov_annex_' + tempId;
+                ali.className = 'provisional';
+                ali.style.cssText = "margin-bottom: 8px; padding-bottom: 5px; color:#666;";
+                ali.innerHTML = `📎 ${escapeHtml(f.name)} <em style="font-size:12px;color:#666;">(pending)</em>`;
+                annexList.appendChild(ali);
+            }
+        }
+
         const formData = new FormData();
         formData.append('ajax_action', 'upload_attachment');
         formData.append('client_id', clientId);
@@ -1591,45 +1693,162 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             formData.append('files[]', files[i]);
         }
 
+       
+
         document.getElementById('upload_spinner').style.display = 'inline';
 
         fetch('template_actions.php', {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
+        .then(response => response.json().catch(() => ({ success:false, error:'Invalid JSON from server' })))
         .then(data => {
             document.getElementById('upload_spinner').style.display = 'none';
-            if (data.success && data.files) {
-                const emptyMsg = Array.from(list.children).find(li => li.textContent.includes('No attachments'));
-                if (emptyMsg) emptyMsg.remove();
 
+            // Remove all provisional placeholders
+            provisionalIds.forEach(id => {
+                const a = document.getElementById('prov_attach_' + id);
+                if (a) a.remove();
+                const b = document.getElementById('prov_annex_' + id);
+                if (b) b.remove();
+            });
+
+            if (data.success && Array.isArray(data.files) && data.files.length) {
+                // Append returned saved files to both lists (attachments and annexures)
                 data.files.forEach(fileName => {
-                    const li = document.createElement('li');
-                    li.style.cssText = "margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;";
-                    li.innerHTML = `
-                        <span>📎 <strong>${fileName}</strong></span>
-                        <a href="#" onclick="deleteAttachment('${fileName}', this); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
-                    `;
+                    // Attachment list
+                    const li = createAttachmentLi(fileName, true);
                     list.appendChild(li);
+
+                    // Annexures list
+                    if (annexList) {
+                        const ali = createAnnexureLi(fileName, true);
+                        annexList.appendChild(ali);
+                    }
                 });
 
                 fileInput.value = '';
             } else {
-                alert('Error: ' + (data.error || 'Unknown error'));
+                // If server failed, show error in UI and restore no-files message if required
+                alert('Error: ' + (data.error || 'Upload failed'));
+                // Optionally re-add provisional text or leave them removed
             }
         })
         .catch(err => {
             document.getElementById('upload_spinner').style.display = 'none';
+            // Remove provisional placeholders
+            provisionalIds.forEach(id => {
+                const a = document.getElementById('prov_attach_' + id);
+                if (a) a.remove();
+                const b = document.getElementById('prov_annex_' + id);
+                if (b) b.remove();
+            });
             alert('Upload error. Please try again.');
         });
     }
 
+    // Helper: create attachment list LI element (used after upload)
+    function createAttachmentLi(fileName, canEdit) {
+        const li = document.createElement('li');
+        li.style.cssText = "margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;";
+        const escaped = escapeHtml(fileName);
+        const actions = canEdit ? `<span><a href="#" class="annex-edit" data-filename="${escaped}">✏️ Edit</a> &nbsp; <a href="#" class="annex-delete" data-filename="${escaped}">🗑 Delete</a></span>` : '';
+        li.innerHTML = `<span>📎 <strong>${escaped}</strong></span>${actions}`;
+        // Attach event listeners for actions via delegation in document
+        return li;
+    }
+
+    // Helper: create annexure list LI element (used after upload)
+    function createAnnexureLi(fileName, canEdit) {
+        const li = document.createElement('li');
+        li.style.cssText = "margin-bottom: 8px; padding-bottom: 5px; display:flex; justify-content:space-between; align-items:center;";
+        const escaped = escapeHtml(fileName);
+        const left = document.createElement('span');
+        left.innerHTML = `📎 <strong>${escaped}</strong>`;
+        li.appendChild(left);
+
+        if (canEdit) {
+            const actions = document.createElement('span');
+            actions.style.fontSize = '12px';
+            actions.innerHTML = `<a href="#" class="annex-edit" data-filename="${escaped}" style="margin-right:10px;">✏️ Edit</a><a href="#" class="annex-delete" data-filename="${escaped}">🗑 Delete</a>`;
+            li.appendChild(actions);
+        }
+        return li;
+    }
+
+    // Utility: escape HTML for insertion
+    function escapeHtml(text) {
+        return (text + '').replace(/[&<>"'`=\/]/g, function (s) {
+            return {
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+                '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;'
+            }[s];
+        });
+    }
+
+    // Delegate handlers for annexure edit / delete (works for both Attachments and Annexures lists)
+    document.addEventListener('click', function(e) {
+        // Delete link
+        if (e.target && e.target.matches('a.annex-delete')) {
+            e.preventDefault();
+            const fileName = e.target.getAttribute('data-filename');
+            if (!fileName) return;
+            if (!confirm('Delete ' + fileName + '?')) return;
+            deleteAttachment(fileName, e.target);
+            return;
+        }
+
+        // Edit (rename) link
+        if (e.target && e.target.matches('a.annex-edit')) {
+            e.preventDefault();
+            const fileName = e.target.getAttribute('data-filename');
+            if (!fileName) return;
+            const newNameRaw = prompt('Enter new filename for annexure:', fileName);
+            if (!newNameRaw || !newNameRaw.trim() || newNameRaw.trim() === fileName) return;
+            const newName = newNameRaw.trim();
+
+            // send rename request to server
+            const clientId = <?php echo (int)$clientId; ?>;
+            fetch('template_actions.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: new URLSearchParams({
+                    ajax_action: 'rename_attachment',
+                    client_id: clientId,
+                    old_name: fileName,
+                    new_name: newName
+                })
+            })
+            .then(res => res.json().catch(()=>({success:false, error:'Invalid JSON'})))
+            .then(data => {
+                if (data.success) {
+                    // Update all occurrences of the filename in both lists
+                    document.querySelectorAll('[data-filename]').forEach(el => {
+                        if (el.getAttribute('data-filename') === fileName) {
+                            el.setAttribute('data-filename', newName);
+                        }
+                    });
+                    // Update displayed text nodes: search annexures and attachments by exact text match
+                    document.querySelectorAll('#attachment_list li, #annexures_list li').forEach(li => {
+                        if (li.textContent && li.textContent.indexOf(fileName) !== -1) {
+                            li.innerHTML = li.innerHTML.replace(escapeHtml(fileName), escapeHtml(newName));
+                        }
+                    });
+                    showToast('Renamed: ' + newName);
+                } else {
+                    alert('Rename failed: ' + (data.error || 'Server error'));
+                }
+            })
+            .catch(err => alert('Rename request failed.'));
+        }
+    });
+
+    // Update deleteAttachment to remove from both lists when successful
     function deleteAttachment(fileName, el) {
         if(!confirm("Are you sure you want to delete " + fileName + "?")) return;
-        
+
         const clientId = <?php echo (int)$clientId; ?>;
-        
+
         fetch('template_actions.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
@@ -1639,35 +1858,24 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 file_name: fileName
             })
         })
-        .then(response => response.json())
+        .then(response => response.json().catch(()=>({success:false, error:'Invalid JSON'})))
         .then(data => {
             if (data.success) {
-                if (el) {
-                    const li = el.closest('li');
-                    if (li) li.remove();
-                } else {
-                    window.location.reload();
-                }
+                // remove matching list items from both lists
+                document.querySelectorAll('#attachment_list li, #annexures_list li').forEach(li => {
+                    if (li.textContent && li.textContent.indexOf(fileName) !== -1) {
+                        li.remove();
+                    }
+                });
+                showToast('Deleted: ' + fileName);
             } else {
-                alert('Error: ' + data.error);
+                alert('Error: ' + (data.error || 'Delete failed'));
             }
         })
         .catch(err => alert('Delete error.'));
     }
-</script>
 
-<!-- Rejection Modal -->
-<div id="rejectModal" class="modal-overlay" style="display: none;">
-    <div class="modal-box">
-        <h3 style="margin-top:0; color:#dc3545;">Reject Report</h3>
-        <p>Please provide a reason for rejection:</p>
-        <textarea id="rejectComment" rows="4" style="width:100%; border:1px solid #ccc; padding:8px;" placeholder="E.g., Fix the intro text..."></textarea>
-        <div style="margin-top:15px; text-align:right;">
-            <button onclick="closeRejectModal()" style="padding:8px 12px; border:none; background:#ccc; cursor:pointer; margin-right:5px;">Cancel</button>
-            <button onclick="submitRejection()" style="padding:8px 12px; border:none; background:#dc3545; color:white; cursor:pointer;">Submit Rejection</button>
-        </div>
-    </div>
-</div>
-
+    // ...existing code...
+    </script>
 </body>
 </html>

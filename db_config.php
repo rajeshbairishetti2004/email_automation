@@ -131,6 +131,14 @@ function addNewTemplate(string $name, string $section_type, string $content): ?i
     return (int)$pdo->lastInsertId();
 }
 
+// NEW: update existing report template
+function updateReportTemplate(int $id, string $name, string $content): bool {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("UPDATE report_templates SET name = :name, content = :content, created_at = created_at WHERE id = :id");
+    // leave created_at as-is; updated_at column doesn't exist in original schema
+    return $stmt->execute([':name' => $name, ':content' => $content, ':id' => $id]);
+}
+
 
 /* ---------- EMAIL CONTACT FUNCTIONS (For Dropdowns Persistence) ---------- */
 function getEmailContacts(string $list_type, ?int $clientId = null): array {
@@ -378,4 +386,103 @@ function checkDatabaseEnvironment(): array {
     
     return $errors;
 }
+
+// ---------- User Rationale Templates (user_rationale_templates) ----------
+if (!function_exists('ensureRationaleTableExists')) {
+	// Creates a dedicated table for user-specific rationale templates (MEDIUMTEXT content)
+	function ensureRationaleTableExists(PDO $pdo): bool {
+		$sql = "
+			CREATE TABLE IF NOT EXISTS `user_rationale_templates` (
+				`id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+				`user_id` INT UNSIGNED NULL,
+				`name` VARCHAR(255) NOT NULL,
+				`content` MEDIUMTEXT NOT NULL,
+				`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				`updated_at` DATETIME NULL DEFAULT NULL,
+				KEY (`user_id`)
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+		";
+		try {
+			$pdo->exec($sql);
+			return true;
+		} catch (Exception $e) {
+			error_log("ensureRationaleTableExists error: " . $e->getMessage());
+			return false;
+		}
+	}
+}
+
+if (!function_exists('getUserRationaleTemplates')) {
+	function getUserRationaleTemplates(?int $userId = null): array {
+		$pdo = getPdo();
+		ensureRationaleTableExists($pdo);
+		// Return user's templates first (if any), then templates with NULL user_id (shared)
+		$stmt = $pdo->prepare("
+			SELECT id, user_id, name, content
+			FROM user_rationale_templates
+			" . ($userId !== null ? "WHERE user_id = :uid OR user_id IS NULL" : "") . "
+			ORDER BY user_id DESC, name ASC
+		");
+		$params = [];
+		if ($userId !== null) $params[':uid'] = (int)$userId;
+		$stmt->execute($params);
+		return $stmt->fetchAll(PDO::FETCH_ASSOC);
+	}
+}
+
+if (!function_exists('getUserRationaleTemplateById')) {
+	function getUserRationaleTemplateById(int $id): ?array {
+		$pdo = getPdo();
+		ensureRationaleTableExists($pdo);
+		$stmt = $pdo->prepare("SELECT id, user_id, name, content FROM user_rationale_templates WHERE id = :id LIMIT 1");
+		$stmt->execute([':id' => $id]);
+		$r = $stmt->fetch(PDO::FETCH_ASSOC);
+		return $r ?: null;
+	}
+}
+
+if (!function_exists('saveUserRationaleTemplate')) {
+	// returns inserted id (int) on insert, true on successful update, false on failure
+	function saveUserRationaleTemplate(?int $userId, string $name, string $content, ?int $updateId = null) {
+		try {
+			$pdo = getPdo();
+			if (!ensureRationaleTableExists($pdo)) return false;
+			$name = mb_substr(trim($name), 0, 255);
+			$content = trim($content);
+			if ($updateId !== null && $updateId > 0) {
+				$stmt = $pdo->prepare("UPDATE user_rationale_templates SET name = :name, content = :content, updated_at = NOW() WHERE id = :id");
+				$ok = $stmt->execute([':name' => $name, ':content' => $content, ':id' => (int)$updateId]);
+				return $ok ? (int)$updateId : false;
+			}
+			$stmt = $pdo->prepare("INSERT INTO user_rationale_templates (user_id, name, content, created_at) VALUES (:uid, :name, :content, NOW())");
+			$ok = $stmt->execute([':uid' => $userId ?: null, ':name' => $name, ':content' => $content]);
+			return $ok ? (int)$pdo->lastInsertId() : false;
+		} catch (Exception $e) {
+			error_log("saveUserRationaleTemplate error: " . $e->getMessage());
+			return false;
+		}
+	}
+}
+
+if (!function_exists('deleteUserRationaleTemplate')) {
+	function deleteUserRationaleTemplate(int $templateId, ?int $userId = null): bool {
+		try {
+			$pdo = getPdo();
+			if (!ensureRationaleTableExists($pdo)) return false;
+			// Only delete if belongs to user (preferred). If userId null, allow deletion by id.
+			if ($userId !== null) {
+				$stmt = $pdo->prepare("DELETE FROM user_rationale_templates WHERE id = :id AND user_id = :uid");
+				$stmt->execute([':id' => $templateId, ':uid' => $userId]);
+				return true;
+			}
+			$stmt = $pdo->prepare("DELETE FROM user_rationale_templates WHERE id = :id");
+			$stmt->execute([':id' => $templateId]);
+			return true;
+		} catch (Exception $e) {
+			error_log("deleteUserRationaleTemplate error: " . $e->getMessage());
+			return false;
+		}
+	}
+}
+
 // NO CLOSING PHP TAG
