@@ -135,8 +135,7 @@ function parsePortfolioValuation(string $path): array {
         // If Excel had a Grand Total row, prefer that for high-level accuracy
         if (isset($grandTotals[$client])) {
             $info['totals']['current']       = $grandTotals[$client]['current'];
-            // Note: We usually keep calculated totals for consistency, but you can uncomment below to overwrite
-            // $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
+            $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
         }
     }
 

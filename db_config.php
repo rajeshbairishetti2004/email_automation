@@ -247,19 +247,38 @@ function findHeaderRowGeneric(array $rows, array $mustKeywords): ?int {
 }
 
 function parseIndianNumber(string $s): float {
-    // 1. Remove Rupee symbols, trim whitespace, remove Indian lakhs/crore symbols if present.
-    $s = trim(str_ireplace(['Rs.', 'Cr', 'lakhs', 'k', 'lakh', 'crore'], '', $s));
+    // 1. Remove Rupee symbols and trim whitespace
+    $s = trim(str_ireplace(['Rs.', 'Rs', '₹'], '', $s));
     
-    // 2. Remove commas (Indian thousand separators).
+    // 2. Handle shorthand formats (30k, 1lakh, 2cr) BEFORE removing other text
+    $multiplier = 1;
+    if (preg_match('/(\d+\.?\d*)\s*k$/i', $s, $matches)) {
+        $multiplier = 1000;
+        $s = $matches[1];
+    } elseif (preg_match('/(\d+\.?\d*)\s*lakhs?$/i', $s, $matches)) {
+        $multiplier = 100000;
+        $s = $matches[1];
+    } elseif (preg_match('/(\d+\.?\d*)\s*crs?$/i', $s, $matches)) {
+        $multiplier = 10000000;
+        $s = $matches[1];
+    } elseif (preg_match('/(\d+\.?\d*)\s*crores?$/i', $s, $matches)) {
+        $multiplier = 10000000;
+        $s = $matches[1];
+    } else {
+        // Remove text markers if not using shorthand
+        $s = str_ireplace(['Cr', 'lakhs', 'lakh', 'crore', 'k'], '', $s);
+    }
+    
+    // 3. Remove commas (Indian thousand separators).
     $s = str_replace(',', '', $s);
     
-    // 3. Handle cases where negative sign might be outside the parentheses, e.g., "-583102.00 *"
+    // 4. Handle cases where negative sign might be outside the parentheses, e.g., "-583102.00 *"
     $s = preg_replace('/[^\d\.\-]/', '', $s);
 
     if ($s === '' || $s === '-' || $s === '.') return 0.0;
     
-    // Convert to float
-    $value = (float)$s;
+    // Convert to float and apply multiplier
+    $value = (float)$s * $multiplier;
     
     // Safety check: If value is unreasonably large (> 10 trillion), it's likely a parsing error
     // This handles cases where commas are misread as extra digits

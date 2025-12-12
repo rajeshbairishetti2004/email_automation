@@ -253,7 +253,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 // ---------------------------------------------------------------------------------
 
 
-/* ---------- HANDLE AJAX REQUESTS (GOAL STATUS SAVE) ---------- */
+/* ---------- HANDLE AJAX REQUESTS (GOAL DATA SAVE) ---------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) && $_POST['ajax_goal_update'] === '1') {
+    header('Content-Type: application/json');
+    $goalId = (int)($_POST['goal_id'] ?? 0);
+    
+    if ($goalId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Invalid ID']);
+        exit;
+    }
+
+    try {
+        // Whitelist allowed fields for security
+        $allowedFields = ['status', 'sip_swp', 'current_amount', 'target_amount'];
+        
+        foreach ($allowedFields as $field) {
+            if (isset($_POST[$field])) {
+                $val = trim($_POST[$field]);
+                // Parse Indian number format for numeric fields (handles "Rs 9.41 lakhs", "3.57 Cr", etc.)
+                if ($field !== 'status') {
+                    $val = parseIndianNumber($val); 
+                }
+                
+                $stmt = $pdo->prepare("UPDATE client_goals SET $field = :val WHERE id = :id");
+                $stmt->execute([':val' => $val, ':id' => $goalId]);
+            }
+        }
+
+        echo json_encode(['success' => true]);
+        exit;
+    } catch (PDOException $e) {
+        error_log("Goal Update Error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'DB Error']);
+        exit;
+    }
+}
+
+/* ---------- HANDLE AJAX REQUESTS (GOAL STATUS SAVE - LEGACY SUPPORT) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_status']) && $_POST['ajax_goal_status'] === '1') {
     header('Content-Type: application/json');
     $goalId = (int)($_POST['goal_id'] ?? 0);
@@ -1008,9 +1045,30 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                             }
                             echo htmlspecialchars($year);
                         ?></td>
-                        <td><?php echo formatAmount((float)$g['current_amount']); ?></td>
-                        <td><?php echo formatAmount((float)$g['sip_swp']); ?></td>
-                        <td><?php echo formatAmount((float)$g['target_amount']); ?></td>
+                        <td style="padding: 0;">
+                            <input type="text" 
+                                   class="goal-input" 
+                                   data-goal-id="<?php echo (int)$g['id']; ?>" 
+                                   data-field="current_amount"
+                                   value="<?php echo htmlspecialchars(formatAmount((float)$g['current_amount'])); ?>"
+                                   style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+                        </td>
+                        <td style="padding: 0;">
+                            <input type="text" 
+                                   class="goal-input" 
+                                   data-goal-id="<?php echo (int)$g['id']; ?>" 
+                                   data-field="sip_swp"
+                                   value="<?php echo htmlspecialchars(formatAmount((float)$g['sip_swp'])); ?>"
+                                   style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+                        </td>
+                        <td style="padding: 0;">
+                            <input type="text" 
+                                   class="goal-input" 
+                                   data-goal-id="<?php echo (int)$g['id']; ?>" 
+                                   data-field="target_amount"
+                                   value="<?php echo htmlspecialchars(formatAmount((float)$g['target_amount'])); ?>"
+                                   style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+                        </td>
                         <?php 
                             // Use DB status directly. Normalize text for comparison.
                             $dbStatus = trim($g['status'] ?? 'On Track');
@@ -1030,9 +1088,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <tr>
                     <td><strong>Total</strong></td>
                     <td></td>
-                    <td><?php echo formatAmount($calculatedGoalCurrent); ?></td>
-                    <td><?php echo formatAmount($calculatedSip); ?></td>
-                    <td><?php echo formatAmount($calculatedGoalTarget); ?></td>
+                    <td id="total-current-amount"><?php echo formatAmount($calculatedGoalCurrent); ?></td>
+                    <td id="total-sip-swp"><?php echo formatAmount($calculatedSip); ?></td>
+                    <td id="total-target-amount"><?php echo formatAmount($calculatedGoalTarget); ?></td>
                     <td></td>
                 </tr>
             </table>
@@ -1498,6 +1556,105 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 .catch(err => console.error(err));
             });
         });
+
+        // Parse shorthand number formats (30k, 1lakh, 2cr)
+        function parseShorthandNumber(value) {
+            if (!value) return 0;
+            value = value.toString().toLowerCase().trim();
+            
+            // Remove common prefixes
+            value = value.replace(/^rs\.?\s*/i, '').replace(/^₹\s*/i, '');
+            
+            // Handle shorthand formats
+            if (value.match(/k$/)) {
+                return parseFloat(value.replace(/k$/, '')) * 1000;
+            } else if (value.match(/lakh?s?$/)) {
+                return parseFloat(value.replace(/lakh?s?$/, '')) * 100000;
+            } else if (value.match(/cr?s?$/)) {
+                return parseFloat(value.replace(/cr?s?$/, '')) * 10000000;
+            }
+            
+            // Remove commas and parse as regular number
+            return parseFloat(value.replace(/,/g, '')) || 0;
+        }
+
+        // Format number to Indian format for display
+        function formatIndianNumber(num) {
+            if (num >= 10000000) {
+                return 'Rs ' + (num / 10000000).toFixed(2) + ' Cr';
+            } else if (num >= 100000) {
+                return 'Rs ' + (num / 100000).toFixed(2) + ' lakhs';
+            } else if (num >= 1000) {
+                return 'Rs ' + (num / 1000).toFixed(2) + ' thousand';
+            }
+            return 'Rs ' + num.toFixed(0);
+        }
+
+        // Update totals based on current input values
+        function updateTotals() {
+            let totalCurrent = 0;
+            let totalSip = 0;
+            let totalTarget = 0;
+
+            document.querySelectorAll('.goal-input').forEach(function(input) {
+                const field = input.getAttribute('data-field');
+                const value = parseShorthandNumber(input.value);
+
+                if (field === 'current_amount') {
+                    totalCurrent += value;
+                } else if (field === 'sip_swp') {
+                    totalSip += value;
+                } else if (field === 'target_amount') {
+                    totalTarget += value;
+                }
+            });
+
+            // Update total row
+            const totalCurrentEl = document.getElementById('total-current-amount');
+            const totalSipEl = document.getElementById('total-sip-swp');
+            const totalTargetEl = document.getElementById('total-target-amount');
+
+            if (totalCurrentEl) totalCurrentEl.textContent = formatIndianNumber(totalCurrent);
+            if (totalSipEl) totalSipEl.textContent = formatIndianNumber(totalSip);
+            if (totalTargetEl) totalTargetEl.textContent = formatIndianNumber(totalTarget);
+        }
+
+        // Auto-save Goal Inputs (Current Amount, SIP/SWP, Target Amount)
+        document.querySelectorAll('.goal-input').forEach(function(input) {
+            // Update totals on input change
+            input.addEventListener('input', function() {
+                updateTotals();
+            });
+
+            input.addEventListener('blur', function() {
+                const goalId = this.getAttribute('data-goal-id');
+                const field  = this.getAttribute('data-field');
+                const value  = this.value;
+
+                fetch('view_report.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({
+                        ajax_goal_update: '1',
+                        goal_id: goalId,
+                        [field]: value
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.success) {
+                        // Visual feedback
+                        input.style.backgroundColor = "#e8f5e9"; // Light green
+                        setTimeout(() => input.style.backgroundColor = "transparent", 500);
+                        // Update totals after successful save
+                        updateTotals();
+                    }
+                });
+            });
+        });
+
+        // Initialize totals on page load
+        updateTotals();
 
         // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
         document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
