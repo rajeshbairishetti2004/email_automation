@@ -450,7 +450,7 @@ function handleEmailSending($clientId) {
                     <td style="text-align: center;"></td>
                     <td style="text-align: center;"><?php echo formatAmount($calculatedGoalCurrent); ?></td>
                     <td style="text-align: center;"><?php echo formatAmount($calculatedSip); ?></td>
-                    <td style="text-align: center;"><?php echo formatAmount($calculatedGoalTarget); ?></td>
+                   <td style="text-align: center;"></td>
                     <td></td>
                 </tr>
             </tbody>

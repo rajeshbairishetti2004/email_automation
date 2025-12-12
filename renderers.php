@@ -129,7 +129,7 @@ function renderClientReport(
                 <td></td>
                 <td><?php echo formatAmount($totalGoalCurrent); ?></td>
                 <td><?php echo formatAmount($totalSip); ?></td>
-                <td><?php echo formatAmount($totalGoalTarget); ?></td>
+                <td></td>
                 <td></td>
             </tr>
         </table>

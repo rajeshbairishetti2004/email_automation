@@ -15,9 +15,12 @@ requireAuth();
 $pdo = getPdo();
 $clientId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+// Do not redirect away for POST (AJAX) requests even if id is missing
 if ($clientId <= 0) {
-    header('Location: view_saved_reports.php');
-    exit;
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header('Location: view_saved_reports.php');
+        exit;
+    }
 }
 
 // Fetch current user details for the header and defaults
@@ -255,6 +258,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
 /* ---------- HANDLE AJAX REQUESTS (GOAL DATA SAVE) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) && $_POST['ajax_goal_update'] === '1') {
+    // Clean any output buffers to prevent HTML contamination of JSON response
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
     header('Content-Type: application/json');
     $goalId = (int)($_POST['goal_id'] ?? 0);
     
@@ -266,10 +274,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) &
     try {
         // Whitelist allowed fields for security
         $allowedFields = ['status', 'sip_swp', 'current_amount', 'target_amount'];
+        $updatedFields = [];
         
         foreach ($allowedFields as $field) {
             if (isset($_POST[$field])) {
                 $val = trim($_POST[$field]);
+                $originalVal = $val;
+                
                 // Parse Indian number format for numeric fields (handles "Rs 9.41 lakhs", "3.57 Cr", etc.)
                 if ($field !== 'status') {
                     $val = parseIndianNumber($val); 
@@ -277,15 +288,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) &
                 
                 $stmt = $pdo->prepare("UPDATE client_goals SET $field = :val WHERE id = :id");
                 $stmt->execute([':val' => $val, ':id' => $goalId]);
+                
+                $updatedFields[$field] = ['original' => $originalVal, 'parsed' => $val, 'rows' => $stmt->rowCount()];
             }
         }
 
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'updated' => $updatedFields, 'goal_id' => $goalId]);
         exit;
     } catch (PDOException $e) {
         error_log("Goal Update Error: " . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'DB Error']);
+        echo json_encode(['success' => false, 'error' => 'DB Error: ' . $e->getMessage()]);
         exit;
     }
 }
@@ -1090,10 +1103,17 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <td></td>
                     <td id="total-current-amount"><?php echo formatAmount($calculatedGoalCurrent); ?></td>
                     <td id="total-sip-swp"><?php echo formatAmount($calculatedSip); ?></td>
-                    <td id="total-target-amount"><?php echo formatAmount($calculatedGoalTarget); ?></td>
+                    <td></td>
                     <td></td>
                 </tr>
             </table>
+            
+            <div style="margin: 10px 0; text-align: right;">
+                <button type="button" id="saveGoalsBtn" class="wf-btn btn-ready" style="padding: 8px 16px; font-size: 14px;">
+                    💾 Save Goals
+                </button>
+                <span id="saveGoalsStatus" style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">✓ Saved</span>
+            </div>
 
             <h3>3. Appropriate Product Selection at a macro level</h3>
             <div style="max-width: 100%; margin: 20px auto; display: flex; justify-content: center;">
@@ -1557,6 +1577,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
 
+        // Track if goals have been modified
+        let goalsDirty = false;
+
         // Parse shorthand number formats (30k, 1lakh, 2cr)
         function parseShorthandNumber(value) {
             if (!value) return 0;
@@ -1594,7 +1617,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         function updateTotals() {
             let totalCurrent = 0;
             let totalSip = 0;
-            let totalTarget = 0;
 
             document.querySelectorAll('.goal-input').forEach(function(input) {
                 const field = input.getAttribute('data-field');
@@ -1604,19 +1626,15 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     totalCurrent += value;
                 } else if (field === 'sip_swp') {
                     totalSip += value;
-                } else if (field === 'target_amount') {
-                    totalTarget += value;
                 }
             });
 
-            // Update total row
+            // Update total row (no Target Amount total by request)
             const totalCurrentEl = document.getElementById('total-current-amount');
             const totalSipEl = document.getElementById('total-sip-swp');
-            const totalTargetEl = document.getElementById('total-target-amount');
 
             if (totalCurrentEl) totalCurrentEl.textContent = formatIndianNumber(totalCurrent);
             if (totalSipEl) totalSipEl.textContent = formatIndianNumber(totalSip);
-            if (totalTargetEl) totalTargetEl.textContent = formatIndianNumber(totalTarget);
         }
 
         // Auto-save Goal Inputs (Current Amount, SIP/SWP, Target Amount)
@@ -1624,6 +1642,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             // Update totals on input change
             input.addEventListener('input', function() {
                 updateTotals();
+                goalsDirty = true;
             });
 
             input.addEventListener('blur', function() {
@@ -1648,6 +1667,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         setTimeout(() => input.style.backgroundColor = "transparent", 500);
                         // Update totals after successful save
                         updateTotals();
+                        goalsDirty = false;
                     }
                 });
             });
@@ -1655,6 +1675,141 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
         // Initialize totals on page load
         updateTotals();
+
+        // Save Goals button handler
+        document.getElementById('saveGoalsBtn').addEventListener('click', function() {
+            const btn = this;
+            const statusSpan = document.getElementById('saveGoalsStatus');
+            
+            btn.disabled = true;
+            btn.textContent = '💾 Saving...';
+            
+            const savePromises = [];
+            document.querySelectorAll('.goal-input').forEach(function(input) {
+                const goalId = input.getAttribute('data-goal-id');
+                const field  = input.getAttribute('data-field');
+                const value  = input.value;
+
+                const promise = fetch('view_report.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({
+                        ajax_goal_update: '1',
+                        goal_id: goalId,
+                        [field]: value
+                    })
+                })
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error('HTTP ' + res.status + ': ' + res.statusText);
+                    }
+                    return res.text();
+                })
+                .then(text => {
+                    console.log('Response text:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch(e) {
+                        console.error('JSON parse error:', e, 'Response:', text);
+                        throw new Error('Invalid JSON response');
+                    }
+                })
+                .then(data => {
+                    console.log('Saved:', field, 'for goal', goalId, ':', data);
+                    return data;
+                })
+                .catch(err => {
+                    console.error('Error saving', field, 'for goal', goalId, ':', err);
+                    return {success: false, error: err.message, field: field, goalId: goalId};
+                });
+                
+                savePromises.push(promise);
+            });
+
+            Promise.all(savePromises)
+                .then((results) => {
+                    btn.textContent = '💾 Save Goals';
+                    btn.disabled = false;
+                    
+                    const allSuccess = results.every(r => r && r.success);
+                    const failedResults = results.filter(r => !r || !r.success);
+                    
+                    if (allSuccess) {
+                        statusSpan.textContent = '✓ All goals saved to database';
+                        statusSpan.style.color = '#28a745';
+                        statusSpan.style.display = 'inline';
+                        console.log('All goals saved successfully:', results);
+                        goalsDirty = false;
+                        
+                        // Green flash on all inputs
+                        document.querySelectorAll('.goal-input').forEach(input => {
+                            input.style.backgroundColor = "#e8f5e9";
+                            setTimeout(() => input.style.backgroundColor = "transparent", 1000);
+                        });
+                    } else {
+                        statusSpan.textContent = '⚠ ' + failedResults.length + ' field(s) failed - see red borders';
+                        statusSpan.style.color = '#dc3545';
+                        statusSpan.style.display = 'inline';
+                        console.error('Failed saves:', failedResults);
+                        console.log('All results:', results);
+                        
+                        // Mark failed inputs with red border
+                        results.forEach((result, index) => {
+                            const inputs = document.querySelectorAll('.goal-input');
+                            if (inputs[index]) {
+                                if (result && result.success) {
+                                    inputs[index].style.backgroundColor = "#e8f5e9";
+                                    setTimeout(() => inputs[index].style.backgroundColor = "transparent", 1000);
+                                } else {
+                                    inputs[index].style.border = "2px solid #dc3545";
+                                    inputs[index].style.backgroundColor = "#ffe6e6";
+                                }
+                            }
+                        });
+                        
+                        alert('Some fields failed to save. Fields with red borders had errors.\nError details logged to console (F12).');
+                    }
+                    
+                    setTimeout(() => {
+                        statusSpan.style.display = 'none';
+                    }, 5000);
+                    updateTotals();
+                })
+                .catch(err => {
+                    console.error('Error saving goals:', err);
+                    btn.textContent = '💾 Save Goals';
+                    btn.disabled = false;
+                    statusSpan.textContent = '❌ Error: ' + err.message;
+                    statusSpan.style.color = '#dc3545';
+                    statusSpan.style.display = 'inline';
+                    alert('Error saving goals: ' + err.message + '\nCheck console for details.');
+                });
+        });
+
+        // Function to save all goal inputs synchronously
+        function saveAllGoalsSync() {
+            const inputs = document.querySelectorAll('.goal-input');
+            if (inputs.length === 0) return;
+            
+            // Use synchronous XMLHttpRequest for beforeunload
+            inputs.forEach(function(input) {
+                const goalId = input.getAttribute('data-goal-id');
+                const field = input.getAttribute('data-field');
+                const value = input.value;
+                
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'view_report.php', false); // false = synchronous
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.send(`ajax_goal_update=1&goal_id=${goalId}&${field}=${encodeURIComponent(value)}`);
+            });
+        }
+
+        // Save goals before page unload
+        window.addEventListener('beforeunload', function(e) {
+            if (goalsDirty) {
+                saveAllGoalsSync();
+            }
+        });
 
         // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
         document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
@@ -1697,11 +1852,41 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     function submitWorkflow(action) {
         if(!confirm("Are you sure you want to perform this action?")) return;
         
-        // 1. Set the action in the hidden input inside the form
-        document.getElementById('workflowActionInput').value = action;
-        
-        // 2. Submit the form naturally. This sends ALL data + the action.
-        document.getElementById('reportForm').submit();
+        // Save all goal inputs before submitting
+        const savePromises = [];
+        document.querySelectorAll('.goal-input').forEach(function(input) {
+            const goalId = input.getAttribute('data-goal-id');
+            const field  = input.getAttribute('data-field');
+            const value  = input.value;
+
+            const promise = fetch('view_report.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: new URLSearchParams({
+                    ajax_goal_update: '1',
+                    goal_id: goalId,
+                    [field]: value
+                })
+            });
+            
+            savePromises.push(promise);
+        });
+
+        // Wait for all saves to complete, then submit the form
+        Promise.all(savePromises)
+            .then(() => {
+                // 1. Set the action in the hidden input inside the form
+                document.getElementById('workflowActionInput').value = action;
+                
+                // 2. Submit the form naturally. This sends ALL data + the action.
+                document.getElementById('reportForm').submit();
+            })
+            .catch(err => {
+                console.error('Error saving goal values:', err);
+                // Submit anyway
+                document.getElementById('workflowActionInput').value = action;
+                document.getElementById('reportForm').submit();
+            });
     }
 
     function openRejectModal() {
@@ -1718,12 +1903,43 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             return;
         }
         
-        // Set Action and Comment in hidden inputs
-        document.getElementById('workflowActionInput').value = 'review_not_ok';
-        document.getElementById('reviewCommentInput').value = comment;
-        
-        // Submit Form
-        document.getElementById('reportForm').submit();
+        // Save all goal inputs before submitting
+        const savePromises = [];
+        document.querySelectorAll('.goal-input').forEach(function(input) {
+            const goalId = input.getAttribute('data-goal-id');
+            const field  = input.getAttribute('data-field');
+            const value  = input.value;
+
+            const promise = fetch('view_report.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: new URLSearchParams({
+                    ajax_goal_update: '1',
+                    goal_id: goalId,
+                    [field]: value
+                })
+            });
+            
+            savePromises.push(promise);
+        });
+
+        // Wait for all saves to complete, then submit the form
+        Promise.all(savePromises)
+            .then(() => {
+                // Set Action and Comment in hidden inputs
+                document.getElementById('workflowActionInput').value = 'review_not_ok';
+                document.getElementById('reviewCommentInput').value = comment;
+                
+                // Submit Form
+                document.getElementById('reportForm').submit();
+            })
+            .catch(err => {
+                console.error('Error saving goal values:', err);
+                // Submit anyway
+                document.getElementById('workflowActionInput').value = 'review_not_ok';
+                document.getElementById('reviewCommentInput').value = comment;
+                document.getElementById('reportForm').submit();
+            });
     }
 
     // --- ATTACHMENT JS LOGIC ---
