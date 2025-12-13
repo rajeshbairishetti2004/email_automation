@@ -287,6 +287,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) &
         exit;
     }
 
+    // LOCK CHECK: Prevent edits if report is approved/sent
+    $stmtCheck = $pdo->prepare("SELECT client_id FROM client_goals WHERE id = :id");
+    $stmtCheck->execute([':id' => $goalId]);
+    $checkClientId = (int)$stmtCheck->fetchColumn();
+    if ($checkClientId > 0) {
+        $stmtLock = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = :id");
+        $stmtLock->execute([':id' => $checkClientId]);
+        $lockRow = $stmtLock->fetch(PDO::FETCH_ASSOC);
+        if ($lockRow) {
+            $lockState = (string)($lockRow['report_state'] ?? 'draft');
+            $lockReviewNotOk = (int)($lockRow['review_not_ok'] ?? 0);
+            $locked = (($lockState === 'reviewed' && $lockReviewNotOk === 0) || $lockState === 'sent');
+            if ($locked) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Report is locked. Changes cannot be saved after approval.']);
+                exit;
+            }
+        }
+    }
+
     try {
         // Whitelist allowed fields for security
         $allowedFields = ['status', 'sip_swp', 'current_amount', 'target_amount'];
@@ -330,6 +350,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_status']) &
         exit;
     }
 
+    // LOCK CHECK: Prevent edits if report is approved/sent
+    $stmtCheck = $pdo->prepare("SELECT client_id FROM client_goals WHERE id = :id");
+    $stmtCheck->execute([':id' => $goalId]);
+    $checkClientId = (int)$stmtCheck->fetchColumn();
+    if ($checkClientId > 0) {
+        $stmtLock = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = :id");
+        $stmtLock->execute([':id' => $checkClientId]);
+        $lockRow = $stmtLock->fetch(PDO::FETCH_ASSOC);
+        if ($lockRow) {
+            $lockState = (string)($lockRow['report_state'] ?? 'draft');
+            $lockReviewNotOk = (int)($lockRow['review_not_ok'] ?? 0);
+            $locked = (($lockState === 'reviewed' && $lockReviewNotOk === 0) || $lockState === 'sent');
+            if ($locked) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Report is locked. Changes cannot be saved after approval.']);
+                exit;
+            }
+        }
+    }
+
     try {
         $stmt = $pdo->prepare("UPDATE client_goals SET status = :status WHERE id = :id");
         $stmt->execute([':status' => $newStatus, ':id' => $goalId]);
@@ -351,6 +391,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
     if ($schemeId <= 0) {
         echo json_encode(['success' => false, 'error' => 'Invalid scheme ID.']);
         exit;
+    }
+
+    // LOCK CHECK: Prevent edits if report is approved/sent
+    $stmtCheck = $pdo->prepare("SELECT client_id FROM client_schemes WHERE id = :id");
+    $stmtCheck->execute([':id' => $schemeId]);
+    $checkClientId = (int)$stmtCheck->fetchColumn();
+    if ($checkClientId > 0) {
+        $stmtLock = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = :id");
+        $stmtLock->execute([':id' => $checkClientId]);
+        $lockRow = $stmtLock->fetch(PDO::FETCH_ASSOC);
+        if ($lockRow) {
+            $lockState = (string)($lockRow['report_state'] ?? 'draft');
+            $lockReviewNotOk = (int)($lockRow['review_not_ok'] ?? 0);
+            $locked = (($lockState === 'reviewed' && $lockReviewNotOk === 0) || $lockState === 'sent');
+            if ($locked) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Report is locked. Changes cannot be saved after approval.']);
+                exit;
+            }
+        }
     }
 
     try {
@@ -501,6 +561,9 @@ if (!$client) {
 $reportState    = $client['report_state'] ?? 'draft'; // draft, ready, reviewed, sent
 $reviewNotOk    = (int)($client['review_not_ok'] ?? 0);
 $reviewComment  = $client['review_comment'] ?? '';
+
+// LOCK MECHANISM: Report is locked (no edits allowed) when approved by RM or already sent
+$isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
 
 // Override RM defaults with LOGGED-IN USER details
 $rmName        = $currentUser['name'] ?? $currentUser['username'] ?? 'Relationship Manager';
@@ -1082,6 +1145,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="current_amount"
                                    value="<?php echo htmlspecialchars(formatAmount((float)$g['current_amount'])); ?>"
+                                   <?php echo $isLocked ? 'readonly' : ''; ?>
                                    style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
                         </td>
                         <td style="padding: 0;">
@@ -1090,6 +1154,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="sip_swp"
                                    value="<?php echo htmlspecialchars(formatAmount((float)$g['sip_swp'])); ?>"
+                                   <?php echo $isLocked ? 'readonly' : ''; ?>
                                    style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
                         </td>
                         <td style="padding: 0;">
@@ -1098,6 +1163,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="target_amount"
                                    value="<?php echo htmlspecialchars(formatAmount((float)$g['target_amount'])); ?>"
+                                   <?php echo $isLocked ? 'readonly' : ''; ?>
                                    style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
                         </td>
                         <?php 
@@ -1109,7 +1175,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td style="padding: 0;">
                             <select name="goal_status[<?php echo (int)$g['id']; ?>]" 
                                     class="goal-status-dropdown <?php echo $dropdownClass; ?>" 
-                                    data-goal-id="<?php echo (int)$g['id']; ?>">
+                                    data-goal-id="<?php echo (int)$g['id']; ?>" <?php echo $isLocked ? 'disabled' : ''; ?>>
                                 <option value="On Track" <?php echo ($dbStatus === 'On Track') ? 'selected' : ''; ?>>On Track</option>
                                 <option value="Invest More" <?php echo ($dbStatus === 'Invest More' || $dbStatus === 'Needs Attention') ? 'selected' : ''; ?>>Invest More</option>
                             </select>
@@ -1127,7 +1193,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             </table>
             
             <div style="margin: 10px 0; text-align: right;">
-                <button type="button" id="saveGoalsBtn" class="wf-btn btn-ready" style="padding: 8px 16px; font-size: 14px;">
+                <button type="button" id="saveGoalsBtn" class="wf-btn btn-ready" style="padding: 8px 16px; font-size: 14px;" <?php echo $isLocked ? 'disabled' : ''; ?>>
                     💾 Save Goals
                 </button>
                 <span id="saveGoalsStatus" style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">✓ Saved</span>
@@ -1249,7 +1315,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td>
                             <select name="action_step[<?php echo (int)$s['id']; ?>]" 
                                     class="action-dropdown" 
-                                    data-scheme-id="<?php echo (int)$s['id']; ?>">
+                                    data-scheme-id="<?php echo (int)$s['id']; ?>" <?php echo $isLocked ? 'disabled' : ''; ?>>
                                 <option value="Continue" <?php echo ($s['action_step'] ?? 'Continue') === 'Continue' ? 'selected' : ''; ?>>Continue</option>
                                 <option value="Drop" <?php echo ($s['action_step'] ?? '') === 'Drop' ? 'selected' : ''; ?>>Drop</option>
                                 <option value="Switch" <?php echo ($s['action_step'] ?? '') === 'Switch' ? 'selected' : ''; ?>>Switch</option>
@@ -1264,7 +1330,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    data-scheme-id="<?php echo (int)$s['id']; ?>"
                                    data-field="recommended_scheme"
                                    value="<?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?>"
-                                   placeholder="Enter recommended scheme...">
+                                   placeholder="Enter recommended scheme..." <?php echo $isLocked ? 'readonly' : ''; ?>>
                         </td>
                         <td>
                             <input type="text" 
@@ -1273,7 +1339,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    data-scheme-id="<?php echo (int)$s['id']; ?>"
                                    data-field="recommended_amount"
                                    value="<?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?>"
-                                   placeholder="Amount / Note">
+                                   placeholder="Amount / Note" <?php echo $isLocked ? 'readonly' : ''; ?>>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -1557,43 +1623,48 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         });
 
+        // LOCK CHECK: Pass lock status from PHP to JS
+        const reportLocked = <?php echo json_encode($isLocked); ?>;
+
         // --- GOAL STATUS DROPDOWN LOGIC ---
-        document.querySelectorAll('.goal-status-dropdown').forEach(function(select) {
-            select.addEventListener('change', function() {
-                const goalId = this.getAttribute('data-goal-id');
-                const newStatus = this.value;
-                const self = this;
+        if (!reportLocked) {
+            document.querySelectorAll('.goal-status-dropdown').forEach(function(select) {
+                select.addEventListener('change', function() {
+                    const goalId = this.getAttribute('data-goal-id');
+                    const newStatus = this.value;
+                    const self = this;
 
-                // Update visual style immediately
-                if (newStatus === 'On Track') {
-                    self.classList.remove('status-off');
-                    self.classList.add('status-on');
-                } else {
-                    self.classList.remove('status-on');
-                    self.classList.add('status-off');
-                }
-
-                // Save to DB
-                fetch('view_report.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                    body: new URLSearchParams({
-                        ajax_goal_status: '1',
-                        goal_id: goalId,
-                        status: newStatus
-                    })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('Status updated');
+                    // Update visual style immediately
+                    if (newStatus === 'On Track') {
+                        self.classList.remove('status-off');
+                        self.classList.add('status-on');
                     } else {
-                        alert('Failed to save status.');
+                        self.classList.remove('status-on');
+                        self.classList.add('status-off');
                     }
-                })
-                .catch(err => console.error(err));
+
+                    // Save to DB
+                    fetch('view_report.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body: new URLSearchParams({
+                            ajax_goal_status: '1',
+                            goal_id: goalId,
+                            status: newStatus
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Status updated');
+                        } else {
+                            alert(data.message || 'Failed to save status.');
+                        }
+                    })
+                    .catch(err => console.error(err));
+                });
             });
-        });
+        }
 
         // Track if goals have been modified
         let goalsDirty = false;
@@ -1660,42 +1731,48 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             // Update totals on input change
             input.addEventListener('input', function() {
                 updateTotals();
-                goalsDirty = true;
+                if (!reportLocked) goalsDirty = true;
             });
 
-            input.addEventListener('blur', function() {
-                const goalId = this.getAttribute('data-goal-id');
-                const field  = this.getAttribute('data-field');
-                const value  = this.value;
+            if (!reportLocked) {
+                input.addEventListener('blur', function() {
+                    const goalId = this.getAttribute('data-goal-id');
+                    const field  = this.getAttribute('data-field');
+                    const value  = this.value;
 
-                fetch('view_report.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                    body: new URLSearchParams({
-                        ajax_goal_update: '1',
-                        goal_id: goalId,
-                        [field]: value
+                    fetch('view_report.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body: new URLSearchParams({
+                            ajax_goal_update: '1',
+                            goal_id: goalId,
+                            [field]: value
+                        })
                     })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if(data.success) {
-                        // Visual feedback
-                        input.style.backgroundColor = "#e8f5e9"; // Light green
-                        setTimeout(() => input.style.backgroundColor = "transparent", 500);
-                        // Update totals after successful save
-                        updateTotals();
-                        goalsDirty = false;
-                    }
+                    .then(res => res.json())
+                    .then(data => {
+                        if(data.success) {
+                            // Visual feedback
+                            input.style.backgroundColor = "#e8f5e9"; // Light green
+                            setTimeout(() => input.style.backgroundColor = "transparent", 500);
+                            // Update totals after successful save
+                            updateTotals();
+                            goalsDirty = false;
+                        } else if (data.message) {
+                            alert(data.message);
+                        }
+                    });
                 });
-            });
+            }
         });
 
         // Initialize totals on page load
         updateTotals();
 
         // Save Goals button handler
-        document.getElementById('saveGoalsBtn').addEventListener('click', function() {
+        const saveGoalsBtn = document.getElementById('saveGoalsBtn');
+        if (saveGoalsBtn && !reportLocked) {
+            saveGoalsBtn.addEventListener('click', function() {
             const btn = this;
             const statusSpan = document.getElementById('saveGoalsStatus');
             
@@ -1802,10 +1879,12 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     statusSpan.style.display = 'inline';
                     alert('Error saving goals: ' + err.message + '\nCheck console for details.');
                 });
-        });
+            });
+        }
 
         // Function to save all goal inputs synchronously
         function saveAllGoalsSync() {
+            if (reportLocked) return; // Don't save if locked
             const inputs = document.querySelectorAll('.goal-input');
             if (inputs.length === 0) return;
             
@@ -1822,16 +1901,19 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
         }
 
-        // Save goals before page unload
-        window.addEventListener('beforeunload', function(e) {
-            if (goalsDirty) {
-                saveAllGoalsSync();
-            }
-        });
+        // Save goals before page unload (only if not locked)
+        if (!reportLocked) {
+            window.addEventListener('beforeunload', function(e) {
+                if (goalsDirty) {
+                    saveAllGoalsSync();
+                }
+            });
+        }
 
         // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
-        document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
-            const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
+        if (!reportLocked) {
+            document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
+                const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
             
             element.addEventListener(eventType, function() {
                 const schemeId = element.getAttribute('data-scheme-id');
@@ -1857,13 +1939,14 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         if (data && data.success) {
                             showToast('Saved ' + (field === 'action_step' ? 'action step' : field.replace('_', ' ')));
                         } else {
-                            alert('Save failed: ' + (data && data.error ? data.error : 'Unknown error'));
+                            alert((data && data.message) || (data && data.error) || 'Unknown error');
                         }
                     })
                     .catch(err => console.error(err));
                 }
             });
-        });
+            });
+        }
 
         // Immediately-responding Portfolio Tenure handler (improved: swaps label and value)
         (function() {
