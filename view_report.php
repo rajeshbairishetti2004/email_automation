@@ -852,6 +852,52 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             background: white; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%;
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
+        
+        /* Compliance Checklist Modal */
+        .checklist-modal-box {
+            background: white; padding: 30px; border-radius: 8px; width: 500px; max-width: 90%;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        .checklist-title {
+            font-size: 20px; font-weight: 600; color: #333; margin-bottom: 10px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .checklist-subtitle {
+            font-size: 13px; color: #666; margin-bottom: 20px;
+        }
+        .checklist-item {
+            display: flex; align-items: center; gap: 12px; padding: 12px 15px;
+            background: #f8f9fa; border-radius: 6px; margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        .checklist-item:hover {
+            background: #e9ecef;
+        }
+        .checklist-item input[type="checkbox"] {
+            width: 20px; height: 20px; cursor: pointer;
+        }
+        .checklist-item label {
+            flex: 1; font-size: 14px; color: #333; cursor: pointer; margin: 0;
+        }
+        .modal-buttons {
+            display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 10px 20px; border: none; border-radius: 5px; font-weight: 600;
+            cursor: pointer; font-size: 14px; transition: all 0.2s;
+        }
+        .modal-btn-confirm {
+            background: #28a745; color: white;
+        }
+        .modal-btn-confirm:disabled {
+            background: #ccc; cursor: not-allowed; opacity: 0.6;
+        }
+        .modal-btn-cancel {
+            background: #6c757d; color: white;
+        }
+        .modal-btn:hover:not(:disabled) {
+            transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -909,7 +955,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         <?php if ($isARM): ?>
             <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
                 <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
-                <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+                <button type="button" class="wf-btn btn-ready" onclick="openComplianceModal()">Mark Ready for Review</button>
             <?php endif; ?>
             
             <?php if ($reportState == 'reviewed' && $reviewNotOk == 0): ?>
@@ -920,7 +966,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         <?php if ($isRM): ?>
             <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
                 <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
-                <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+                <button type="button" class="wf-btn btn-ready" onclick="openComplianceModal()">Mark Ready for Review</button>
             <?php endif; ?>
 
             <?php if ($reportState == 'ready' && $reviewNotOk == 0): ?>
@@ -1100,7 +1146,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             <table class="report-table">
                 <tr>
                     <th>Goal/s</th>
-                    <th>Target Year</th>
+                    <th>Target Month and Year</th>
                     <th>Current Amount (Rs)</th>
                     <th>SIP/SWP</th>
                     <th>Target Amount (Rs)</th>
@@ -1133,11 +1179,11 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <tr>
                         <td><?php echo htmlspecialchars($g['goal']); ?></td>
                         <td><?php
-                            $year = '';
+                            $displayDate = '';
                             if (!empty($g['goal_date'])) {
-                                $year = substr($g['goal_date'], -4);
+                                $displayDate = date('M Y', strtotime($g['goal_date']));
                             }
-                            echo htmlspecialchars($year);
+                            echo htmlspecialchars($displayDate);
                         ?></td>
                         <td style="padding: 0;">
                             <input type="text" 
@@ -1401,6 +1447,62 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- Compliance Checklist Modal -->
+<div id="complianceModal" class="modal-overlay">
+    <div class="checklist-modal-box">
+        <div class="checklist-title">
+            <span style="font-size: 24px;">✓</span>
+            <span>Pre-Review Compliance Checklist</span>
+        </div>
+        <div class="checklist-subtitle">
+            Please confirm all the following checks before marking the report as ready for review:
+        </div>
+        
+        <div class="checklist-item">
+            <input type="checkbox" id="check1" class="compliance-checkbox">
+            <label for="check1">Have you checked the Risk Profile?</label>
+        </div>
+        
+        <div class="checklist-item">
+            <input type="checkbox" id="check2" class="compliance-checkbox">
+            <label for="check2">Has Contact and Nominee verification been checked?</label>
+        </div>
+        
+        <div class="checklist-item">
+            <input type="checkbox" id="check3" class="compliance-checkbox">
+            <label for="check3">Has Tax Impact been checked?</label>
+        </div>
+        
+        <div class="checklist-item">
+            <input type="checkbox" id="check4" class="compliance-checkbox">
+            <label for="check4">Has there been any SIP/SWP update?</label>
+        </div>
+        
+        <div class="checklist-item">
+            <input type="checkbox" id="check5" class="compliance-checkbox">
+            <label for="check5">Are Annexures attached?</label>
+        </div>
+        
+        <div class="modal-buttons">
+            <button type="button" class="modal-btn modal-btn-cancel" onclick="closeComplianceModal()">Cancel</button>
+            <button type="button" id="confirmComplianceBtn" class="modal-btn modal-btn-confirm" disabled onclick="confirmCompliance()">Confirm & Mark Ready</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rejection Modal -->
+<div id="rejectModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 style="margin-top: 0; color: #dc3545;">Reject Report</h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 15px;">Please provide a comment explaining why this report needs revision:</p>
+        <textarea id="rejectComment" rows="4" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; resize: vertical;"></textarea>
+        <div class="modal-buttons">
+            <button type="button" class="modal-btn modal-btn-cancel" onclick="closeRejectModal()">Cancel</button>
+            <button type="button" class="modal-btn modal-btn-confirm" style="background: #dc3545;" onclick="submitRejection()">Submit Rejection</button>
+        </div>
+    </div>
+</div>
 
 <script>
     // --- Header Dropdown Toggle Script (JS code remains the same) ---
@@ -2044,6 +2146,38 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             });
     }
 
+    // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
+    function openComplianceModal() {
+        // Reset all checkboxes
+        document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
+        document.getElementById('confirmComplianceBtn').disabled = true;
+        document.getElementById('complianceModal').style.display = 'flex';
+    }
+    
+    function closeComplianceModal() {
+        document.getElementById('complianceModal').style.display = 'none';
+    }
+    
+    function confirmCompliance() {
+        // Close modal and submit workflow
+        closeComplianceModal();
+        submitWorkflow('ready_for_review');
+    }
+    
+    // Enable/Disable confirm button based on checklist completion
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkboxes = document.querySelectorAll('.compliance-checkbox');
+        const confirmBtn = document.getElementById('confirmComplianceBtn');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                confirmBtn.disabled = !allChecked;
+            });
+        });
+    });
+    
+    // --- REJECTION MODAL FUNCTIONS ---
     function openRejectModal() {
         document.getElementById('rejectModal').style.display = 'flex';
     }
