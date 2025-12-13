@@ -158,7 +158,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
                     <td><?php echo formatRupeesLakhs((float)$c['total_amount']); ?></td>
                     <td><?php echo formatRupeesLakhs((float)$c['profit']); ?></td>
-                    <td><?php echo htmlspecialchars(date('d-M-Y', strtotime($c['created_at']))); ?></td>
+                    <td><?php echo htmlspecialchars(date('d-M-Y h:i A', strtotime($c['created_at']))); ?></td>
                     <td><a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a></td>
                 </tr>
             <?php endforeach; ?>
