@@ -935,6 +935,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         $statusText = 'Reviewed Not OK';
         $borderColor = '#dc3545';
     } elseif ($reportState == 'ready') {
+        $statusText = 'Ready for Review';
         $borderColor = '#ffc107';
     } elseif ($reportState == 'reviewed') {
         $borderColor = '#28a745';
@@ -1199,7 +1200,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                    class="goal-input" 
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="sip_swp"
-                                   value="<?php echo htmlspecialchars(formatAmount((float)$g['sip_swp'])); ?>"
+                                   value="<?php echo (float)$g['sip_swp'] == 0 ? '-' : htmlspecialchars(formatAmount((float)$g['sip_swp'])); ?>"
                                    <?php echo $isLocked ? 'readonly' : ''; ?>
                                    style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
                         </td>
@@ -1356,7 +1357,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 ?>
                     <tr>
                         <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
-                        <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
+                        <td><?php echo (float)$s['sip_swp'] == 0 ? '-' : formatAmount((float)$s['sip_swp']); ?></td>
                         <td><?php echo formatAmount((float)$s['current_value']); ?></td>
                         <td>
                             <select name="action_step[<?php echo (int)$s['id']; ?>]" 
@@ -1367,6 +1368,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                 <option value="Switch" <?php echo ($s['action_step'] ?? '') === 'Switch' ? 'selected' : ''; ?>>Switch</option>
                                 <option value="Redeem" <?php echo ($s['action_step'] ?? '') === 'Redeem' ? 'selected' : ''; ?>>Redeem</option>
                                 <option value="Partially Redeem" <?php echo ($s['action_step'] ?? '') === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
+                                <option value="Under Observation" <?php echo ($s['action_step'] ?? '') === 'Under Observation' ? 'selected' : ''; ?>>Under Observation</option>
                             </select>
                         </td>
                         <td>
