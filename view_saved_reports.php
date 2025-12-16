@@ -111,8 +111,6 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <th>ID</th>
                 <th>Client Name</th>
                 <th>Status</th> <th>As On</th>
-                <th>Total Amount</th>
-                <th>Profit</th>
                 <th>Created At</th>
                 <th>Action</th>
             </tr>
@@ -156,8 +154,6 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
-                    <td><?php echo formatRupeesLakhs((float)$c['total_amount']); ?></td>
-                    <td><?php echo formatRupeesLakhs((float)$c['profit']); ?></td>
                     <td><?php echo htmlspecialchars(date('d-M-Y h:i A', strtotime($c['created_at']))); ?></td>
                     <td><a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a></td>
                 </tr>
