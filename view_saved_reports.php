@@ -29,13 +29,15 @@ $stmtCount->execute($params);
 $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
-// 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS)
+// 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 $stmt = $pdo->prepare("
-    SELECT id, name, as_on, created_at, total_amount, profit, 
-           report_state, review_not_ok, review_comment
-    FROM clients
+    SELECT c.id, c.name, c.as_on, c.created_at, c.total_amount, c.profit, 
+           c.report_state, c.review_not_ok, c.review_comment, c.created_by,
+           u.username as creator_username
+    FROM clients c
+    LEFT JOIN users u ON c.created_by = u.id
     {$where}
-    ORDER BY created_at DESC, id DESC
+    ORDER BY c.created_at DESC, c.id DESC
     LIMIT :limit OFFSET :offset
 ");
 
@@ -111,6 +113,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <th>ID</th>
                 <th>Client Name</th>
                 <th>Status</th> <th>As On</th>
+                <th>Created By</th>
                 <th>Created At</th>
                 <th>Action</th>
             </tr>
@@ -154,6 +157,15 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
+                    <td>
+                        <?php if (!empty($c['creator_username'])): ?>
+                            <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                <?php echo htmlspecialchars($c['creator_username']); ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="color: #999; font-size: 0.85em;">-</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo htmlspecialchars(date('d-M-Y h:i A', strtotime($c['created_at']))); ?></td>
                     <td><a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a></td>
                 </tr>

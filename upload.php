@@ -15,6 +15,8 @@ requireAuth(); // Enforce login
 
 // Fetch current user details
 $currentUser = getCurrentUser();
+// --- FIX: Capture Creator ID from session (fallback to admin ID 1) ---
+$currentUserId = $_SESSION['user_id'] ?? 1;
 
 // Determine the correct name to display.
 $displayName = 'User';
@@ -171,11 +173,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
             INSERT INTO clients
                 (name, as_on, total_amount, profit, cagr, xirr,
                  total_goal_current, total_goal_target, total_sip,
-                 greeting_prefix, intro_text, closing_text, rationale_text)
+                 greeting_prefix, intro_text, closing_text, rationale_text, created_by)
             VALUES
                 (:name, :as_on, :total_amount, :profit, :cagr, :xirr,
                  :total_goal_current, :total_goal_target, :total_sip,
-                 :greeting_prefix, :intro_text, :closing_text, :rationale_text)
+                 :greeting_prefix, :intro_text, :closing_text, :rationale_text, :created_by)
         ");
 
 $stmtGoal = $pdo->prepare("
@@ -278,6 +280,7 @@ $stmtGoal = $pdo->prepare("
             }
 
             // ----- SAVE MASTER ROW -----
+            $userId = $currentUserId; // Use session user ID (fallback 1) to track creator
             $stmtClient->execute([
                 ':name'               => $name,
                 ':as_on'              => $asOn,
@@ -292,6 +295,7 @@ $stmtGoal = $pdo->prepare("
                 ':intro_text'         => $DEFAULT_INTRO,
                 ':closing_text'       => $DEFAULT_CLOSING,
                 ':rationale_text'     => $DEFAULT_RATIONALE,
+                ':created_by'         => $userId,
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
