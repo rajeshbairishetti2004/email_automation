@@ -11,6 +11,7 @@ requireAuth(); // Ensure login
 $pdo = getPdo();
 
 $q      = isset($_GET['q']) ? trim($_GET['q']) : '';
+$filter = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $page   = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $limit  = 20;
 $offset = ($page - 1) * $limit;
@@ -19,8 +20,18 @@ $where  = '';
 $params = [];
 
 if ($q !== '') {
-    $where = "WHERE name LIKE :q OR as_on LIKE :q";
+    $where = "WHERE (name LIKE :q OR as_on LIKE :q)";
     $params[':q'] = '%' . $q . '%';
+}
+
+$validStates = ['draft', 'ready', 'reviewed', 'sent'];
+if ($filter !== '' && in_array($filter, $validStates, true)) {
+    if ($where === '') {
+        $where = "WHERE report_state = :filter_state";
+    } else {
+        $where .= " AND report_state = :filter_state";
+    }
+    $params[':filter_state'] = $filter;
 }
 
 // 1. Count Total Rows

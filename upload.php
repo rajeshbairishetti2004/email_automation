@@ -18,6 +18,33 @@ $currentUser = getCurrentUser();
 // --- FIX: Capture Creator ID from session (fallback to admin ID 1) ---
 $currentUserId = $_SESSION['user_id'] ?? 1;
 
+$pdo = getPdo();
+
+function fetchDashboardStats(PDO $pdo): array {
+    $baseStats = [
+        'draft' => 0,
+        'ready' => 0,
+        'reviewed' => 0,
+        'sent' => 0,
+    ];
+
+    $query = $pdo->query("
+        SELECT report_state, COUNT(*) AS total
+        FROM clients
+        GROUP BY report_state
+    ");
+
+    while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+        if (isset($baseStats[$row['report_state']])) {
+            $baseStats[$row['report_state']] = (int)$row['total'];
+        }
+    }
+
+    return $baseStats;
+}
+
+$stats = fetchDashboardStats($pdo);
+
 // Determine the correct name to display.
 $displayName = 'User';
 $nameForInitials = 'U';
@@ -440,6 +467,10 @@ $stmtGoal = $pdo->prepare("
     }
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
+    $stats = fetchDashboardStats($pdo);
+}
+
 /* ---------- INITIAL UPLOAD PAGE (GET) ---------- */
 ?>
 <!DOCTYPE html>
@@ -633,6 +664,60 @@ $stmtGoal = $pdo->prepare("
             margin-bottom: 20px;
             text-align: left; 
         }
+
+        /* Dashboard cards */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 35px 0 10px;
+        }
+
+        .dashboard-card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 22px 24px;
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+            border-left: 6px solid transparent;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            text-decoration: none;
+            color: #1e293b;
+            display: block;
+        }
+
+        .dashboard-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+        }
+
+        .dashboard-card .label {
+            font-size: 0.72rem;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 18px;
+            font-weight: 600;
+        }
+
+        .dashboard-card .value {
+            font-size: 2.75rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+            line-height: 1;
+        }
+
+        .dashboard-card.draft { border-left-color: #6c757d; }
+        .dashboard-card.draft .value { color: #475569; }
+
+        .dashboard-card.ready { border-left-color: #f59e0b; }
+        .dashboard-card.ready .value { color: #d97706; }
+
+        .dashboard-card.reviewed { border-left-color: #0ea5e9; }
+        .dashboard-card.reviewed .value { color: #0284c7; }
+
+        .dashboard-card.sent { border-left-color: #22c55e; }
+        .dashboard-card.sent .value { color: #16a34a; }
     </style>
 </head>
 <body>
@@ -671,6 +756,28 @@ $stmtGoal = $pdo->prepare("
             <input type="file" name="client_files[]" id="client_files" multiple required>
             <button type="submit">Create Reports</button>
         </form>
+    </div>
+
+    <div class="dashboard-grid">
+        <a href="view_saved_reports.php?filter=draft" class="dashboard-card draft">
+            <span class="label">Total Drafts</span>
+            <div class="value"><?php echo $stats['draft']; ?></div>
+        </a>
+
+        <a href="view_saved_reports.php?filter=ready" class="dashboard-card ready">
+            <span class="label">Ready for Review</span>
+            <div class="value"><?php echo $stats['ready']; ?></div>
+        </a>
+
+        <a href="view_saved_reports.php?filter=reviewed" class="dashboard-card reviewed">
+            <span class="label">Reviewed</span>
+            <div class="value"><?php echo $stats['reviewed']; ?></div>
+        </a>
+
+        <a href="view_saved_reports.php?filter=sent" class="dashboard-card sent">
+            <span class="label">Emails Sent</span>
+            <div class="value"><?php echo $stats['sent']; ?></div>
+        </a>
     </div>
 </div>
 
