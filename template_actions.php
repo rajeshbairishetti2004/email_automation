@@ -4,6 +4,48 @@
 
 require_once 'db_config.php';
 
+if (!function_exists('formatAnnexureLabel')) {
+    function formatAnnexureLabel($filename, $clientName = '') {
+        $name = pathinfo($filename, PATHINFO_FILENAME);
+        $nameLower = strtolower($name);
+
+        $dateStr = '';
+        if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
+            $day = ltrim($dateMatch[1], '0');
+            $mon = ucfirst(strtolower($dateMatch[2]));
+            $yearRaw = $dateMatch[3];
+            $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
+            $dateStr = $mon . ' ' . $day . ', ' . $year;
+        }
+
+        if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) ||
+            preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
+            return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
+        }
+
+        if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
+            return 'Current portfolio ' . $dateStr;
+        }
+
+        if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
+            return 'Goal report ' . $dateStr;
+        }
+
+        if (preg_match('/portfolio.*performance.*between/i', $nameLower) ||
+            preg_match('/portfolio.*performance.*from/i', $nameLower)) {
+            if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
+                return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
+            }
+            return 'Portfolio Performance from 1 Mar25- 4Dec25';
+        }
+
+        $name = str_replace('_', ' ', $name);
+        $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name);
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        return $name . ($dateStr ? ' ' . $dateStr : '');
+    }
+}
+
 $pdo = getPdo();
 $clientId = (int)($_GET['id'] ?? 0); // Get client ID from query string
 $ajax_action = $_POST['ajax_action'] ?? null;
@@ -232,6 +274,56 @@ try {
             } else {
                 throw new Exception("File not found.");
             }
+            break;
+
+        case 'rename_attachment':
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $oldName = basename($_POST['old_name'] ?? '');
+            $newNameRaw = $_POST['new_name'] ?? '';
+
+            if ($clientId <= 0 || $oldName === '' || trim($newNameRaw) === '') {
+                throw new Exception('Invalid parameters for rename.');
+            }
+
+            // Allow letters, numbers, spaces, dots, underscores and hyphens
+            $newName = preg_replace('/[^\w\s\.\-_]/u', '', $newNameRaw);
+            $newName = trim($newName);
+
+            if ($newName === '') {
+                throw new Exception('Renamed file is empty after sanitization.');
+            }
+
+            $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId . '/';
+            $oldPath = $baseDir . $oldName;
+            $newPath = $baseDir . $newName;
+
+            if (!file_exists($oldPath)) {
+                throw new Exception('Original file not found.');
+            }
+
+            if ($oldPath !== $newPath) {
+                if (file_exists($newPath)) {
+                    throw new Exception('A file with the new name already exists.');
+                }
+
+                if (!rename($oldPath, $newPath)) {
+                    throw new Exception('Filesystem rename failed.');
+                }
+            }
+
+            $clientName = '';
+            $stmt = $pdo->prepare('SELECT name FROM clients WHERE id = :id');
+            if ($stmt->execute([':id' => $clientId])) {
+                $clientName = (string)($stmt->fetchColumn() ?? '');
+            }
+
+            $displayLabel = formatAnnexureLabel($newName, $clientName);
+
+            echo json_encode([
+                'success' => true,
+                'file_name' => $newName,
+                'display_label' => $displayLabel
+            ]);
             break;
 
         default:

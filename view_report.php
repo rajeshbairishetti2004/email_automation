@@ -1080,10 +1080,14 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>
                     <?php else: ?>
                         <?php foreach ($existingFiles as $file): ?>
-                            <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;">
+                            <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;" data-filename="<?php echo htmlspecialchars($file); ?>">
                                 <span>📎 <strong><?php echo htmlspecialchars($file); ?></strong></span>
                                 <?php if ($canEditAttachments): ?>
-                                    <a href="#" onclick="deleteAttachment('<?php echo htmlspecialchars($file); ?>'); return false;" style="color: red; text-decoration: none; font-size: 12px;">🗑 Delete</a>
+                                    <span style="font-size: 12px;">
+                                        <a href="#" class="annex-edit" data-filename="<?php echo htmlspecialchars($file); ?>">✏️ Edit</a>
+                                        &nbsp;
+                                        <a href="#" class="annex-delete" data-filename="<?php echo htmlspecialchars($file); ?>">🗑 Delete</a>
+                                    </span>
                                 <?php else: ?>
                                     <span style="font-size: 11px; color: #999;">(Read Only)</span>
                                 <?php endif; ?>
@@ -1434,13 +1438,29 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     // Display inception file first if it exists
                     if ($inceptionFile) {
                         $label = formatAnnexureLabel($inceptionFile, $client['name'] ?? '');
-                        echo "<li>" . htmlspecialchars($label) . "</li>";
+                        echo '<li data-filename="' . htmlspecialchars($inceptionFile) . '" style="margin-bottom:8px; border-bottom:1px solid #eee; padding:5px 0; display:flex; justify-content:space-between; align-items:center;">';
+                        echo '<span>📎 <strong>' . htmlspecialchars($label) . '</strong></span>';
+                        if ($canEditAttachments) {
+                            echo '<span style="font-size:12px; margin-left:10px;">';
+                            echo '<a href="#" class="annex-edit" data-filename="' . htmlspecialchars($inceptionFile) . '">✏️ Edit</a> &nbsp;';
+                            echo '<a href="#" class="annex-delete" data-filename="' . htmlspecialchars($inceptionFile) . '">🗑 Delete</a>';
+                            echo '</span>';
+                        }
+                        echo '</li>';
                     }
                     
                     // Display remaining files
                     foreach ($sortedFiles as $file) {
                         $label = formatAnnexureLabel($file, $client['name'] ?? '');
-                        echo "<li>" . htmlspecialchars($label) . "</li>";
+                        echo '<li data-filename="' . htmlspecialchars($file) . '" style="margin-bottom:8px; border-bottom:1px solid #eee; padding:5px 0; display:flex; justify-content:space-between; align-items:center;">';
+                        echo '<span>📎 <strong>' . htmlspecialchars($label) . '</strong></span>';
+                        if ($canEditAttachments) {
+                            echo '<span style="font-size:12px; margin-left:10px;">';
+                            echo '<a href="#" class="annex-edit" data-filename="' . htmlspecialchars($file) . '">✏️ Edit</a> &nbsp;';
+                            echo '<a href="#" class="annex-delete" data-filename="' . htmlspecialchars($file) . '">🗑 Delete</a>';
+                            echo '</span>';
+                        }
+                        echo '</li>';
                     }
                 }
                 
@@ -2353,6 +2373,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     function createAttachmentLi(fileName, canEdit) {
         const li = document.createElement('li');
         li.style.cssText = "margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;";
+        li.dataset.filename = fileName;
         const escaped = escapeHtml(fileName);
         const actions = canEdit ? `<span><a href="#" class="annex-edit" data-filename="${escaped}">✏️ Edit</a> &nbsp; <a href="#" class="annex-delete" data-filename="${escaped}">🗑 Delete</a></span>` : '';
         li.innerHTML = `<span>📎 <strong>${escaped}</strong></span>${actions}`;
@@ -2364,6 +2385,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     function createAnnexureLi(fileName, canEdit) {
         const li = document.createElement('li');
         li.style.cssText = "margin-bottom: 8px; padding-bottom: 5px; display:flex; justify-content:space-between; align-items:center;";
+        li.dataset.filename = fileName;
         const escaped = escapeHtml(fileName);
         const left = document.createElement('span');
         left.innerHTML = `📎 <strong>${escaped}</strong>`;
@@ -2395,7 +2417,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             e.preventDefault();
             const fileName = e.target.getAttribute('data-filename');
             if (!fileName) return;
-            if (!confirm('Delete ' + fileName + '?')) return;
             deleteAttachment(fileName, e.target);
             return;
         }
@@ -2424,19 +2445,34 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             .then(res => res.json().catch(()=>({success:false, error:'Invalid JSON'})))
             .then(data => {
                 if (data.success) {
-                    // Update all occurrences of the filename in both lists
-                    document.querySelectorAll('[data-filename]').forEach(el => {
-                        if (el.getAttribute('data-filename') === fileName) {
-                            el.setAttribute('data-filename', newName);
+                    const effectiveName = data.file_name || newName;
+                    document.querySelectorAll('#attachment_list li[data-filename]').forEach(li => {
+                        if (li.dataset.filename === fileName) {
+                            li.dataset.filename = effectiveName;
+                            const strong = li.querySelector('strong');
+                            if (strong) {
+                                strong.textContent = effectiveName;
+                            }
+                            li.querySelectorAll('a[data-filename]').forEach(link => {
+                                link.setAttribute('data-filename', effectiveName);
+                            });
                         }
                     });
-                    // Update displayed text nodes: search annexures and attachments by exact text match
-                    document.querySelectorAll('#attachment_list li, #annexures_list li').forEach(li => {
-                        if (li.textContent && li.textContent.indexOf(fileName) !== -1) {
-                            li.innerHTML = li.innerHTML.replace(escapeHtml(fileName), escapeHtml(newName));
+
+                    const annexLabel = data.display_label || effectiveName;
+                    document.querySelectorAll('#annexures_list li[data-filename]').forEach(li => {
+                        if (li.dataset.filename === fileName) {
+                            li.dataset.filename = effectiveName;
+                            const strong = li.querySelector('strong');
+                            if (strong) {
+                                strong.textContent = annexLabel;
+                            }
+                            li.querySelectorAll('a[data-filename]').forEach(link => {
+                                link.setAttribute('data-filename', effectiveName);
+                            });
                         }
                     });
-                    showToast('Renamed: ' + newName);
+                    showToast('Renamed: ' + effectiveName);
                 } else {
                     alert('Rename failed: ' + (data.error || 'Server error'));
                 }
@@ -2463,12 +2499,15 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         .then(response => response.json().catch(()=>({success:false, error:'Invalid JSON'})))
         .then(data => {
             if (data.success) {
-                // remove matching list items from both lists
-                document.querySelectorAll('#attachment_list li, #annexures_list li').forEach(li => {
-                    if (li.textContent && li.textContent.indexOf(fileName) !== -1) {
-                        li.remove();
-                    }
-                });
+                const removeNodes = (selector) => {
+                    document.querySelectorAll(selector).forEach(li => {
+                        if (li.dataset.filename === fileName) {
+                            li.remove();
+                        }
+                    });
+                };
+                removeNodes('#attachment_list li[data-filename]');
+                removeNodes('#annexures_list li[data-filename]');
                 showToast('Deleted: ' + fileName);
             } else {
                 alert('Error: ' + (data.error || 'Delete failed'));

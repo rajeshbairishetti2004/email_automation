@@ -150,6 +150,34 @@
     const flash = document.getElementById('rationale_flash_container');
     const clientId = <?php echo json_encode((int)$clientId); ?>;
 
+    function findOptionByValue(val) {
+        if (!selector) return null;
+        const target = String(val);
+        for (const option of selector.options) {
+            if (option.value === target) return option;
+        }
+        return null;
+    }
+
+    function upsertTemplateOption(id, name, content) {
+        if (!selector) return null;
+        const value = String(id);
+        let opt = findOptionByValue(value);
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.value = value;
+            selector.appendChild(opt);
+        }
+        opt.textContent = name;
+        opt.setAttribute('data-content', content);
+        return opt;
+    }
+
+    function removeTemplateOption(id) {
+        const opt = findOptionByValue(id);
+        if (opt) opt.remove();
+    }
+
     function showFlash(type, msg) {
         flash.innerHTML = '<div class="flash-message ' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' + (type === 'success' ? '✅ ' : '❌ ') + msg + '</div>';
         setTimeout(() => { flash.innerHTML = ''; }, 3500);
@@ -196,8 +224,11 @@
             .then(r => r.json())
             .then(data => {
                 if (data && data.success) {
-                    showFlash('success','Template added. Reloading...');
-                    setTimeout(() => { window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&saved_template=1#rationale_module'; }, 700);
+                    if (data.template_id) {
+                        const opt = upsertTemplateOption(data.template_id, name.trim(), content);
+                        if (opt) selector.value = String(data.template_id);
+                    }
+                    showFlash('success','Template added successfully.');
                 } else {
                     throw new Error(data && data.error ? data.error : 'Save failed');
                 }
@@ -249,8 +280,12 @@
             .then(r => r.json())
             .then(data => {
                 if (data && data.success) {
-                    showFlash('success','Template saved. Reloading...');
-                    setTimeout(() => { window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&saved_template=1#rationale_module'; }, 700);
+                    const templateId = data.template_id || id;
+                    if (templateId) {
+                        const opt = upsertTemplateOption(templateId, name.trim(), content);
+                        if (opt) selector.value = String(templateId);
+                    }
+                    showFlash('success','Template saved successfully.');
                 } else {
                     showFlash('error','Save failed: ' + (data.error || 'Unknown'));
                 }
@@ -280,8 +315,9 @@
             .then(r => r.json())
             .then(data => {
                 if (data && data.success) {
-                    showFlash('success','Template deleted. Reloading...');
-                    setTimeout(() => { window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted_template=1#rationale_module'; }, 700);
+                    removeTemplateOption(id);
+                    selector.value = '0';
+                    showFlash('success','Template deleted successfully.');
                 } else {
                     showFlash('error','Delete failed: ' + (data.error || 'Unknown'));
                 }
