@@ -124,7 +124,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <th>ID</th>
                 <th>Client Name</th>
                 <th>Status</th> <th>As On</th>
-                <th>Created By</th>
+                <th>Drafted By</th>
                 <th>Created At</th>
                 <th>Action</th>
             </tr>

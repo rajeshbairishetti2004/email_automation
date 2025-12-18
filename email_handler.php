@@ -8,6 +8,25 @@ require_once 'env_loader.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+if (!function_exists('save_to_sent_folder')) {
+    /**
+     * Append the last sent email to Gmail's Sent Mail folder via IMAP.
+     * Returns true on success, false otherwise.
+     */
+    function save_to_sent_folder(PHPMailer $mail): bool {
+        $path = "{imap.gmail.com:993/imap/ssl}[Gmail]/Sent Mail";
+
+        $imapStream = @imap_open($path, $mail->Username, $mail->Password);
+        if ($imapStream) {
+            $result = @imap_append($imapStream, $path, $mail->getSentMIMEMessage());
+            imap_close($imapStream);
+            return (bool)$result;
+        }
+
+        return false;
+    }
+}
+
 function handleEmailSending($clientId) {
     $pdo = getPdo();
     
@@ -657,6 +676,7 @@ function handleEmailSending($clientId) {
             $mail->CharSet    = 'UTF-8';
 
             $mail->setFrom($smtpFromEmail, $smtpFromName);
+            $mail->addBCC($smtpFromEmail); // Ensure sender gets a copy
 
             // Add all recipients (TO and CC)
             foreach ($emailList as $email) {
@@ -683,6 +703,10 @@ function handleEmailSending($clientId) {
             }
 
             $mail->send();
+
+            if (!save_to_sent_folder($mail)) {
+                error_log('Unable to append email to Gmail Sent Mail folder for client ID ' . $clientId);
+            }
             
             // --- UPDATE REPORT STATUS TO 'SENT' ---
             $updateStmt = $pdo->prepare("
