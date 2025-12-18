@@ -31,6 +31,7 @@ function parsePortfolioValuation(string $path): array {
     $colCagr     = findColumnByKeywords($headerRow, ['cagr']);
     $colXirr     = findColumnByKeywords($headerRow, ['xirr']);
     $colClient   = findColumnByKeywords($headerRow, ['investor name', 'client name', 'holder']);
+    $colAbs      = findColumnByKeywords($headerRow, ['absolute return', 'abs return', 'absolute', 'abs %']);
 
     // Fallback: If "Client Name" column isn't found in the row, assume the file belongs to the main client from filename.
     // This aggregates Family holdings (Ganesh + Sudha) into one report if they are in the same file.
@@ -66,9 +67,18 @@ function parsePortfolioValuation(string $path): array {
 
         // Capture Grand Totals
         if (strpos($normScheme, 'grand total') !== false) {
+            $absoluteFromFile = null;
+            if ($colAbs !== null && isset($row[$colAbs])) {
+                $rawAbs = (string)$row[$colAbs];
+                if (trim($rawAbs) !== '') {
+                    $absoluteFromFile = parseIndianNumber($rawAbs);
+                }
+            }
+
             $grandTotals[$client] = [
-                'current' => $current,
-                'cagr'    => $cagr,
+                'current'          => $current,
+                'cagr'             => $cagr,
+                'absolute_return'  => $absoluteFromFile,
             ];
             continue;
         }
@@ -85,11 +95,12 @@ function parsePortfolioValuation(string $path): array {
             $data[$client] = [
                 'schemes' => [],
                 'totals'  => [
-                    'purchase' => 0,
-                    'current'  => 0,
-                    'profit'   => 0,
-                    'cagr_sum' => 0,
-                    'xirr_sum' => 0,
+                    'purchase'        => 0,
+                    'current'         => 0,
+                    'profit'          => 0,
+                    'cagr_sum'        => 0,
+                    'xirr_sum'        => 0,
+                    'absolute_return' => 0,
                 ]
             ];
         }
@@ -128,15 +139,33 @@ function parsePortfolioValuation(string $path): array {
 
     // Finalize weighted averages
     foreach ($data as $client => &$info) {
-        $cur = max($info['totals']['current'], 1);
-        $info['totals']['cagr_weighted'] = $info['totals']['cagr_sum'] / $cur;
-        $info['totals']['xirr_weighted'] = $info['totals']['xirr_sum'] / $cur;
+        $totals = &$info['totals'];
+        $curBase = max($totals['current'], 1);
+        $totals['cagr_weighted'] = $totals['cagr_sum'] / $curBase;
+        $totals['xirr_weighted'] = $totals['xirr_sum'] / $curBase;
 
-        // If Excel had a Grand Total row, prefer that for high-level accuracy
+        $fileGrandTotalAbs = null;
+
         if (isset($grandTotals[$client])) {
-            $info['totals']['current']       = $grandTotals[$client]['current'];
-            $info['totals']['cagr_weighted'] = $grandTotals[$client]['cagr'];
+            $totals['current']       = $grandTotals[$client]['current'];
+            $totals['cagr_weighted'] = $grandTotals[$client]['cagr'];
+            if (array_key_exists('absolute_return', $grandTotals[$client])) {
+                $fileGrandTotalAbs = $grandTotals[$client]['absolute_return'];
+            }
         }
+
+        $totalCost    = $totals['purchase'];
+        $totalCurrent = $totals['current'];
+
+        $finalAbsReturn = 0;
+        if ($fileGrandTotalAbs !== null) {
+            $finalAbsReturn = $fileGrandTotalAbs;
+        } elseif ($totalCost > 0) {
+            $finalAbsReturn = (($totalCurrent - $totalCost) / $totalCost) * 100;
+        }
+
+        $totals['profit']          = $totalCurrent - $totalCost;
+        $totals['absolute_return'] = $finalAbsReturn;
     }
 
     return $data;

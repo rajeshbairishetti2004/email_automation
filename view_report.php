@@ -600,6 +600,8 @@ $totalAmount       = (float)($client['total_amount'] ?? 0);
 $profit            = (float)($client['profit'] ?? 0);
 $cagr              = (float)($client['cagr'] ?? 0);
 $xirr              = (float)($client['xirr'] ?? 0);
+$absoluteReturnRaw = $client['absolute_return'] ?? null;
+$absoluteReturn    = ($absoluteReturnRaw !== null) ? (float)$absoluteReturnRaw : null;
 $totalGoalCurrent  = (float)($client['total_goal_current'] ?? 0);
 $totalGoalTarget   = (float)($client['total_goal_target'] ?? 0);
 $totalSip          = (float)($client['total_sip'] ?? 0);
@@ -1127,7 +1129,15 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <tr>
                     <!-- label switched dynamically by JS -->
                     <td id="returnLabel"><?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
-                    <td id="returnValueCell"><?php echo formatPercent($cagr); ?></td>
+                    <td id="returnValueCell">
+                        <?php
+                            if ($isOlderThan1Year == 0) {
+                                echo ($absoluteReturn !== null) ? formatPercent($absoluteReturn) : 'N/A';
+                            } else {
+                                echo formatPercent($cagr);
+                            }
+                        ?>
+                    </td>
                 </tr>
                 <?php
                     // XIRR row is present but may be hidden initially depending on server state
@@ -2062,9 +2072,9 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
             // Preformatted server-side strings to avoid client-side number formatting differences
             const cagrText = <?php echo json_encode(formatPercent($cagr)); ?>;
             const absoluteReturnText = <?php
-                // If absolute_return is present, format using existing helper; fallback to raw number
-                $absVal = isset($client['absolute_return']) && $client['absolute_return'] !== null ? (float)$client['absolute_return'] : null;
-                echo json_encode($absVal !== null ? formatRupeesLakhs($absVal, true) : 'N/A');
+                // Format as percentage when available, fallback to N/A
+                $absVal = ($absoluteReturn !== null) ? (float)$absoluteReturn : null;
+                echo json_encode($absVal !== null ? formatPercent($absVal) : 'N/A');
             ?>;
 
             window.updateCurrentSituation = function() {

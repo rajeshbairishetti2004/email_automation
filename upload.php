@@ -198,11 +198,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
         $stmtClient = $pdo->prepare("
             INSERT INTO clients
-                (name, as_on, total_amount, profit, cagr, xirr,
+                (name, as_on, total_amount, profit, cagr, xirr, absolute_return,
                  total_goal_current, total_goal_target, total_sip,
                  greeting_prefix, intro_text, closing_text, rationale_text, created_by)
             VALUES
-                (:name, :as_on, :total_amount, :profit, :cagr, :xirr,
+                (:name, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
                  :total_goal_current, :total_goal_target, :total_sip,
                  :greeting_prefix, :intro_text, :closing_text, :rationale_text, :created_by)
         ");
@@ -270,11 +270,12 @@ $stmtGoal = $pdo->prepare("
             $goals      = $data['goals'] ?? [];
 
             $totals  = $data['current']['totals'] ?? [
-                'purchase'      => 0,
-                'current'       => 0,
-                'profit'        => 0,
-                'cagr_weighted' => 0,
-                'xirr_weighted' => 0
+                'purchase'        => 0,
+                'current'         => 0,
+                'profit'          => 0,
+                'cagr_weighted'   => 0,
+                'xirr_weighted'   => 0,
+                'absolute_return' => 0,
             ];
             $summary = $data['current']['summary'] ?? null;
 
@@ -282,6 +283,7 @@ $stmtGoal = $pdo->prepare("
             $profit      = $summary['profit'] ?? $totals['profit'];
             $cagr        = $totals['cagr_weighted'];
             $xirr        = $summary['xirr'] ?? $totals['xirr_weighted'];
+            $absoluteReturn = $totals['absolute_return'] ?? 0;
 
             $totalSip         = 0;
             $totalGoalCurrent = 0;
@@ -315,6 +317,7 @@ $stmtGoal = $pdo->prepare("
                 ':profit'             => $profit,
                 ':cagr'               => $cagr,
                 ':xirr'               => $xirr,
+                ':absolute_return'    => $absoluteReturn,
                 ':total_goal_current' => $totalGoalCurrent,
                 ':total_goal_target'  => $totalGoalTarget,
                 ':total_sip'          => $totalSip,
