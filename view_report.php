@@ -23,7 +23,7 @@ if ($clientId <= 0) {
     }
 }
 
-// Fetch current user details for the header and defaults
+// // Fetch current user details for the header and defaults
 $currentUser = getCurrentUser();
 
 // Determine the correct name and initials for the header
