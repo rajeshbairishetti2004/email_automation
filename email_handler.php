@@ -234,6 +234,9 @@ function handleEmailSending($clientId) {
         $profit      = (float)($client['profit'] ?? 0);
         $cagr        = (float)($client['cagr'] ?? 0);
         $xirr        = (float)($client['xirr'] ?? 0);
+        $absoluteReturnRaw = $client['absolute_return'] ?? null;
+        $absoluteReturn    = ($absoluteReturnRaw !== null) ? (float)$absoluteReturnRaw : null;
+        $isOlderThanOneYear = (int)($client['is_older_than_1_year'] ?? 1);
         $totalGoalCurrent = (float)($client['total_goal_current'] ?? 0);
         $totalGoalTarget  = (float)($client['total_goal_target'] ?? 0);
         $totalSip         = (float)($client['total_sip'] ?? 0);
@@ -379,10 +382,18 @@ function handleEmailSending($clientId) {
                 <td><?php echo formatAmount($totalAmount); ?></td>
             </tr>
             <tr>
-                <td><?php echo (($client['is_older_than_1_year'] ?? 1) == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
-                <td><?php echo formatPercent($cagr); ?></td>
+                <td><?php echo ($isOlderThanOneYear === 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
+                <td>
+                    <?php
+                        if ($isOlderThanOneYear === 0) {
+                            echo ($absoluteReturn !== null) ? formatPercent($absoluteReturn) : 'N/A';
+                        } else {
+                            echo formatPercent($cagr);
+                        }
+                    ?>
+                </td>
             </tr>
-            <?php if (($client['is_older_than_1_year'] ?? 1) == 1 && $xirr != 0): ?>
+            <?php if ($isOlderThanOneYear === 1 && $xirr != 0): ?>
                 <tr>
                     <td>XIRR of all schemes since inception</td>
                     <td><?php echo formatPercent($xirr); ?></td>
@@ -456,7 +467,7 @@ function handleEmailSending($clientId) {
             </tbody>
         </table>
 
-        <h4>3. Appropriate Product Selection at a macro level</h4>
+        <h4>3. Appropriate Asset Allocation</h4>
         <?php
         // Ensure Gold always exists in allocations
         $hasGold = false;
@@ -538,10 +549,18 @@ function handleEmailSending($clientId) {
 
         <h4>4. Appropriate Scheme Selection</h4>
         <table>
+            <colgroup>
+                <col style="width: 26%;">
+                <col style="width: 16%;">
+                <col style="width: 17%;">
+                <col style="width: 15%;">
+                <col style="width: 16%;">
+                <col style="width: 10%;">
+            </colgroup>
             <thead>
                 <tr>
                     <th colspan="3">Present Schemes</th>
-                    <th rowspan="2" style="width: 100px;">Action Step</th>
+                    <th rowspan="2" style="width: 18%;">Action Step</th>
                     <th colspan="2">Recommended Schemes</th>
                 </tr>
                 <tr>

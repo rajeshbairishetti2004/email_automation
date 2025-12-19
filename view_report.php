@@ -1260,7 +1260,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <span id="saveGoalsStatus" style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">✓ Saved</span>
             </div>
 
-            <h3>3. Appropriate Product Selection at a macro level</h3>
+            <h3>3. Appropriate Asset Allocation</h3>
             <div style="max-width: 100%; margin: 20px auto; display: flex; justify-content: center;">
                 <canvas id="allocationChart" style="max-height: 300px; max-width: 100%;"></canvas>
             </div>
