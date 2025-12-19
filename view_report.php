@@ -100,46 +100,10 @@ if (!function_exists('formatAnnexureLabel')) {
     // Map filenames to descriptive labels with dates
     function formatAnnexureLabel($filename, $clientName = '') {
         $name = pathinfo($filename, PATHINFO_FILENAME);
-        $nameLower = strtolower($name);
-        
-        // Extract date from filename (e.g., 4Dec25 or 04Dec2025)
-        $dateStr = '';
-        if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
-            $day = ltrim($dateMatch[1], '0');
-            $mon = ucfirst(strtolower($dateMatch[2]));
-            $yearRaw = $dateMatch[3];
-            $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
-            $dateStr = $mon . ' ' . $day . ', ' . $year;
+        if ($name === '') {
+            return $filename;
         }
-        
-        // Map known filename patterns to descriptive labels
-        if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
-            preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
-            return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
-        }
-        
-        if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
-            return 'Current portfolio ' . $dateStr;
-        }
-        
-        if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
-            return 'Goal report ' . $dateStr;
-        }
-        
-        if (preg_match('/portfolio.*performance.*between/i', $nameLower) || 
-            preg_match('/portfolio.*performance.*from/i', $nameLower)) {
-            // Extract date range if present
-            if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
-                return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
-            }
-            return 'Portfolio Performance from 1 Mar25- 4Dec25';
-        }
-        
-        // Fallback: clean up the filename
-        $name = str_replace('_', ' ', $name);
-        $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name); // Remove trailing client name
-        $name = preg_replace('/\s+/', ' ', trim($name));
-        return $name . ($dateStr ? ' ' . $dateStr : '');
+        return $name;
     }
 }
 
@@ -2303,7 +2267,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 ali.id = 'prov_annex_' + tempId;
                 ali.className = 'provisional';
                 ali.style.cssText = "margin-bottom: 8px; padding-bottom: 5px; color:#666;";
-                ali.innerHTML = `📎 ${escapeHtml(f.name)} <em style="font-size:12px;color:#666;">(pending)</em>`;
+                ali.innerHTML = `📎 ${escapeHtml(getAnnexureLabel(f.name))} <em style="font-size:12px;color:#666;">(pending)</em>`;
                 annexList.appendChild(ali);
             }
         }
@@ -2386,7 +2350,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         const li = document.createElement('li');
         li.style.cssText = "margin-bottom: 8px; padding-bottom: 5px; display:flex; justify-content:space-between; align-items:center;";
         li.dataset.filename = fileName;
-        const escaped = escapeHtml(fileName);
+        const label = getAnnexureLabel(fileName);
+        const escaped = escapeHtml(label);
         const left = document.createElement('span');
         left.innerHTML = `📎 <strong>${escaped}</strong>`;
         li.appendChild(left);
@@ -2394,10 +2359,16 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         if (canEdit) {
             const actions = document.createElement('span');
             actions.style.fontSize = '12px';
-            actions.innerHTML = `<a href="#" class="annex-edit" data-filename="${escaped}" style="margin-right:10px;">✏️ Edit</a><a href="#" class="annex-delete" data-filename="${escaped}">🗑 Delete</a>`;
+            const originalNameEscaped = escapeHtml(fileName);
+            actions.innerHTML = `<a href="#" class="annex-edit" data-filename="${originalNameEscaped}" style="margin-right:10px;">✏️ Edit</a><a href="#" class="annex-delete" data-filename="${originalNameEscaped}">🗑 Delete</a>`;
             li.appendChild(actions);
         }
         return li;
+    }
+
+    function getAnnexureLabel(fileName) {
+        if (!fileName) return '';
+        return fileName.replace(/\.pdf$/i, '');
     }
 
     // Utility: escape HTML for insertion

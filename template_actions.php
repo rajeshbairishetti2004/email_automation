@@ -7,42 +7,10 @@ require_once 'db_config.php';
 if (!function_exists('formatAnnexureLabel')) {
     function formatAnnexureLabel($filename, $clientName = '') {
         $name = pathinfo($filename, PATHINFO_FILENAME);
-        $nameLower = strtolower($name);
-
-        $dateStr = '';
-        if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
-            $day = ltrim($dateMatch[1], '0');
-            $mon = ucfirst(strtolower($dateMatch[2]));
-            $yearRaw = $dateMatch[3];
-            $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
-            $dateStr = $mon . ' ' . $day . ', ' . $year;
+        if ($name === '') {
+            return $filename;
         }
-
-        if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) ||
-            preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
-            return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
-        }
-
-        if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
-            return 'Current portfolio ' . $dateStr;
-        }
-
-        if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
-            return 'Goal report ' . $dateStr;
-        }
-
-        if (preg_match('/portfolio.*performance.*between/i', $nameLower) ||
-            preg_match('/portfolio.*performance.*from/i', $nameLower)) {
-            if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
-                return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
-            }
-            return 'Portfolio Performance from 1 Mar25- 4Dec25';
-        }
-
-        $name = str_replace('_', ' ', $name);
-        $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name);
-        $name = preg_replace('/\s+/', ' ', trim($name));
-        return $name . ($dateStr ? ' ' . $dateStr : '');
+        return $name;
     }
 }
 

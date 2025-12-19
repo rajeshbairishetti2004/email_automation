@@ -111,46 +111,10 @@ function handleEmailSending($clientId) {
         // Map filenames to descriptive labels with dates
         function formatAnnexureLabel($filename, $clientName = '') {
             $name = pathinfo($filename, PATHINFO_FILENAME);
-            $nameLower = strtolower($name);
-            
-            // Extract date from filename (e.g., 4Dec25 or 04Dec2025)
-            $dateStr = '';
-            if (preg_match('/(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(\d{2,4})/i', $name, $dateMatch)) {
-                $day = ltrim($dateMatch[1], '0');
-                $mon = ucfirst(strtolower($dateMatch[2]));
-                $yearRaw = $dateMatch[3];
-                $year = (strlen($yearRaw) === 2) ? ('20' . $yearRaw) : $yearRaw;
-                $dateStr = $mon . ' ' . $day . ', ' . $year;
+            if ($name === '') {
+                return $filename;
             }
-            
-            // Map known filename patterns to descriptive labels
-            if (preg_match('/portfolio.*performance.*since.*inception/i', $nameLower) || 
-                preg_match('/portfolio.*performance.*inception/i', $nameLower)) {
-                return 'PDF document showing portfolio performance from inception including redeemed schemes ' . $dateStr;
-            }
-            
-            if (preg_match('/current.*portfolio/i', $nameLower) || preg_match('/portfolio.*valuation/i', $nameLower)) {
-                return 'Current portfolio ' . $dateStr;
-            }
-            
-            if (preg_match('/goal.*status.*report/i', $nameLower) || preg_match('/goal.*report/i', $nameLower)) {
-                return 'Goal report ' . $dateStr;
-            }
-            
-            if (preg_match('/portfolio.*performance.*between/i', $nameLower) || 
-                preg_match('/portfolio.*performance.*from/i', $nameLower)) {
-                // Extract date range if present
-                if (preg_match('/(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4}).*?(\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\d{2,4})/i', $name, $rangeMatch)) {
-                    return 'Portfolio Performance from ' . trim($rangeMatch[1]) . '- ' . trim($rangeMatch[2]);
-                }
-                return 'Portfolio Performance from 1 Mar25- 4Dec25';
-            }
-            
-            // Fallback: clean up the filename
-            $name = str_replace('_', ' ', $name);
-            $name = preg_replace('/\s*-\s*[A-Z0-9]+\s*$/i', '', $name); // Remove trailing client name
-            $name = preg_replace('/\s+/', ' ', trim($name));
-            return $name . ($dateStr ? ' ' . $dateStr : '');
+            return $name;
         }
     }
 
