@@ -10,32 +10,49 @@ requireAuth(); // Ensure login
 
 $pdo = getPdo();
 
-$q      = isset($_GET['q']) ? trim($_GET['q']) : '';
-$filter = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$page   = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$limit  = 20;
-$offset = ($page - 1) * $limit;
+$navUser = $_SESSION['username'] ?? 'User';
+$currentPage = basename($_SERVER['PHP_SELF']);
+$myId = (int)($_SESSION['user_id'] ?? 0);
 
-$where  = '';
+$q           = isset($_GET['q']) ? trim($_GET['q']) : '';
+$filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'mine';
+$page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$limit       = 20;
+$offset      = ($page - 1) * $limit;
+
+$whereParts = [];
 $params = [];
 
 if ($q !== '') {
-    $where = "WHERE (name LIKE :q OR as_on LIKE :q)";
+    $whereParts[] = "(c.name LIKE :q OR c.as_on LIKE :q)";
     $params[':q'] = '%' . $q . '%';
 }
 
-$validStates = ['draft', 'ready', 'reviewed', 'sent'];
+$validStates = ['pending', 'draft', 'ready', 'reviewed', 'sent'];
 if ($filter !== '' && in_array($filter, $validStates, true)) {
-    if ($where === '') {
-        $where = "WHERE report_state = :filter_state";
-    } else {
-        $where .= " AND report_state = :filter_state";
-    }
+    // Explicit filter requested (e.g., user clicked a card)
+    $whereParts[] = "c.report_state = :filter_state";
     $params[':filter_state'] = $filter;
+} else {
+    // Default view: hide pending allocations
+    $whereParts[] = "c.report_state != 'pending'";
 }
 
+if ($ownerFilter === 'mine' || $ownerFilter === '') {
+    $whereParts[] = "c.assigned_to = :owner_id";
+    $params[':owner_id'] = $myId;
+} elseif ($ownerFilter === 'all') {
+    // no additional filter
+} elseif (ctype_digit($ownerFilter)) {
+    $whereParts[] = "c.assigned_to = :owner_id";
+    $params[':owner_id'] = (int)$ownerFilter;
+}
+
+$where = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+
 // 1. Count Total Rows
-$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients {$where}");
+$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$where}");
 $stmtCount->execute($params);
 $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
@@ -43,17 +60,21 @@ $totalPages = max(1, (int)ceil($totalRows / $limit));
 // 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.total_amount, c.profit, 
-           c.report_state, c.review_not_ok, c.review_comment, c.created_by,
-           u.username as creator_username
+           c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to,
+           c.priority,
+           u.username as creator_username,
+           owner.username AS owner_name
     FROM clients c
     LEFT JOIN users u ON c.created_by = u.id
+    LEFT JOIN users owner ON c.assigned_to = owner.id
     {$where}
     ORDER BY c.created_at DESC, c.id DESC
     LIMIT :limit OFFSET :offset
 ");
 
 foreach ($params as $k => $v) {
-    $stmt->bindValue($k, $v, PDO::PARAM_STR);
+    $paramType = is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR;
+    $stmt->bindValue($k, $v, $paramType);
 }
 $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
@@ -103,16 +124,44 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
 
-<div class="container">
-    <div class="nav-bar">
-        <a href="upload.php" class="nav-button">Upload New Files</a>
-        <a href="view_saved_reports.php" class="nav-button">View Saved Reports</a>
+<nav class="navbar" style="background:#fff;border-bottom:1px solid #e0e0e0;padding:15px 30px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.05);margin-bottom:20px;font-family:'Segoe UI',system-ui,sans-serif;">
+    <div style="display:flex;align-items:center;">
+        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">Finance Doctor</a>
+        <div class="nav-links" style="display:flex;gap:18px;">
+            <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'upload.php' ? 'color:#1565c0;' : ''; ?>">Dashboard</a>
+            <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'view_saved_reports.php' ? 'color:#1565c0;' : ''; ?>">All Reports</a>
+            <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'bulk_import.php' ? 'color:#1565c0;' : ''; ?>">Bulk Allocate</a>
+        </div>
     </div>
+    <div class="nav-user" style="display:flex;align-items:center;gap:12px;font-size:0.95rem;color:#777;">
+        <span>👤 <?php echo htmlspecialchars($navUser); ?></span>
+        <a href="logout.php" class="btn-logout" style="text-decoration:none;padding:6px 14px;background-color:#ffebee;color:#c62828;border-radius:6px;font-weight:700;font-size:0.85rem;">Logout</a>
+    </div>
+</nav>
+
+<div class="container">
 
     <h1>Stored Client Reports</h1>
 
-    <form method="get" class="search-box">
+    <form method="get" class="search-box" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
         <input type="text" name="q" placeholder="Search by name or date..." value="<?php echo htmlspecialchars($q); ?>">
+        <select name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
+            <option value="mine" <?php echo ($ownerFilter === 'mine' || $ownerFilter === '') ? 'selected' : ''; ?>>My Clients</option>
+            <option value="all" <?php echo ($ownerFilter === 'all') ? 'selected' : ''; ?>>All Clients</option>
+            <?php
+            $userOptions = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($userOptions as $uOpt): ?>
+                <option value="<?php echo (int)$uOpt['id']; ?>" <?php echo ((string)$ownerFilter === (string)$uOpt['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($uOpt['username']); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <select name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
+            <option value="">All States</option>
+            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Pending (Not Sent)</option>
+            <option value="draft" <?php echo ($filter === 'draft') ? 'selected' : ''; ?>>Draft</option>
+            <option value="ready" <?php echo ($filter === 'ready') ? 'selected' : ''; ?>>Ready</option>
+            <option value="reviewed" <?php echo ($filter === 'reviewed') ? 'selected' : ''; ?>>Reviewed</option>
+            <option value="sent" <?php echo ($filter === 'sent') ? 'selected' : ''; ?>>Sent</option>
+        </select>
         <button type="submit">Search</button>
     </form>
 
@@ -123,7 +172,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <tr>
                 <th>ID</th>
                 <th>Client Name</th>
-                <th>Status</th> <th>As On</th>
+                <th>AUM</th> <th>Status</th> <th>As On</th>
                 <th>Drafted By</th>
                 <th>Created At</th>
                 <th>Action</th>
@@ -162,10 +211,18 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <tr>
                     <td><?php echo (int)$c['id']; ?></td>
                     <td>
-                        <?php echo htmlspecialchars($c['name']); ?>
+                        <div style="font-weight: 600; color: #333;">
+                            <?php echo htmlspecialchars($c['name']); ?>
+                        </div>
+                        <div style="font-size: 12px; color: #888;">
+                            <?php echo htmlspecialchars($c['as_on'] ?? ''); ?>
+                        </div>
                         <?php if($hasAttachments): ?>
                             <span title="Has Attachments">📎</span>
                         <?php endif; ?>
+                    </td>
+                    <td style="font-family: monospace; font-size: 13px; color: #444;">
+                        <?php echo '₹ ' . number_format((float)($c['total_amount'] ?? 0), 0); ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
                     <td>
@@ -192,6 +249,8 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 } else {
                     $params = ['page' => $p];
                     if ($q !== '') $params['q'] = $q;
+                    if ($filter !== '') $params['filter'] = $filter;
+                    if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
                     $url = 'view_saved_reports.php?' . http_build_query($params);
                     echo "<a href=\"{$url}\">{$p}</a> ";
                 }

@@ -20,8 +20,57 @@ $currentUserId = $_SESSION['user_id'] ?? 1;
 
 $pdo = getPdo();
 
+// My workload stats (current user)
+$myId = (int)($_SESSION['user_id'] ?? 0);
+$myStatsStmt = $pdo->prepare("
+    SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN report_state = 'pending' THEN 1 ELSE 0 END) as count_pending,
+        SUM(CASE WHEN report_state = 'draft' THEN 1 ELSE 0 END) as count_draft,
+        SUM(CASE WHEN report_state = 'ready' THEN 1 ELSE 0 END) as count_ready,
+        SUM(CASE WHEN report_state = 'reviewed' THEN 1 ELSE 0 END) as count_reviewed,
+        SUM(CASE WHEN report_state = 'sent' THEN 1 ELSE 0 END) as count_sent
+    FROM clients 
+    WHERE assigned_to = :uid
+");
+$myStatsStmt->execute([':uid' => $currentUserId]);
+$myStats = $myStatsStmt->fetch(PDO::FETCH_ASSOC) ?: [
+    'total' => 0,
+    'count_pending' => 0,
+    'count_draft' => 0,
+    'count_ready' => 0,
+    'count_reviewed' => 0,
+    'count_sent' => 0,
+];
+
+// Team leaderboard stats
+$teamQuery = $pdo->query("
+    SELECT 
+        u.id,
+        u.username, 
+        u.designation,
+        COUNT(c.id) as total_assigned,
+        SUM(CASE WHEN c.report_state = 'sent' THEN 1 ELSE 0 END) as sent_count,
+        SUM(CASE WHEN c.report_state != 'sent' THEN 1 ELSE 0 END) as pending_count,
+        SUM(CASE WHEN c.priority = 'High' AND c.report_state != 'sent' THEN 1 ELSE 0 END) as `high_priority`
+    FROM users u
+    LEFT JOIN clients c ON u.id = c.assigned_to
+    GROUP BY u.id
+    HAVING total_assigned > 0
+    ORDER BY pending_count DESC
+");
+$teamStats = $teamQuery->fetchAll(PDO::FETCH_ASSOC);
+
+function safePercent(int $part, int $whole): int {
+    if ($whole <= 0) {
+        return 0;
+    }
+    return (int)round(($part / $whole) * 100);
+}
+
 function fetchDashboardStats(PDO $pdo): array {
     $baseStats = [
+        'pending' => 0,
         'draft' => 0,
         'ready' => 0,
         'reviewed' => 0,
@@ -197,15 +246,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
         $pdo = getPdo();
 
         $stmtClient = $pdo->prepare("
-            INSERT INTO clients
-                (name, as_on, total_amount, profit, cagr, xirr, absolute_return,
-                 total_goal_current, total_goal_target, total_sip,
-                 greeting_prefix, intro_text, closing_text, rationale_text, created_by)
-            VALUES
-                (:name, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
-                 :total_goal_current, :total_goal_target, :total_sip,
-                 :greeting_prefix, :intro_text, :closing_text, :rationale_text, :created_by)
+                    INSERT INTO clients
+                        (name, as_on, total_amount, profit, cagr, xirr, absolute_return,
+                         total_goal_current, total_goal_target, total_sip,
+                         greeting_prefix, intro_text, closing_text, rationale_text, created_by, report_state)
+                    VALUES
+                        (:name, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
+                         :total_goal_current, :total_goal_target, :total_sip,
+                         :greeting_prefix, :intro_text, :closing_text, :rationale_text, :created_by, :report_state)
+                ");
+
+        $checkClient = $pdo->prepare("SELECT id, report_state FROM clients WHERE name = :name LIMIT 1");
+        $updateClient = $pdo->prepare("
+            UPDATE clients
+            SET report_state = 'ready',
+                as_on = :as_on,
+                total_amount = :total_amount,
+                profit = :profit,
+                cagr = :cagr,
+                xirr = :xirr,
+                absolute_return = :absolute_return,
+                total_goal_current = :total_goal_current,
+                total_goal_target = :total_goal_target,
+                total_sip = :total_sip,
+                greeting_prefix = :greeting_prefix,
+                intro_text = :intro_text,
+                closing_text = :closing_text,
+                rationale_text = :rationale_text,
+                updated_at = NOW()
+            WHERE id = :id
         ");
+
+        $wipeGoals  = $pdo->prepare("DELETE FROM client_goals WHERE client_id = :cid");
+        $wipeAlloc  = $pdo->prepare("DELETE FROM client_allocations WHERE client_id = :cid");
+        $wipeSchemes= $pdo->prepare("DELETE FROM client_schemes WHERE client_id = :cid");
+        $wipeAnnex  = $pdo->prepare("DELETE FROM client_annexures WHERE client_id = :cid");
 
 $stmtGoal = $pdo->prepare("
     INSERT INTO client_goals
@@ -251,11 +326,6 @@ $stmtGoal = $pdo->prepare("
                 <link rel="stylesheet" href="public/css/styles.css">
                 <style>body { font-family: Arial, sans-serif; margin: 20px; }</style>
             </head>
-            <body>
-            <div class='flash flash-error'>No client data could be extracted. Please check that the correct files were uploaded.</div>
-            <a href="upload.php" class="nav-button">Back to Upload</a>
-            </body>
-            </html>
             <?php
             exit;
         }
@@ -264,6 +334,7 @@ $stmtGoal = $pdo->prepare("
             if (!empty($validSet) && !isset($validSet[$data['name']])) continue;
 
             $name       = $data['name'];
+            $clientName = trim((string)$name);
             $asOn       = $data['as_on'] ?? '';
             $allocation = $data['allocation'] ?? [];
             $schemes    = $data['schemes'] ?? [];
@@ -302,36 +373,67 @@ $stmtGoal = $pdo->prepare("
                 }
             }
 
-            // --- DUPLICATE CLEANUP: remove existing rows for same name + as_on ---
-            if ($asOn !== '') {
-                $delStmt = $pdo->prepare("DELETE FROM clients WHERE name = :name AND as_on = :as_on");
-                $delStmt->execute([':name' => $name, ':as_on' => $asOn]);
-            }
+            // ----- UPSERT MASTER ROW -----
+            $checkClient->execute([':name' => $clientName]);
+            $existingRow = $checkClient->fetch(PDO::FETCH_ASSOC) ?: null;
+            $existingId = $existingRow['id'] ?? null;
 
-            // ----- SAVE MASTER ROW -----
-            $userId = $currentUserId; // Use session user ID (fallback 1) to track creator
-            $stmtClient->execute([
-                ':name'               => $name,
-                ':as_on'              => $asOn,
-                ':total_amount'       => $totalAmount,
-                ':profit'             => $profit,
-                ':cagr'               => $cagr,
-                ':xirr'               => $xirr,
-                ':absolute_return'    => $absoluteReturn,
-                ':total_goal_current' => $totalGoalCurrent,
-                ':total_goal_target'  => $totalGoalTarget,
-                ':total_sip'          => $totalSip,
-                ':greeting_prefix'    => $DEFAULT_GREETING,
-                ':intro_text'         => $DEFAULT_INTRO,
-                ':closing_text'       => $DEFAULT_CLOSING,
-                ':rationale_text'     => $DEFAULT_RATIONALE,
-                ':created_by'         => $userId,
-            ]);
+            if ($existingId) {
+                $clientId = (int)$existingId;
 
-            $clientId = (int)$pdo->lastInsertId();
-            
-            if ($firstClientId === 0) { // Track the first generated ID
-                $firstClientId = $clientId;
+                // Replace details and mark as ready when a pending allocation receives data
+                $updateClient->execute([
+                    ':as_on'              => $asOn,
+                    ':total_amount'       => $totalAmount,
+                    ':profit'             => $profit,
+                    ':cagr'               => $cagr,
+                    ':xirr'               => $xirr,
+                    ':absolute_return'    => $absoluteReturn,
+                    ':total_goal_current' => $totalGoalCurrent,
+                    ':total_goal_target'  => $totalGoalTarget,
+                    ':total_sip'          => $totalSip,
+                    ':greeting_prefix'    => $DEFAULT_GREETING,
+                    ':intro_text'         => $DEFAULT_INTRO,
+                    ':closing_text'       => $DEFAULT_CLOSING,
+                    ':rationale_text'     => $DEFAULT_RATIONALE,
+                    ':id'                 => $clientId,
+                ]);
+
+                if ($firstClientId === 0) {
+                    $firstClientId = $clientId;
+                }
+
+                // Clear old children to avoid duplicates before reinserting fresh data
+                $wipeGoals->execute([':cid' => $clientId]);
+                $wipeAlloc->execute([':cid' => $clientId]);
+                $wipeSchemes->execute([':cid' => $clientId]);
+                $wipeAnnex->execute([':cid' => $clientId]);
+            } else {
+                $userId = $currentUserId; // Use session user ID (fallback 1) to track creator
+                $stmtClient->execute([
+                    ':name'               => $clientName,
+                    ':as_on'              => $asOn,
+                    ':total_amount'       => $totalAmount,
+                    ':profit'             => $profit,
+                    ':cagr'               => $cagr,
+                    ':xirr'               => $xirr,
+                    ':absolute_return'    => $absoluteReturn,
+                    ':total_goal_current' => $totalGoalCurrent,
+                    ':total_goal_target'  => $totalGoalTarget,
+                    ':total_sip'          => $totalSip,
+                    ':greeting_prefix'    => $DEFAULT_GREETING,
+                    ':intro_text'         => $DEFAULT_INTRO,
+                    ':closing_text'       => $DEFAULT_CLOSING,
+                    ':rationale_text'     => $DEFAULT_RATIONALE,
+                    ':created_by'         => $userId,
+                    ':report_state'       => 'draft',
+                ]);
+
+                $clientId = (int)$pdo->lastInsertId();
+
+                if ($firstClientId === 0) { // Track the first generated ID
+                    $firstClientId = $clientId;
+                }
             }
 
             $savedCount++;
@@ -476,345 +578,203 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['ajax'])) {
 
 /* ---------- INITIAL UPLOAD PAGE (GET) ---------- */
 ?>
+<?php 
+$navUser = $_SESSION['username'] ?? ($currentUser['username'] ?? 'User');
+$currentPage = basename($_SERVER['PHP_SELF']);
+?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Upload Client Files</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Center</title>
     <link rel="stylesheet" href="public/css/styles.css">
-    
     <style>
-        /* General layout adjustments */
-        body { 
-            margin: 0; 
-            padding: 0; 
-            background-color: #f7f9fb;
-            font-family: 'Inter', sans-serif;
-        }
+        /* Navigation */
+        body { margin: 0; background: #f4f6fb; font-family: 'Inter', sans-serif; color: #0f172a; }
+        .navbar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 15px 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 6px rgba(15,23,42,0.08); }
+        .nav-left { display: flex; align-items: center; gap: 28px; }
+        .nav-brand { font-size: 1.2rem; font-weight: 700; color: #1e293b; text-decoration: none; letter-spacing: 0.01em; }
+        .nav-links a { margin-right: 18px; text-decoration: none; font-weight: 600; color: #5b6475; padding-bottom: 3px; border-bottom: 2px solid transparent; }
+        .nav-links a.active { color: #1565c0; border-color: #1565c0; }
+        .nav-links a:last-child { margin-right: 0; }
+        .nav-user { display: flex; align-items: center; gap: 12px; font-size: 0.95rem; color: #475569; }
+        .btn-logout { text-decoration: none; padding: 8px 14px; background: #ffebee; color: #c62828; border-radius: 8px; font-weight: 700; font-size: 0.85rem; }
+        .btn-logout:hover { background: #ffcdd2; }
 
-        /* --- FULL WIDTH HEADER BAR --- */
-        .full-width-header-bar {
-            width: 100%;
-            background-color: white; 
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
+        .wrap { max-width: 1200px; margin: 0 auto; padding: 26px 20px 60px; }
+        h1 { margin: 8px 0 10px; font-family: 'Poppins', sans-serif; font-size: 30px; color: #0f172a; }
+        p.lead { margin: 0 0 24px; color: #6b7280; font-size: 15px; }
 
-        /* Header content constrained to max-width */
-        .header {
-            max-width: 1200px; 
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px; 
-        }
-        
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-        .header-left img {
-            width: 50px; 
-            height: 50px;
-            margin-right: 15px;
-            object-fit: contain;
-        }
-        .header-left .greeting {
-            font-size: 24px; 
-            font-weight: 700; 
-            color: #0288D1; 
-            font-family: 'Poppins', sans-serif;
-        }
+        /* My stats cards (5-col) */
+        .row { width: 100%; display: flex; flex-wrap: wrap; margin: 0 -10px; }
+        .col-md-20p { width: 20%; padding: 0 10px; box-sizing: border-box; }
+        .stats-card { display: block; padding: 20px; border-radius: 8px; text-decoration: none; color: #333; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); background: white; border-left: 4px solid #ccc; }
+        .stats-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .stats-card .number { font-size: 24px; font-weight: 700; margin-top: 5px; }
+        .stats-card .label { font-size: 12px; text-transform: uppercase; color: #777; font-weight: 600; letter-spacing: 0.12em; }
+        .card-blue { border-left-color: #1565c0; }
+        .card-grey { border-left-color: #78909c; }
+        .card-yellow { border-left-color: #ffb300; }
+        .card-teal { border-left-color: #00897b; }
+        .card-green { border-left-color: #43a047; }
 
-        /* Profile/Logout section styles */
-        .header-right {
-            position: relative; /* Essential for positioning the dropdown */
-            display: flex;
-            align-items: center;
-        }
-        
-        .profile-pic {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background-color: #4FC3F7; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
-            border: 2px solid #0288D1;
-            cursor: pointer; 
-            z-index: 20; /* Ensure it stays on top */
-        }
+        /* Team table */
+        .section { background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 12px 30px rgba(15,23,42,0.06); padding: 20px; margin-top: 20px; }
+        .section h2 { margin: 0 0 14px; font-family: 'Poppins', sans-serif; font-size: 22px; color: #0f172a; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 10px; text-align: left; font-size: 14px; }
+        th { background: #f8fafc; color: #6b7280; font-weight: 700; border-bottom: 1px solid #e5e7eb; }
+        tr + tr td { border-top: 1px solid #e5e7eb; }
+        .progress { width: 100%; height: 12px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+        .progress-bar { height: 100%; background: linear-gradient(135deg, #4ade80, #16a34a); }
+        .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+        .badge-red { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+        .badge-ghost { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
 
-        /* Dropdown container */
-        .profile-dropdown {
-            position: absolute;
-            top: 100%; /* Position below the profile icon */
-            right: 0;
-            margin-top: 10px; /* Space below icon */
-            width: auto;
-            min-width: 120px;
-            background: white;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border-radius: 6px;
-            overflow: hidden;
-            display: none; /* Initially hidden */
-            z-index: 10;
-        }
-
-        /* Dropdown link styling */
-        .profile-dropdown a {
-            padding: 10px 15px;
-            text-decoration: none;
-            display: block;
-            text-align: right;
-            font-size: 15px;
-            color: #333;
-            transition: background-color 0.1s;
-        }
-        .profile-dropdown a:hover {
-            background-color: #f0f0f0;
-        }
-
-        /* Specific style for Logout link (Red Text) */
-        .profile-dropdown a.logout-link {
-            color: #F44336; /* Red text for logout */
-            font-weight: 600;
-        }
-        
-        /* --- MAIN PAGE CONTENT --- */
-        .main-content {
-            max-width: 800px;
-            margin: 20px auto 40px auto; 
-            padding: 0 20px; 
-            text-align: center; 
-        }
-
-        h1 {
-            color: #0288D1;
-            font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .nav-bar {
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: center; 
-            gap: 10px;
-        }
-        .nav-button {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #0288D1;
-            color: #fff;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 15px; 
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .nav-button:hover {
-            background-color: #01579B;
-        }
-        
-        label {
-            display: block;
-            margin-top: 20px;
-            font-weight: 600;
-            color: #0288D1;
-            font-size: 14px;
-            text-align: left; 
-        }
-        
-        input[type="file"],
-        input[type="text"],
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #E3F2FD;
-            border-radius: 8px;
-            font-family: 'Inter', sans-serif;
-            margin-top: 8px;
-            font-size: 14px;
-        }
-        
-        button[type="submit"] {
-            margin-top: 25px;
-            padding: 12px 30px;
-            background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
-        }
-        
-        .form-section {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-            margin-bottom: 20px;
-            text-align: left; 
-        }
-
-        /* Dashboard cards */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 35px 0 10px;
-        }
-
-        .dashboard-card {
-            background: #ffffff;
-            border-radius: 14px;
-            padding: 22px 24px;
-            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
-            border-left: 6px solid transparent;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            text-decoration: none;
-            color: #1e293b;
-            display: block;
-        }
-
-        .dashboard-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
-        }
-
-        .dashboard-card .label {
-            font-size: 0.72rem;
-            letter-spacing: 0.22em;
-            text-transform: uppercase;
-            color: #64748b;
-            margin-bottom: 18px;
-            font-weight: 600;
-        }
-
-        .dashboard-card .value {
-            font-size: 2.75rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin: 0;
-            line-height: 1;
-        }
-
-        .dashboard-card.draft { border-left-color: #6c757d; }
-        .dashboard-card.draft .value { color: #475569; }
-
-        .dashboard-card.ready { border-left-color: #f59e0b; }
-        .dashboard-card.ready .value { color: #d97706; }
-
-        .dashboard-card.reviewed { border-left-color: #0ea5e9; }
-        .dashboard-card.reviewed .value { color: #0284c7; }
-
-        .dashboard-card.sent { border-left-color: #22c55e; }
-        .dashboard-card.sent .value { color: #16a34a; }
+        /* Action center */
+        .action-card { border: 2px dashed #b0c4de; background: #f8fbff; border-radius: 14px; box-shadow: 0 8px 18px rgba(15,23,42,0.05); padding: 26px; margin-top: 26px; }
+        .action-card h3 { margin: 0 0 10px; font-family: 'Poppins', sans-serif; color: #1565c0; }
+        .action-card label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #0f172a; }
+        .action-card input[type="file"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+        .action-card button { padding: 12px 32px; background: linear-gradient(135deg, #4FC3F7 0%, #29B6F6 100%); color: #fff; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; box-shadow: 0 8px 20px rgba(41,182,246,0.28); }
+        .action-card button:hover { transform: translateY(-1px); }
     </style>
 </head>
 <body>
-
-<div class="full-width-header-bar">
-    <header class="header">
-        <div class="header-left">
-            <img src="image.png" alt="Company Logo">
-            <span class="greeting">Hi <?= $displayName ?>!</span>
-        </div>
-        
-        <div class="header-right">
-            <div class="profile-pic" onclick="toggleDropdown()">
-                <?= $initials ?>
-            </div>
-
-            <div id="profileDropdown" class="profile-dropdown">
-                <a href="logout.php" class="logout-link">Logout</a>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="upload.php" class="nav-brand">Finance Doctor</a>
+            <div class="nav-links">
+                <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
+                <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
+                <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>">Bulk Allocate</a>
             </div>
         </div>
-    </header>
-</div>
+        <div class="nav-user">
+            <span>👤 <?php echo htmlspecialchars($navUser); ?></span>
+            <a href="logout.php" class="btn-logout">Logout</a>
+        </div>
+    </nav>
 
-<div class="main-content">
-    
-    <div class="nav-bar">
-        <a href="upload.php" class="nav-button">Upload New Files</a>
-        <a href="view_saved_reports.php" class="nav-button">View Saved Reports</a>
+    <div class="wrap">
+        <h1>Command Center</h1>
+        <p class="lead">Your workload, team performance, and uploads — all in one view.</p>
+
+        <div class="row" style="margin-bottom:28px;">
+            <div class="col-md-20p">
+                <a href="view_saved_reports.php?owner_filter=mine" class="stats-card card-blue">
+                    <div class="label">Total Assigned</div>
+                    <div class="number"><?php echo (int)$myStats['total']; ?></div>
+                </a>
+            </div>
+
+            <div class="col-md-20p">
+                <a href="view_saved_reports.php?owner_filter=mine&filter=draft" class="stats-card card-grey">
+                    <div class="label">Drafts</div>
+                    <div class="number"><?php echo (int)$myStats['count_draft']; ?></div>
+                </a>
+            </div>
+
+            <div class="col-md-20p">
+                <a href="view_saved_reports.php?owner_filter=mine&filter=ready" class="stats-card card-yellow">
+                    <div class="label">Ready for Review</div>
+                    <div class="number"><?php echo (int)$myStats['count_ready']; ?></div>
+                </a>
+            </div>
+
+            <div class="col-md-20p">
+                <a href="view_saved_reports.php?owner_filter=mine&filter=reviewed" class="stats-card card-teal">
+                    <div class="label">Reviewed</div>
+                    <div class="number"><?php echo (int)$myStats['count_reviewed']; ?></div>
+                </a>
+            </div>
+
+            <div class="col-md-20p">
+                <a href="view_saved_reports.php?owner_filter=mine&filter=sent" class="stats-card card-green">
+                    <div class="label">Emails Sent</div>
+                    <div class="number"><?php echo (int)$myStats['count_sent']; ?></div>
+                </a>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Team Performance</h2>
+            <table>
+                <tr>
+                    <th style="width: 28%;">Employee</th>
+                    <th style="width: 32%;">Progress</th>
+                    <th style="width: 14%;">Pending</th>
+                    <th style="width: 14%;">Total</th>
+                    <th style="width: 12%;">Priority</th>
+                </tr>
+                <?php foreach ($teamStats as $row):
+                    $total = (int)($row['total_assigned'] ?? 0);
+                    $sent = (int)($row['sent_count'] ?? 0);
+                    $pending = (int)($row['pending_count'] ?? 0);
+                    $hi = (int)($row['high_priority'] ?? 0);
+                    $pct = safePercent($sent, max($total, $pending + $sent));
+                ?>
+                <tr>
+                    <td>
+                        <a href="view_saved_reports.php?owner_filter=<?php echo (int)$row['id']; ?>" style="font-weight: 600; color: #333; text-decoration: none; display: inline-flex; align-items: center;">
+                            <div style="width: 30px; height: 30px; background: #e3f2fd; color: #1565c0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; margin-right: 8px;">
+                                <?php echo strtoupper(substr($row['username'], 0, 1)); ?>
+                            </div>
+                            <div>
+                                <div style="font-weight:700; color:#0f172a;">&nbsp;<?php echo htmlspecialchars($row['username']); ?></div>
+                                <div style="color:#6b7280; font-size:12px;">&nbsp;<?php echo htmlspecialchars($row['designation'] ?? ''); ?></div>
+                            </div>
+                        </a>
+                    </td>
+                    <td>
+                        <div class="progress" aria-label="Completion">
+                            <div class="progress-bar" style="width: <?php echo $pct; ?>%;"></div>
+                        </div>
+                        <div style="font-size:12px; color:#6b7280; margin-top:6px;"><?php echo $pct; ?>% sent</div>
+                    </td>
+                    <td style="text-align: center;">
+                        <?php if ($pending > 0): ?>
+                            <a href="view_saved_reports.php?owner_filter=<?php echo (int)$row['id']; ?>&filter=pending" style="color: #d32f2f; font-weight: bold; text-decoration: underline;">
+                                <?php echo $pending; ?>
+                            </a>
+                        <?php else: ?>
+                            <span style="color: #ccc;">0</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?php echo $total; ?></td>
+                    <td>
+                        <?php if ($hi > 0): ?>
+                            <span class="badge badge-red"><?php echo $hi; ?> High</span>
+                        <?php else: ?>
+                            <span class="badge badge-ghost">Clear</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+        </div>
+
+        <div class="section" style="margin-top: 32px;">
+            <h2>Action Center</h2>
+            <div class="action-card">
+                <div style="text-align:center; margin-bottom: 16px;">
+                    <h3>Upload New Client Data</h3>
+                    <p style="color:#6b7280; margin:0; font-size:14px;">Attach Excel and PDF files to generate client reports.</p>
+                </div>
+                <form method="post" enctype="multipart/form-data" style="max-width: 760px; margin: 0 auto;">
+                    <div style="display:flex; gap:16px; flex-wrap: wrap;">
+                        <div style="flex:1; min-width:260px;">
+                            <label for="client_files">Select Excel &amp; PDF files (multiple allowed)</label>
+                            <input type="file" name="client_files[]" id="client_files" multiple required>
+                        </div>
+                    </div>
+                    <div style="margin-top: 18px; text-align:center;">
+                        <button type="submit">Upload &amp; Generate Reports</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-
-    <h1>Upload Client Data Files</h1>
-
-    <div class="form-section">
-        <form method="post" enctype="multipart/form-data">
-            <label for="client_files">Select Excel &amp; PDF files (multiple allowed):</label>
-            <input type="file" name="client_files[]" id="client_files" multiple required>
-            <button type="submit">Create Reports</button>
-        </form>
-    </div>
-
-    <div class="dashboard-grid">
-        <a href="view_saved_reports.php?filter=draft" class="dashboard-card draft">
-            <span class="label">Total Drafts</span>
-            <div class="value"><?php echo $stats['draft']; ?></div>
-        </a>
-
-        <a href="view_saved_reports.php?filter=ready" class="dashboard-card ready">
-            <span class="label">Ready for Review</span>
-            <div class="value"><?php echo $stats['ready']; ?></div>
-        </a>
-
-        <a href="view_saved_reports.php?filter=reviewed" class="dashboard-card reviewed">
-            <span class="label">Reviewed</span>
-            <div class="value"><?php echo $stats['reviewed']; ?></div>
-        </a>
-
-        <a href="view_saved_reports.php?filter=sent" class="dashboard-card sent">
-            <span class="label">Emails Sent</span>
-            <div class="value"><?php echo $stats['sent']; ?></div>
-        </a>
-    </div>
-</div>
-
-<script>
-    function toggleDropdown() {
-        const dropdown = document.getElementById('profileDropdown');
-        const isVisible = dropdown.style.display === 'block';
-        
-        // Hide all open dropdowns first (if any)
-        document.querySelectorAll('.profile-dropdown').forEach(d => {
-            d.style.display = 'none';
-        });
-
-        // Toggle visibility of the current dropdown
-        if (!isVisible) {
-            dropdown.style.display = 'block';
-        }
-    }
-
-    // Close the dropdown if the user clicks anywhere outside of it
-    document.addEventListener('click', function(event) {
-        const profilePic = document.querySelector('.profile-pic');
-        const dropdown = document.getElementById('profileDropdown');
-
-        if (profilePic && dropdown) {
-            const isClickInsidePic = profilePic.contains(event.target);
-            const isClickInsideDropdown = dropdown.contains(event.target);
-
-            if (!isClickInsidePic && !isClickInsideDropdown) {
-                dropdown.style.display = 'none';
-            }
-        }
-    });
-</script>
-
 </body>
 </html>
