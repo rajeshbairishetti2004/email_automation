@@ -2,6 +2,7 @@
 // view_saved_reports.php
 // - Lists all stored clients with STATUS Workflow badges
 // - FIX: explicitly selects report_state to ensure badges appear
+// - Added: Bulk reassignment functionality and split owner columns
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -9,6 +10,47 @@ require_once 'db_config.php';
 requireAuth(); // Ensure login
 
 $pdo = getPdo();
+$successMessage = '';
+$errorMessage = '';
+
+// Handle POST request for bulk reassignment
+// Accept either new_owner_id (preferred) or fallback to new_owner
+// Ensure valid user is selected
+// Sanitize selected IDs
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type']) && $_POST['action_type'] === 'reassign') {
+    try {
+        $newOwnerId = 0;
+        if (isset($_POST['new_owner_id'])) {
+            $newOwnerId = (int)$_POST['new_owner_id'];
+        } elseif (isset($_POST['new_owner'])) {
+            $newOwnerId = (int)$_POST['new_owner'];
+        }
+        $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
+        
+        if ($newOwnerId <= 0) {
+            $errorMessage = "Please select a valid user to assign to.";
+        } elseif (empty($selectedIds)) {
+            $errorMessage = "Please select at least one client to reassign.";
+        } else {
+            // Sanitize selected IDs
+            $selectedIds = array_filter(array_map('intval', $selectedIds));
+            
+            if (!empty($selectedIds)) {
+                // Update assigned_to for selected clients
+                $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
+                $updateStmt = $pdo->prepare("UPDATE clients SET assigned_to = ? WHERE id IN ($placeholders)");
+                
+                $params = array_merge([$newOwnerId], $selectedIds);
+                $updateStmt->execute($params);
+                
+                $affectedRows = $updateStmt->rowCount();
+                $successMessage = "Successfully reassigned $affectedRows client(s).";
+            }
+        }
+    } catch (Exception $e) {
+        $errorMessage = "Error during reassignment: " . $e->getMessage();
+    }
+}
 
 $navUser = $_SESSION['username'] ?? 'User';
 $currentPage = basename($_SERVER['PHP_SELF']);
@@ -62,11 +104,11 @@ $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.total_amount, c.profit, 
            c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to,
            c.priority,
-           u.username as creator_username,
-           owner.username AS owner_name
+           creator.username as created_by_username,
+           assignee.username as assigned_to_username
     FROM clients c
-    LEFT JOIN users u ON c.created_by = u.id
-    LEFT JOIN users owner ON c.assigned_to = owner.id
+    LEFT JOIN users creator ON c.created_by = creator.id
+    LEFT JOIN users assignee ON c.assigned_to = assignee.id
     {$where}
     ORDER BY c.created_at DESC, c.id DESC
     LIMIT :limit OFFSET :offset
@@ -80,6 +122,10 @@ $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Fetch all users for reassignment dropdown
+$allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
+$allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
 <!DOCTYPE html>
@@ -115,11 +161,70 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         /* Workflow Status Badges */
         .badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; border: 1px solid transparent; display: inline-block; min-width: 60px; text-align: center;}
+        .badge-pending { background: #fff7ed; color: #9a3412; border-color: #fde68a; }
         .badge-draft { background: #e0e0e0; color: #555; border-color: #ccc; }
         .badge-ready { background: #fff3cd; color: #856404; border-color: #ffeeba; }
         .badge-reviewed { background: #d4edda; color: #155724; border-color: #c3e6cb; }
         .badge-sent { background: #cce5ff; color: #004085; border-color: #b8daff; }
         .badge-rejected { background: #f8d7da; color: #721c24; border-color: #f5c6cb; cursor: help; }
+        
+        /* Bulk Actions Bar */
+        .bulk-actions-bar {
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .bulk-actions-bar select, .bulk-actions-bar button {
+            padding: 8px 12px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .bulk-actions-bar button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .bulk-actions-bar button:hover {
+            background: #388e3c;
+        }
+        .bulk-selection-info {
+            font-size: 13px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        /* Message Alerts */
+        .alert {
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* Checkbox Styling */
+        input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
     </style>
 </head>
 <body>
@@ -143,6 +248,14 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <h1>Stored Client Reports</h1>
 
+    <?php if ($successMessage): ?>
+        <div class="alert alert-success"><?php echo htmlspecialchars($successMessage); ?></div>
+    <?php endif; ?>
+    
+    <?php if ($errorMessage): ?>
+        <div class="alert alert-error"><?php echo htmlspecialchars($errorMessage); ?></div>
+    <?php endif; ?>
+
     <form method="get" class="search-box" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
         <input type="text" name="q" placeholder="Search by name or date..." value="<?php echo htmlspecialchars($q); ?>">
         <select name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
@@ -156,7 +269,7 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </select>
         <select name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
             <option value="">All States</option>
-            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Pending (Not Sent)</option>
+            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Review Not Started</option>
             <option value="draft" <?php echo ($filter === 'draft') ? 'selected' : ''; ?>>Draft</option>
             <option value="ready" <?php echo ($filter === 'ready') ? 'selected' : ''; ?>>Ready</option>
             <option value="reviewed" <?php echo ($filter === 'reviewed') ? 'selected' : ''; ?>>Reviewed</option>
@@ -168,15 +281,34 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <?php if (!$clients): ?>
         <p style="margin-top: 20px;">No reports found. Try uploading from <a href="upload.php">Upload Page</a>.</p>
     <?php else: ?>
-        <table>
-            <tr>
-                <th>ID</th>
-                <th>Client Name</th>
-                <th>AUM</th> <th>Status</th> <th>As On</th>
-                <th>Drafted By</th>
-                <th>Created At</th>
-                <th>Action</th>
-            </tr>
+        <!-- Bulk Reassignment Form wrapping the table -->
+        <form method="post" id="bulkReassignForm">
+            <input type="hidden" name="action_type" value="reassign">
+            <div class="bulk-actions-bar">
+                <span class="bulk-selection-info">With Selected:</span>
+                <select name="new_owner_id" id="newOwnerSelect" required>
+                    <option value="">-- Assign to... --</option>
+                    <?php foreach ($allUsers as $user): ?>
+                        <option value="<?php echo (int)$user['id']; ?>">
+                            <?php echo htmlspecialchars($user['username']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit">Reassign</button>
+            </div>
+
+            <table>
+                <tr>
+                    <th style="width: 40px;">
+                        <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll(this)">
+                    </th>
+                    <th>ID</th>
+                    <th>Client Name</th>
+                    <th>Drafted By</th>
+                    <th>Assigned To</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
             <?php foreach ($clients as $c): 
                 // --- WORKFLOW BADGE LOGIC ---
                 $statusHtml = '';
@@ -190,10 +322,18 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 else {
                     $state = $c['report_state'] ?? 'draft'; // Default to draft if null
                     $badgeClass = 'badge-' . $state;
-                    
-                    // Display "Email Sent" for sent state, otherwise capitalize first letter
-                    $displayText = ($state === 'sent') ? 'Email Sent' : ucfirst($state);
-                    
+
+                    // Special display names
+                    if ($state === 'sent') {
+                        $displayText = 'Email Sent';
+                    } elseif ($state === 'pending') {
+                        $displayText = 'Review Not Started';
+                        // ensure class exists for pending visual
+                        $badgeClass = 'badge-pending';
+                    } else {
+                        $displayText = ucfirst($state);
+                    }
+
                     $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
                 }
 
@@ -207,38 +347,65 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         $hasAttachments = true;
                     }
                 }
+                
+                // Priority badge styling
+                $priorityBadgeClass = 'badge';
+                $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
+                
+                if (strtolower($priorityText) === 'high') {
+                    $priorityBadgeClass .= ' badge-ready';
+                } elseif (strtolower($priorityText) === 'low') {
+                    $priorityBadgeClass .= ' badge-draft';
+                }
             ?>
                 <tr>
+                    <td>
+                        <input type="checkbox" class="client-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>">
+                    </td>
                     <td><?php echo (int)$c['id']; ?></td>
                     <td>
-                        <div style="font-weight: 600; color: #333;">
-                            <?php echo htmlspecialchars($c['name']); ?>
+                        <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
+                            <span><?php echo htmlspecialchars($c['name']); ?></span>
+                            <?php if (!empty($c['priority'])): ?>
+                                <span class="<?php echo $priorityBadgeClass; ?>" style="min-width:auto; text-transform:none;">
+                                    <?php echo $priorityText; ?>
+                                </span>
+                            <?php endif; ?>
+                            <?php if($hasAttachments): ?>
+                                <span title="Has Attachments">📎</span>
+                            <?php endif; ?>
                         </div>
-                        <div style="font-size: 12px; color: #888;">
-                            <?php echo htmlspecialchars($c['as_on'] ?? ''); ?>
-                        </div>
-                        <?php if($hasAttachments): ?>
-                            <span title="Has Attachments">📎</span>
-                        <?php endif; ?>
                     </td>
-                    <td style="font-family: monospace; font-size: 13px; color: #444;">
-                        <?php echo '₹ ' . number_format((float)($c['total_amount'] ?? 0), 0); ?>
-                    </td>
-                    <td><?php echo $statusHtml; ?></td> <td><?php echo htmlspecialchars($c['as_on'] ?? ''); ?></td>
                     <td>
-                        <?php if (!empty($c['creator_username'])): ?>
+                        <?php if (!empty($c['created_by_username'])): ?>
                             <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                <?php echo htmlspecialchars($c['creator_username']); ?>
+                                <?php echo htmlspecialchars($c['created_by_username']); ?>
                             </span>
                         <?php else: ?>
-                            <span style="color: #999; font-size: 0.85em;">-</span>
+                            <span style="color: #999; font-size: 0.85em;">Unassigned</span>
                         <?php endif; ?>
                     </td>
-                    <td><?php echo htmlspecialchars(date('d-M-Y h:i A', strtotime($c['created_at']))); ?></td>
-                    <td><a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a></td>
+                    <td>
+                        <?php if (!empty($c['assigned_to_username'])): ?>
+                            <span class="badge" style="background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                <?php echo htmlspecialchars($c['assigned_to_username']); ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="color: #999; font-size: 0.85em;">Unassigned</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><?php echo $statusHtml; ?></td>
+                    <td>
+                        <?php if (($c['report_state'] ?? '') === 'pending'): ?>
+                            <a href="upload.php" style="font-weight: 600; color:#0288D1;">Upload Files</a>
+                        <?php else: ?>
+                            <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a>
+                        <?php endif; ?>
+                    </td>
                 </tr>
             <?php endforeach; ?>
-        </table>
+            </table>
+        </form>
 
         <div class="pagination">
             Page <?php echo $page; ?> of <?php echo $totalPages; ?>:
@@ -260,5 +427,40 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <?php endif; ?>
 </div>
 
-</body>
-</html>
+<script>
+    // Toggle select all checkboxes
+    function toggleSelectAll(checkbox) {
+        const checkboxes = document.querySelectorAll('.client-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = checkbox.checked;
+        });
+        updateSelectAllState();
+    }
+
+    // Update select all checkbox state based on individual checkboxes
+    function updateSelectAllState() {
+        const allCheckboxes = document.querySelectorAll('.client-checkbox');
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (!selectAllCheckbox) return;
+        const allChecked = Array.from(allCheckboxes).length > 0 && Array.from(allCheckboxes).every(c => c.checked);
+        const someChecked = Array.from(allCheckboxes).some(c => c.checked);
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    }
+
+    document.querySelectorAll('.client-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectAllState);
+    });
+
+    // Prevent form submission if no owner selected
+    const bulkForm = document.getElementById('bulkReassignForm');
+    if (bulkForm) {
+        bulkForm.addEventListener('submit', function(e) {
+            const newOwner = document.getElementById('newOwnerSelect').value;
+            if (!newOwner) {
+                e.preventDefault();
+                alert('Please select a user to assign to before clicking Reassign.');
+            }
+        });
+    }
+</script>

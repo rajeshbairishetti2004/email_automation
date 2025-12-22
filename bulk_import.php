@@ -1,6 +1,8 @@
 <?php
 // bulk_import.php
-// Upload an .xlsx file to bulk-create/update clients and assign them to RMs.
+// - Uploads "Sample Customer List" format
+// - Filters by "Tag/Quarter"
+// - Case-Sensitive RM Assignment
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -12,132 +14,137 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 requireAuth();
 
 $pdo = getPdo();
-$currentUser = getCurrentUser();
 $currentUserId = (int)($_SESSION['user_id'] ?? 1);
 
+// Initialize Summary Stats
 $summary = [
     'processed'   => 0,
     'assigned'    => 0,
     'unassigned'  => 0,
     'inserted'    => 0,
     'updated'     => 0,
+    'skipped'     => 0,
     'errors'      => [],
 ];
 
-function parsePriority(?string $raw): ?string {
-    $val = strtolower(trim((string)$raw));
-    if ($val === 'high' || $val === 'medium' || $val === 'low') {
-        return ucfirst($val);
+// 1. FETCH USERS (Smart Matching)
+$allUsers = [];
+$uStmt = $pdo->query("SELECT id, username, name FROM users");
+while ($uRow = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+    // Map BOTH "username" and "name" to the User ID (Lowercase for flexibility)
+    $usernameKey = strtolower(trim($uRow['username']));
+    $fullnameKey = strtolower(trim($uRow['name']));
+    
+    $allUsers[$usernameKey] = $uRow['id'];
+    if (!empty($fullnameKey)) {
+        $allUsers[$fullnameKey] = $uRow['id'];
     }
-    return null;
 }
 
-function parseAmount($raw): float {
-    $clean = preg_replace('/[^0-9\.-]/', '', (string)$raw);
-    return (float)$clean;
-}
-
-function findUserIdByUsername(PDO $pdo, ?string $username): ?int {
-    $name = trim((string)$username);
-    if ($name === '') {
-        return null;
-    }
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE LOWER(username) LIKE LOWER(:uname) LIMIT 1");
-    $stmt->execute([':uname' => $name]);
-    $id = $stmt->fetchColumn();
-    return $id ? (int)$id : null;
-}
-
-function upsertClient(PDO $pdo, string $clientName, ?int $assignedTo, float $totalAmount, ?string $priority, int $createdBy): bool {
-    // Check if client exists (case-insensitive match on name)
-    $stmt = $pdo->prepare("SELECT id FROM clients WHERE name = :name LIMIT 1");
-    $stmt->execute([':name' => $clientName]);
-    $existingId = $stmt->fetchColumn();
-
-    if ($existingId) {
-        $stmtUpdate = $pdo->prepare("UPDATE clients SET assigned_to = :assigned_to, total_amount = :total_amount, priority = :priority WHERE id = :id");
-        return $stmtUpdate->execute([
-            ':assigned_to'  => $assignedTo,
-            ':total_amount' => $totalAmount,
-            ':priority'     => $priority,
-            ':id'           => (int)$existingId,
-        ]);
-    }
-
-    // Set default state to 'pending' so it doesn't show in Saved Reports yet
-    $stmtInsert = $pdo->prepare("INSERT INTO clients (name, assigned_to, total_amount, priority, report_state, created_at) VALUES (:name, :assigned, :amount, :priority, 'pending', NOW())");
-
-    return $stmtInsert->execute([
-        ':name'     => $clientName,
-        ':assigned' => $assignedTo,
-        ':amount'   => $totalAmount,
-        ':priority' => $priority,
-    ]);
-}
-
-$navUser = $_SESSION['username'] ?? ($currentUser['username'] ?? 'User');
-$currentPage = basename($_SERVER['PHP_SELF']);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['bulk_file'])) {
-    $file = $_FILES['bulk_file'];
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        $summary['errors'][] = 'File upload failed.';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) {
+    
+    // Get the Target Tag from input (e.g., "RJ", "RM")
+    $targetTag = trim($_POST['target_tag'] ?? '');
+    
+    if (empty($targetTag)) {
+        $summary['errors'][] = "Please specify a Target Quarter/Tag (e.g., RJ) to import.";
     } else {
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        if ($ext !== 'xlsx') {
-            $summary['errors'][] = 'Only .xlsx files are supported.';
-        } else {
-            try {
-                $spreadsheet = IOFactory::load($file['tmp_name']);
-                $sheet = $spreadsheet->getActiveSheet();
-                $rows = $sheet->toArray(null, true, true, true);
+        $file = $_FILES['allocation_file']['tmp_name'];
+        
+        try {
+            $spreadsheet = IOFactory::load($file);
+            $sheet = $spreadsheet->getActiveSheet();
+            $rows = $sheet->toArray(null, true, true, true); // Returns A, B, C indexed array
 
-                // Expect header in first row: A=Client Name, B=RM, C=AUM, D=Priority
-                foreach ($rows as $index => $row) {
-                    if ($index === 1) {
-                        continue; // skip header
-                    }
+            // Loop through rows (Start from Row 2 to skip headers)
+            foreach ($rows as $rowIndex => $row) {
+                if ($rowIndex < 2) continue; // Skip Header
 
-                    $clientName = trim((string)($row['A'] ?? ''));
-                    $rmName     = trim((string)($row['B'] ?? ''));
-                    $aumRaw     = $row['C'] ?? '0';
-                    $priority   = parsePriority($row['D'] ?? '');
+                // --- 1. PARSE COLUMNS BASED ON NEW FORMAT ---
+                // Col A: Priority
+                // Col B: Name
+                // Col E: Tags (Quarter)
+                // Col G: AUM
+                // Col H: Relationship Manager
 
-                    if ($clientName === '') {
-                        continue;
-                    }
+                $rawName     = trim($row['B'] ?? '');
+                $rawRM       = trim($row['H'] ?? ''); // Case Sensitive Name
+                $rawTag      = trim($row['E'] ?? ''); // The Quarter/Tag
+                $rawAum      = $row['G'] ?? 0;
+                $rawPriority = trim($row['A'] ?? '');
 
-                    $summary['processed']++;
+                // Skip empty rows
+                if (empty($rawName)) continue;
 
-                    $assignedTo = findUserIdByUsername($pdo, $rmName);
-                    if ($assignedTo) {
-                        $summary['assigned']++;
-                    } else {
-                        $summary['unassigned']++;
-                    }
-
-                    $totalAmount = parseAmount($aumRaw);
-
-                    $existsStmt = $pdo->prepare("SELECT id FROM clients WHERE name = :name LIMIT 1");
-                    $existsStmt->execute([':name' => $clientName]);
-                    $existingId = $existsStmt->fetchColumn();
-
-                    $ok = upsertClient($pdo, $clientName, $assignedTo, $totalAmount, $priority, $currentUserId);
-
-                    if (!$ok) {
-                        $summary['errors'][] = "Row {$index}: DB write failed for client {$clientName}";
-                        continue;
-                    }
-
-                    if ($existingId) {
-                        $summary['updated']++;
-                    } else {
-                        $summary['inserted']++;
-                    }
+                // --- 2. FILTER BY TAG/QUARTER ---
+                // Only process if the Excel Tag matches the Input Tag
+                // Using stripos for the Tag itself to be user-friendly (case-insensitive tag check)
+                if (stripos($rawTag, $targetTag) === false) {
+                    $summary['skipped']++;
+                    continue; 
                 }
-            } catch (Throwable $e) {
-                $summary['errors'][] = 'Import failed: ' . $e->getMessage();
+
+                $summary['processed']++;
+
+                // --- 3. SMART LOOKUP ---
+                $assignedToId = null;
+                $lookupKey = strtolower($rawRM); // Convert Excel name to lowercase
+
+                if (!empty($lookupKey) && isset($allUsers[$lookupKey])) {
+                    $assignedToId = $allUsers[$lookupKey];
+                    $summary['assigned']++;
+                } else {
+                    $summary['unassigned']++;
+                }
+
+                // Clean Amount
+                $cleanAum = (float)preg_replace('/[^0-9\.-]/', '', (string)$rawAum);
+
+                // --- 4. DB UPSERT (Insert or Update) ---
+                
+                // Check if client exists
+                $chk = $pdo->prepare("SELECT id FROM clients WHERE name = :name LIMIT 1");
+                $chk->execute([':name' => $rawName]);
+                $exists = $chk->fetchColumn();
+
+                if ($exists) {
+                    // UPDATE
+                    $upd = $pdo->prepare("
+                        UPDATE clients SET 
+                            assigned_to = :assign, 
+                            total_amount = :aum,
+                            priority = :prio,
+                            updated_at = NOW()
+                        WHERE id = :id
+                    ");
+                    $upd->execute([
+                        ':assign' => $assignedToId,
+                        ':aum'    => $cleanAum,
+                        ':prio'   => $rawPriority,
+                        ':id'     => $exists
+                    ]);
+                    $summary['updated']++;
+                } else {
+                    // INSERT (Default state: 'pending')
+                    $ins = $pdo->prepare("
+                        INSERT INTO clients 
+                        (name, assigned_to, total_amount, priority, report_state, created_at, created_by) 
+                        VALUES 
+                        (:name, :assign, :aum, :prio, 'pending', NOW(), :creator)
+                    ");
+                    $ins->execute([
+                        ':name'   => $rawName,
+                        ':assign' => $assignedToId,
+                        ':aum'    => $cleanAum,
+                        ':prio'   => $rawPriority,
+                        ':creator'=> $currentUserId
+                    ]);
+                    $summary['inserted']++;
+                }
             }
+
+        } catch (Exception $e) {
+            $summary['errors'][] = "Error processing file: " . $e->getMessage();
         }
     }
 }
@@ -145,129 +152,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['bulk_file'])) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bulk Import Clients</title>
-    <link rel="stylesheet" href="public/css/styles.css">
+    <title>Bulk Allocation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Navigation Bar Styles */
-        .navbar {
-            background-color: #ffffff;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            margin-bottom: 25px;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-        }
-        .nav-brand {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #2c3e50;
-            text-decoration: none;
-            margin-right: 40px;
-        }
-        .nav-links a {
-            text-decoration: none;
-            color: #555;
-            font-weight: 500;
-            margin-right: 25px;
-            transition: color 0.2s;
-        }
-        .nav-links a:hover, .nav-links a.active {
-            color: #1565c0; /* Primary Blue */
-        }
-        .nav-user {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            font-size: 0.9rem;
-            color: #777;
-        }
-        .btn-logout {
-            text-decoration: none;
-            padding: 6px 16px;
-            background-color: #ffebee;
-            color: #c62828;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            transition: background 0.2s;
-        }
-        .btn-logout:hover {
-            background-color: #ffcdd2;
-        }
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .card { border: 1px solid #ccc; padding: 16px; border-radius: 6px; max-width: 720px; }
-        .summary { margin-top: 20px; padding: 12px; border: 1px solid #e0e0e0; background: #f8f8f8; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #f0f6ff; }
-        .error { color: #b00020; }
-        .success { color: #1b5e20; }
+        body { font-family: 'Inter', sans-serif; background: #f7f9fb; padding: 20px; }
+        
+        /* Navigation */
+        .navbar { background: #fff; padding: 15px 30px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-radius: 8px; }
+        .nav-brand { font-weight: 700; color: #2c3e50; text-decoration: none; font-size: 1.2rem; }
+        .nav-links a { margin-right: 20px; text-decoration: none; color: #555; }
+        .nav-links a:hover { color: #1565c0; }
+        
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; color: #333; }
+        
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        button { background: #1565c0; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; width: 100%; }
+        button:hover { background: #0d47a1; }
+        
+        .summary { margin-top: 20px; padding: 15px; background: #f1f8e9; border: 1px solid #c5e1a5; border-radius: 4px; color: #33691e; }
+        .error { color: #c62828; margin-top: 10px; }
+        .info-box { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 14px; color: #0d47a1; }
     </style>
 </head>
 <body>
-    <?php 
-    // Ensure we have user details for the header
-    $navUser = $_SESSION['username'] ?? ($currentUser['username'] ?? 'User');
-    $currentPage = basename($_SERVER['PHP_SELF']); 
-    ?>
 
     <nav class="navbar">
-        <div style="display: flex; align-items: center;">
+        <div style="display:flex; align-items:center">
             <a href="upload.php" class="nav-brand">Finance Doctor</a>
-            <div class="nav-links">
-                <a href="upload.php" class="<?php echo $currentPage == 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
-                <a href="view_saved_reports.php" class="<?php echo $currentPage == 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
-                <a href="bulk_import.php" class="<?php echo $currentPage == 'bulk_import.php' ? 'active' : ''; ?>">Bulk Allocate</a>
+            <div class="nav-links" style="margin-left: 40px;">
+                <a href="upload.php">Dashboard</a>
+                <a href="view_saved_reports.php">All Reports</a>
+                <a href="bulk_import.php" style="color: #1565c0; font-weight: bold;">Bulk Allocate</a>
             </div>
         </div>
-        
-        <div class="nav-user">
-            <span><i class="stat-icon">👤</i> <?php echo htmlspecialchars($navUser); ?></span>
-            <a href="logout.php" class="btn-logout">Logout</a>
+        <div>
+            <a href="logout.php" style="color: #c62828; text-decoration: none; font-size: 14px;">Logout</a>
         </div>
     </nav>
 
-    <div class="card">
-        <h2>Bulk Import Clients (.xlsx)</h2>
+    <div class="container">
+        <h2>Bulk Client Allocation</h2>
+        <p style="color:#666; margin-bottom: 25px;">Upload the "Dec 2025" Customer List format to assign tasks.</p>
+
         <form method="post" enctype="multipart/form-data">
-            <div style="margin-bottom: 10px;">
-                <label for="bulk_file"><strong>Select Excel file (.xlsx)</strong></label><br>
-                <input type="file" name="bulk_file" id="bulk_file" accept=".xlsx" required>
+            
+            <div class="form-group">
+                <label>1. Enter Quarter/Tag to Import (Required)</label>
+                <input type="text" name="target_tag" placeholder="e.g. RJ, RM, or RF" required>
+                <small style="color:#888;">Only clients with this exact tag in Column E will be imported.</small>
             </div>
-            <button type="submit">Upload and Import</button>
+
+            <div class="form-group">
+                <label>2. Select Excel File (.xlsx)</label>
+                <input type="file" name="allocation_file" accept=".xlsx, .xls" required>
+            </div>
+
+            <button type="submit">Import & Allocate</button>
         </form>
 
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
             <div class="summary">
-                <div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?></div>
-                <div><strong>Inserted:</strong> <?php echo (int)$summary['inserted']; ?> | <strong>Updated:</strong> <?php echo (int)$summary['updated']; ?></div>
-                <div><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> | <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?></div>
+                <h4>Import Result for Tag: "<?php echo htmlspecialchars($targetTag); ?>"</h4>
+                <div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?> (Skipped: <?php echo (int)$summary['skipped']; ?>)</div>
+                <div style="margin-top:5px;"><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> | <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?></div>
+                <div style="margin-top:5px;"><strong>New Clients:</strong> <?php echo (int)$summary['inserted']; ?> | <strong>Updated:</strong> <?php echo (int)$summary['updated']; ?></div>
+                
                 <?php if (!empty($summary['errors'])): ?>
-                    <div class="error"><strong>Errors:</strong>
+                    <div class="error" style="margin-top:15px;">
+                        <strong>Errors:</strong>
                         <ul>
                             <?php foreach ($summary['errors'] as $err): ?>
                                 <li><?php echo htmlspecialchars($err); ?></li>
                             <?php endforeach; ?>
                         </ul>
                     </div>
-                <?php else: ?>
-                    <div class="success">Import completed.</div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
 
-        <div style="margin-top: 15px;">
-            <strong>Expected Columns (Row 1 headers):</strong>
-            <ul>
-                <li>Column A: Client Name</li>
-                <li>Column B: Relationship Manager / ARM (matches username)</li>
-                <li>Column C: AUM</li>
-                <li>Column D: Priority (High / Medium / Low)</li>
+        <div class="info-box">
+            <strong>Formatting Rules:</strong>
+            <ul style="padding-left: 20px; margin: 5px 0;">
+                <li><strong>Column E (Tags):</strong> Must match the tag you entered above (e.g., 'RJ').</li>
+                <li><strong>Column H (RM Name):</strong> Must be an <u>EXACT</u> case-sensitive match to the username in the system (e.g., 'Sailesh Kumar' != 'sailesh kumar').</li>
+                <li><strong>Column B:</strong> Client Name.</li>
+                <li><strong>Column A:</strong> Priority.</li>
             </ul>
         </div>
     </div>
+
 </body>
-</html>
+</html>G
