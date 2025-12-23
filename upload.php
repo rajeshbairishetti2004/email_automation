@@ -10,6 +10,7 @@ require_once 'env_loader.php';
 
 requireAuth();
 
+$currentReviewPeriod = date('F Y');
 $pdo           = getPdo();
 $currentUser   = getCurrentUser();
 $currentUserId = (int)($_SESSION['user_id'] ?? 0);
@@ -480,14 +481,48 @@ $userDesignation = $currentUser['designation'] ?? '';
         .progress-fill { height: 100%; background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%); }
         .completion-value { font-size: 22px; font-weight: 800; color: var(--text-strong); }
 
-        .upload-section { margin-top: 26px; padding: 24px; background: var(--surface); border: 1px dashed #cbd5e1; border-radius: 16px; box-shadow: var(--shadow); text-align: center; }
-        .upload-section h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-strong); }
-        .upload-section p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
-        .upload-zone { border: 2px dashed #cbd5e1; border-radius: 14px; padding: 28px; background: #f8fafc; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .upload-icon { font-size: 36px; color: var(--primary); opacity: 0.85; }
-        .btn-primary { display: inline-block; padding: 12px 22px; background: var(--primary); color: white; border-radius: 10px; font-weight: 700; box-shadow: var(--shadow); border: none; cursor: pointer; }
+        /* 1. Decreased the width of the upload section */
+        .upload-section { 
+            max-width: 600px;
+            margin: 26px auto 0;
+            padding: 24px;
+            background: var(--surface);
+            border: 1px dashed #cbd5e1;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        /* 2. New style for the Ash/Light color button */
+        .btn-ash {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-ash:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        /* Keep the primary blue for the final submission */
+        .btn-primary { 
+            display: inline-block; 
+            padding: 12px 22px; 
+            background: var(--primary); 
+            color: white; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            box-shadow: var(--shadow); 
+            border: none; 
+            cursor: pointer; 
+        }
         .btn-primary:hover { background: var(--primary-dark); }
-        .file-input { display: none; }
 
         .pending-alert { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; margin-bottom: 18px; }
         .pending-pill { background: #f97316; color: #fff; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
@@ -615,10 +650,9 @@ $userDesignation = $currentUser['designation'] ?? '';
     <div class="wrap">
         <div class="page-header">
             <div>
-                <h1>Dashboard</h1>
-                <p class="lead">Overview of performance, workload, and delivery status.</p>
-            </div>
-
+        <h1>Client Review of <?= $currentReviewPeriod ?></h1>
+        <p class="lead">Overview of performance, workload, and delivery status.</p>
+    </div>
             <nav class="context-navbar">
                 <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
                 <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Workspace</a>
@@ -672,47 +706,25 @@ $userDesignation = $currentUser['designation'] ?? '';
             </a>
         </div>
 
-        <div class="completion-card">
-            <div>
-                <p class="completion-title">Completion rate</p>
-                <p class="completion-sub">Sent vs total for <?php echo strtolower($targetName); ?> reports.</p>
-            </div>
-            <div class="progress-shell" aria-label="Completion progress">
-                <div class="progress-fill" style="width: <?php echo $completionRate; ?>%;"></div>
-            </div>
-            <div class="completion-value"><?php echo $completionRate; ?>%</div>
-            <div style="color: var(--muted); font-size: 13px; font-weight: 600;">
-                <?php echo (int)$viewStats['count_sent']; ?> sent / <?php echo (int)$viewStats['total']; ?> total
-            </div>
-        </div>
-
-        <?php if ($viewStats['count_pending'] > 0): ?>
-            <div class="pending-alert">
-                <span class="pending-pill">Review Not Started</span>
-                <div>
-                    <h4 style="margin: 0; color: #9a3412;">Review not started</h4>
-                    <p style="margin: 4px 0 0; color: #7c2d12; font-size: 13px;"><?php echo (int)$viewStats['count_pending']; ?> client(s) still need their first review pass.</p>
-                </div>
-                <div style="margin-left:auto;">
-                    <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending">View not started</a>
-                </div>
-            </div>
-        <?php endif; ?>
+       
+       
 
         <div class="upload-section">
-            <h3>Upload &amp; Generate Reports</h3>
-            <p>Attach Excel and PDF files. We will parse, assign, and build the client reports for you.</p>
+            <h3>Upload & Generate Reports</h3>
+            <p>Attach Excel and PDF files. We will parse and build the reports.</p>
             <?php if ($uploadError !== ''): ?>
-                <div style="margin-bottom:12px; padding: 10px 12px; background:#fee2e2; border:1px solid #fca5a5; border-radius:8px; color:#991b1b; font-weight:600;">Error: <?php echo htmlspecialchars($uploadError); ?></div>
+                <div class="flash-error">Error: <?php echo htmlspecialchars($uploadError); ?></div>
             <?php endif; ?>
             <form method="post" enctype="multipart/form-data">
                 <div class="upload-zone" id="uploadZone">
                     <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                    <p style="margin: 0; font-weight: 600; color: var(--text-strong);">Drag &amp; drop files here</p>
-                    <p style="margin: 0; color: var(--muted);">or click to select from your computer</p>
-                    <input type="file" name="client_files[]" id="client_files" class="file-input" multiple required>
-                    <label for="client_files" class="btn-primary" style="cursor:pointer;">Select Files</label>
-                    <div id="fileList" style="margin-top: 16px; display: none;">
+                    <p style="margin: 0; font-weight: 600; color: var(--text-strong);">Drag & drop files here</p>
+                    <!-- Hide the default file input completely -->
+                    <input type="file" name="client_files[]" id="client_files" class="file-input" multiple required style="display:none;">
+                    <label for="client_files" class="btn-ash" style="margin-top:10px; display:inline-block; cursor:pointer;">
+                        <i class="fa-solid fa-file-import"></i> Choose Files
+                    </label>
+                    <div id="fileList" style="margin-top: 16px; display: none; text-align: left; width: 100%;">
                         <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--text-strong);">Selected Files:</h4>
                         <ul id="selectedFiles" style="margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--text);"></ul>
                     </div>
@@ -722,6 +734,7 @@ $userDesignation = $currentUser['designation'] ?? '';
                 </div>
             </form>
             <script>
+                // Only one button will be visible now
                 const fileInput = document.getElementById('client_files');
                 const fileList = document.getElementById('fileList');
                 const selectedFiles = document.getElementById('selectedFiles');
@@ -744,6 +757,12 @@ $userDesignation = $currentUser['designation'] ?? '';
                     }
                 });
             </script>
+        </div> <!-- end .wrap main content -->
+
+    <div class="section">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Scheme Strategy Overview</h3>
+            <a href="schemes.php" class="btn-primary" style="font-size:12px; padding:6px 12px;">Manage Schemes</a>
         </div>
     </div>
 </body>
