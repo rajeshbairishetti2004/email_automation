@@ -66,9 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // Col E: Tags (Quarter)
                 // Col G: AUM
                 // Col H: Relationship Manager
+                    // Col I: Reviewer (Review Assigned To)
 
                 $rawName     = trim($row['B'] ?? '');
-                $rawRM       = trim($row['H'] ?? ''); // Case Sensitive Name
+                    $rawRM       = trim($row['H'] ?? ''); // Relationship Manager name
+                    $rawReviewer = trim($row['I'] ?? ''); // Reviewer name
                 $rawTag      = trim($row['E'] ?? ''); // The Quarter/Tag
                 $rawAum      = $row['G'] ?? 0;
                 $rawPriority = trim($row['A'] ?? '');
@@ -89,6 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // --- 3. SMART LOOKUP ---
                 $assignedToId = null;
                 $lookupKey = strtolower($rawRM); // Convert Excel name to lowercase
+                    $reviewerId   = null;
+
+                    $rmKey = strtolower($rawRM);
+                    $revKey = strtolower($rawReviewer);
 
                 if (!empty($lookupKey) && isset($allUsers[$lookupKey])) {
                     $assignedToId = $allUsers[$lookupKey];
@@ -96,6 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 } else {
                     $summary['unassigned']++;
                 }
+                
+                    if (!empty($revKey) && isset($allUsers[$revKey])) {
+                        $reviewerId = $allUsers[$revKey];
+                    }
 
                 // Clean Amount
                 $cleanAum = (float)preg_replace('/[^0-9\.-]/', '', (string)$rawAum);
@@ -112,32 +122,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     $upd = $pdo->prepare("
                         UPDATE clients SET 
                             assigned_to = :assign, 
+                                review_assigned_to = :reviewer,
                             total_amount = :aum,
                             priority = :prio,
                             updated_at = NOW()
                         WHERE id = :id
                     ");
                     $upd->execute([
-                        ':assign' => $assignedToId,
-                        ':aum'    => $cleanAum,
-                        ':prio'   => $rawPriority,
-                        ':id'     => $exists
+                        ':assign'   => $assignedToId,
+                        ':reviewer' => $reviewerId,
+                        ':aum'      => $cleanAum,
+                        ':prio'     => $rawPriority,
+                        ':id'       => (int)$exists
                     ]);
                     $summary['updated']++;
                 } else {
                     // INSERT (Default state: 'pending')
                     $ins = $pdo->prepare("
                         INSERT INTO clients 
-                        (name, assigned_to, total_amount, priority, report_state, created_at, created_by) 
+                        (name, assigned_to, review_assigned_to, total_amount, priority, report_state, created_at, created_by) 
                         VALUES 
-                        (:name, :assign, :aum, :prio, 'pending', NOW(), :creator)
+                        (:name, :assign, :reviewer, :aum, :prio, 'pending', NOW(), :creator)
                     ");
                     $ins->execute([
-                        ':name'   => $rawName,
-                        ':assign' => $assignedToId,
-                        ':aum'    => $cleanAum,
-                        ':prio'   => $rawPriority,
-                        ':creator'=> $currentUserId
+                        ':name'     => $rawName,
+                        ':assign'   => $assignedToId,
+                        ':reviewer' => $reviewerId,
+                        ':aum'      => $cleanAum,
+                        ':prio'     => $rawPriority,
+                        ':creator'  => $currentUserId
                     ]);
                     $summary['inserted']++;
                 }
@@ -239,7 +252,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             <strong>Formatting Rules:</strong>
             <ul style="padding-left: 20px; margin: 5px 0;">
                 <li><strong>Column E (Tags):</strong> Must match the tag you entered above (e.g., 'RJ').</li>
-                <li><strong>Column H (RM Name):</strong> Must be an <u>EXACT</u> case-sensitive match to the username in the system (e.g., 'Sailesh Kumar' != 'sailesh kumar').</li>
+                <li><strong>Column H (RM Name):</strong> Case-insensitive; matches either a username or full name.</li>
+                <li><strong>Column I (Reviewer Name):</strong> Case-insensitive; matches either a username or full name.</li>
                 <li><strong>Column B:</strong> Client Name.</li>
                 <li><strong>Column A:</strong> Priority.</li>
             </ul>

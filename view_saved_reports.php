@@ -58,7 +58,7 @@ $myId = (int)($_SESSION['user_id'] ?? 0);
 
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'mine';
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
 $sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
 $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
 $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
@@ -80,23 +80,19 @@ if ($filter !== '' && in_array($filter, $validStates, true)) {
     // Explicit filter requested (e.g., user clicked a card)
     $whereParts[] = "c.report_state = ?";
     $params[] = $filter;
-} else {
-    // Default view: hide pending allocations (unless filtering for a specific state)
-    if ($filter === '') {
-        $whereParts[] = "c.report_state != ?";
-        $params[] = 'pending';
-    }
 }
 
-if ($ownerFilter === 'mine' || $ownerFilter === '') {
+if ($ownerFilter === 'mine') {
     // Show where user is RM or Reviewer
     $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
     $params[] = $myId;
     $params[] = $myId;
-} elseif ($ownerFilter === 'all') {
-    // no additional filter
+} elseif ($ownerFilter === 'all' || $ownerFilter === '') {
+    // no additional filter, show all clients
 } elseif (ctype_digit($ownerFilter)) {
-    $whereParts[] = "c.assigned_to = ?";
+    // Show where selected user is RM or Reviewer
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = (int)$ownerFilter;
     $params[] = (int)$ownerFilter;
 }
 
@@ -310,8 +306,8 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
     <form method="get" class="search-box" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
         <input type="text" name="q" placeholder="Search by name or date..." value="<?php echo htmlspecialchars($q); ?>">
         <select name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
-            <option value="mine" <?php echo ($ownerFilter === 'mine' || $ownerFilter === '') ? 'selected' : ''; ?>>My Clients</option>
-            <option value="all" <?php echo ($ownerFilter === 'all') ? 'selected' : ''; ?>>All Clients</option>
+            <option value="all" <?php echo ($ownerFilter === 'all' || $ownerFilter === '') ? 'selected' : ''; ?>>All Owners / Global View</option>
+            <option value="mine" <?php echo ($ownerFilter === 'mine') ? 'selected' : ''; ?>>My Reports</option>
             <?php
             $userOptions = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll(PDO::FETCH_ASSOC);
             foreach ($userOptions as $uOpt): ?>
@@ -365,7 +361,7 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     </th>
                     <th>Drafted By</th>
                     <th>RM</th>
-                    <th>Review Assigned To</th>
+                    <th>Reviewer</th>
                     <th>
                         <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                             Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
@@ -465,9 +461,17 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         </span>
                     </td>
                     <td>
+                        <?php 
+                            $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                            $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
+                            if ($isReviewer) {
+                                $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
+                            }
+                        ?>
                         <?php if (!empty($c['reviewer_username'])): ?>
-                            <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                            <span class="badge" style="<?php echo $reviewerStyle; ?>">
                                 <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                                <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
                             </span>
                         <?php else: ?>
                             <span style="color: #999; font-size: 0.85em;">Unassigned</span>

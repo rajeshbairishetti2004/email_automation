@@ -30,11 +30,12 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId): array
     $where  = '1=1';
     $params = [];
     if ($context === 'mine') {
-        $where = 'assigned_to = :uid';
-        $params[':uid'] = $userId;
+        // Use positional placeholders to avoid duplicate named-param issues on some PDO drivers
+        $where = '(assigned_to = ? OR review_assigned_to = ?)';
+        $params = [$userId, $userId];
     } elseif (ctype_digit($context)) {
-        $where = 'assigned_to = :uid';
-        $params[':uid'] = (int)$context;
+        $where = '(assigned_to = ? OR review_assigned_to = ?)';
+        $params = [(int)$context, (int)$context];
     }
 
     $sql = "SELECT
@@ -618,13 +619,12 @@ $userDesignation = $currentUser['designation'] ?? '';
     <div class="wrap">
         <div class="page-header">
             <div>
-                <h1>Dashboard</h1>
-                <p class="lead">Overview of performance, workload, and delivery status.</p>
+                <h1>Quarterly Review of <?php echo date('F Y'); ?></h1>
             </div>
 
             <nav class="context-navbar">
                 <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
-                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Workspace</a>
+                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
                 
                 <?php foreach ($allUsers as $u): ?>
                     <?php if ($u['id'] != $currentUserId): ?>
@@ -675,32 +675,7 @@ $userDesignation = $currentUser['designation'] ?? '';
             </a>
         </div>
 
-        <div class="completion-card">
-            <div>
-                <p class="completion-title">Completion rate</p>
-                <p class="completion-sub">Sent vs total for <?php echo strtolower($targetName); ?> reports.</p>
-            </div>
-            <div class="progress-shell" aria-label="Completion progress">
-                <div class="progress-fill" style="width: <?php echo $completionRate; ?>%;"></div>
-            </div>
-            <div class="completion-value"><?php echo $completionRate; ?>%</div>
-            <div style="color: var(--muted); font-size: 13px; font-weight: 600;">
-                <?php echo (int)$viewStats['count_sent']; ?> sent / <?php echo (int)$viewStats['total']; ?> total
-            </div>
-        </div>
-
-        <?php if ($viewStats['count_pending'] > 0): ?>
-            <div class="pending-alert">
-                <span class="pending-pill">Review Not Started</span>
-                <div>
-                    <h4 style="margin: 0; color: #9a3412;">Review not started</h4>
-                    <p style="margin: 4px 0 0; color: #7c2d12; font-size: 13px;"><?php echo (int)$viewStats['count_pending']; ?> client(s) still need their first review pass.</p>
-                </div>
-                <div style="margin-left:auto;">
-                    <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending">View not started</a>
-                </div>
-            </div>
-        <?php endif; ?>
+        <!-- Review not started block removed as requested -->
 
         <div class="upload-section">
             <h3>Upload &amp; Generate Reports</h3>
