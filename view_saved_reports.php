@@ -225,13 +225,37 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
             width: 18px;
             height: 18px;
         }
+        
+        .top-bar {
+            background: #fff;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .top-bar img {
+            height: 40px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        .top-bar .brand-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #2c3e50;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
 
 <nav class="navbar" style="background:#fff;border-bottom:1px solid #e0e0e0;padding:15px 30px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.05);margin-bottom:20px;font-family:'Segoe UI',system-ui,sans-serif;">
     <div style="display:flex;align-items:center;">
-        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">Finance Doctor</a>
+        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">
+            <img src="image.png" alt="Logo" style="height:40px;vertical-align:middle;margin-right:10px;">
+            Finance Doctor
+        </a>
         <div class="nav-links" style="display:flex;gap:18px;">
             <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'upload.php' ? 'color:#1565c0;' : ''; ?>">Dashboard</a>
             <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'view_saved_reports.php' ? 'color:#1565c0;' : ''; ?>">All Reports</a>

@@ -496,12 +496,61 @@ $filterParam = ($viewContext === 'all') ? 'all' : (($viewContext === 'mine') ? '
         th { font-weight: 700; color: #475569; }
         .progress { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
         .progress-bar { height: 100%; background: linear-gradient(90deg, #0ea5e9, #2563eb); }
+
+        .context-navbar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+        .context-link {
+            padding: 10px 16px;
+            border-radius: 999px;
+            font-weight: 600;
+            color: var(--muted);
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .context-link:hover {
+            background: rgba(37,99,235,0.1);
+            color: var(--text-strong);
+        }
+        .context-link.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            padding: 10px 28px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 18px;
+        }
+        .top-bar img {
+            height: 40px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        .brand-text {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-strong);
+            letter-spacing: 0.01em;
+        }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-left">
-            <a href="upload.php" class="nav-brand">Finance Doctor</a>
+            <div class="top-bar">
+                <img src="image.png" alt="Logo">
+                 <a href="upload.php" class="nav-brand">Finance Doctor</a>
+            </div>
+           
             <div class="nav-links">
                 <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
                 <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
@@ -521,17 +570,19 @@ $filterParam = ($viewContext === 'all') ? 'all' : (($viewContext === 'mine') ? '
                 <p class="lead">Overview of performance, workload, and delivery status.</p>
             </div>
 
-            <form method="get" class="context-switch">
-                <label>View</label>
-                <select name="view_context" class="context-select" onchange="this.form.submit()">
-                    <option value="mine" <?php if ($viewContext === 'mine') echo 'selected'; ?>>My Workspace</option>
-                    <option value="all" <?php if ($viewContext === 'all') echo 'selected'; ?>>Global Overview</option>
-                    <option disabled>──────────</option>
-                    <?php foreach ($allUsers as $u): ?>
-                        <option value="<?php echo $u['id']; ?>" <?php if ($viewContext == $u['id']) echo 'selected'; ?>><?php echo htmlspecialchars($u['username']); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </form>
+            <nav class="context-navbar">
+                <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
+                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Workspace</a>
+                
+                <?php foreach ($allUsers as $u): ?>
+                    <?php if ($u['id'] != $currentUserId): ?>
+                        <a href="?view_context=<?= $u['id'] ?>" 
+                           class="context-link <?= ($viewContext == $u['id']) ? 'active' : '' ?>">
+                           <?= htmlspecialchars($u['username']) ?>
+                        </a>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </nav>
         </div>
 
         <div class="kpi-grid">
