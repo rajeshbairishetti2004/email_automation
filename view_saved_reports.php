@@ -59,6 +59,8 @@ $myId = (int)($_SESSION['user_id'] ?? 0);
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'mine';
+$sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'created_at';
+$sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
 $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $limit       = 20;
 $offset      = ($page - 1) * $limit;
@@ -66,29 +68,34 @@ $offset      = ($page - 1) * $limit;
 $whereParts = [];
 $params = [];
 
+// Build WHERE clause
 if ($q !== '') {
-    $whereParts[] = "(c.name LIKE :q OR c.as_on LIKE :q)";
-    $params[':q'] = '%' . $q . '%';
+    $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
+    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%';
 }
 
 $validStates = ['pending', 'draft', 'ready', 'reviewed', 'sent'];
 if ($filter !== '' && in_array($filter, $validStates, true)) {
     // Explicit filter requested (e.g., user clicked a card)
-    $whereParts[] = "c.report_state = :filter_state";
-    $params[':filter_state'] = $filter;
+    $whereParts[] = "c.report_state = ?";
+    $params[] = $filter;
 } else {
-    // Default view: hide pending allocations
-    $whereParts[] = "c.report_state != 'pending'";
+    // Default view: hide pending allocations (unless filtering for a specific state)
+    if ($filter === '') {
+        $whereParts[] = "c.report_state != ?";
+        $params[] = 'pending';
+    }
 }
 
 if ($ownerFilter === 'mine' || $ownerFilter === '') {
-    $whereParts[] = "c.assigned_to = :owner_id";
-    $params[':owner_id'] = $myId;
+    $whereParts[] = "c.assigned_to = ?";
+    $params[] = $myId;
 } elseif ($ownerFilter === 'all') {
     // no additional filter
 } elseif (ctype_digit($ownerFilter)) {
-    $whereParts[] = "c.assigned_to = :owner_id";
-    $params[':owner_id'] = (int)$ownerFilter;
+    $whereParts[] = "c.assigned_to = ?";
+    $params[] = (int)$ownerFilter;
 }
 
 $where = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
@@ -100,6 +107,23 @@ $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
 // 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
+// Validate sort column to prevent SQL injection
+$allowedSorts = ['id', 'name', 'created_at', 'priority', 'report_state'];
+$sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'created_at';
+
+// Priority sorting needs special handling for NULL and High/Normal/Low ordering
+$orderByClause = '';
+if ($sortColumn === 'priority') {
+    // Sort: High -> Normal -> Low -> NULL
+    $orderByClause = "ORDER BY CASE c.priority 
+        WHEN 'High' THEN 1 
+        WHEN 'Normal' THEN 2 
+        WHEN 'Low' THEN 3 
+        ELSE 4 END {$sortOrder}, c.id DESC";
+} else {
+    $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
+}
+
 $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.total_amount, c.profit, 
            c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to,
@@ -110,17 +134,16 @@ $stmt = $pdo->prepare("
     LEFT JOIN users creator ON c.created_by = creator.id
     LEFT JOIN users assignee ON c.assigned_to = assignee.id
     {$where}
-    ORDER BY c.created_at DESC, c.id DESC
-    LIMIT :limit OFFSET :offset
+    {$orderByClause}
+    LIMIT ? OFFSET ?
 ");
 
-foreach ($params as $k => $v) {
-    $paramType = is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR;
-    $stmt->bindValue($k, $v, $paramType);
-}
-$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
+// Add pagination parameters to the params array
+$params[] = $limit;
+$params[] = $offset;
+
+// Execute with all parameters
+$stmt->execute($params);
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch all users for reassignment dropdown
@@ -302,11 +325,33 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     <th style="width: 40px;">
                         <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll(this)">
                     </th>
-                    <th>ID</th>
-                    <th>Client Name</th>
-                    <th>Drafted By</th>
-                    <th>Assigned To</th>
-                    <th>Status</th>
+                    <th>
+                        <a href="?sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
+                    <th>Review Drafted By</th>
+                    <th>Review Assigned To</th>
+                    <th>
+                        <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?sort=created_at&order=<?php echo ($sortBy === 'created_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Created At <?php if ($sortBy === 'created_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
                     <th>Action</th>
                 </tr>
             <?php foreach ($clients as $c): 
@@ -366,11 +411,6 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     <td>
                         <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
                             <span><?php echo htmlspecialchars($c['name']); ?></span>
-                            <?php if (!empty($c['priority'])): ?>
-                                <span class="<?php echo $priorityBadgeClass; ?>" style="min-width:auto; text-transform:none;">
-                                    <?php echo $priorityText; ?>
-                                </span>
-                            <?php endif; ?>
                             <?php if($hasAttachments): ?>
                                 <span title="Has Attachments">📎</span>
                             <?php endif; ?>
@@ -392,6 +432,25 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                             </span>
                         <?php else: ?>
                             <span style="color: #999; font-size: 0.85em;">Unassigned</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($c['priority'])): ?>
+                            <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
+                                <?php echo $priorityText; ?>
+                            </span>
+                        <?php else: ?>
+                            <span style="color: #999; font-size: 0.85em;">Normal</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($c['created_at'])): ?>
+                            <span style="color: #555; font-size: 0.9em;">
+                                <?php echo date('M j, Y', strtotime($c['created_at'])); ?><br>
+                                <span style="color: #999; font-size: 0.85em;"><?php echo date('g:i A', strtotime($c['created_at'])); ?></span>
+                            </span>
+                        <?php else: ?>
+                            <span style="color: #999; font-size: 0.85em;">N/A</span>
                         <?php endif; ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td>
@@ -418,6 +477,8 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     if ($q !== '') $params['q'] = $q;
                     if ($filter !== '') $params['filter'] = $filter;
                     if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
+                    if ($sortBy !== 'created_at') $params['sort'] = $sortBy;
+                    if ($sortOrder !== 'DESC') $params['order'] = strtolower($sortOrder);
                     $url = 'view_saved_reports.php?' . http_build_query($params);
                     echo "<a href=\"{$url}\">{$p}</a> ";
                 }

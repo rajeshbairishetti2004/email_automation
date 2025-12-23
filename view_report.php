@@ -982,7 +982,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     <?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
         <div class="flash-message flash-success">✅ Report saved successfully!</div>
     <?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
-        <div class="flash-message flash-success">✅ Report created successfully! You can now edit and save the details.</div>
+        <div class="flash-message flash-success">✅ Report for <strong><?php echo htmlspecialchars($name); ?></strong> created successfully as draft! You can now edit and save the details.</div>
     <?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
         <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
     <?php endif; ?>

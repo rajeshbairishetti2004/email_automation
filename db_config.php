@@ -337,19 +337,25 @@ function clientNameFromFilename(string $path): ?string {
     $base = basename($path);
     $base = preg_replace('/\.(xlsx|xls|csv|pdf)$/i', '', $base);
 
-    if (preg_match('/PortfolioValuation-([^-]+)-/i', $base, $m)) {
-        return trim($m[1]);
+    $clientName = null;
+    
+    // More flexible patterns that capture full client names with spaces/hyphens
+    if (preg_match('/PortfolioValuation-(.+?)(?:-\d{8}|-\d{4})?$/i', $base, $m)) {
+        $clientName = trim($m[1]);
+    } elseif (preg_match('/Portfolio\s+Summary-(.+?)(?:-\d{8}|-\d{4})?$/i', $base, $m)) {
+        $clientName = trim($m[1]);
+    } elseif (preg_match('/Allocation\s+Analysis-(.+?)(?:-\d{8}|-\d{4})?$/i', $base, $m)) {
+        $clientName = trim($m[1]);
+    } elseif (preg_match('/GoalStatusReport[_-](.+?)(?:[_-]\d{8})?$/i', $base, $m)) {
+        $clientName = trim(str_replace('_', ' ', $m[1]));
     }
-    if (preg_match('/Portfolio Summary-([^-]+)-/i', $base, $m)) {
-        return trim($m[1]);
+    
+    // Remove trailing numbers (like phone numbers) from the client name
+    if ($clientName) {
+        $clientName = preg_replace('/\s+\d+$/', '', $clientName);
     }
-    if (preg_match('/Allocation Analysis-([^-]+)-/i', $base, $m)) {
-        return trim($m[1]);
-    }
-    if (preg_match('/GoalStatusReport_([^_]+)_/i', $base, $m)) {
-        return trim(str_replace('_', ' ', $m[1]));
-    }
-    return null;
+    
+    return $clientName;
 }
 
 function filterClientArrayForTarget(array $dataset, ?string $targetName): array {
