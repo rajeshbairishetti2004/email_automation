@@ -168,3 +168,13 @@ a:hover {
     border-color: #f5c6cb; 
     cursor: help; 
 }
+
+  .navbar { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); }
+        .nav-left { display: flex; align-items: center; gap: 24px; }
+        .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text-strong); letter-spacing: 0.01em; }
+        .nav-links a { margin-right: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
+        .nav-links a.active { color: var(--primary); border-color: var(--primary); }
+        .nav-user { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--muted); }
+        .btn-logout { padding: 8px 12px; background: #fee2e2; color: #b91c1c; border-radius: 8px; font-weight: 700; }
+        .btn-logout:hover { background: #fecdd3; }
+        

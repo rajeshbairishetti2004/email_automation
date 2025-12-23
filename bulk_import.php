@@ -12,6 +12,9 @@ require_once __DIR__ . '/vendor/autoload.php';
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 requireAuth();
+$currentUser = getCurrentUser();
+$userDesignation = $currentUser['designation'] ?? '';
+$navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 
 $pdo = getPdo();
 $currentUserId = (int)($_SESSION['user_id'] ?? 1);
@@ -155,13 +158,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     <title>Bulk Allocation</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background: #f7f9fb; padding: 20px; }
-        
-        /* Navigation */
-        .navbar { background: #fff; padding: 15px 30px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-radius: 8px; }
-        .nav-brand { font-weight: 700; color: #2c3e50; text-decoration: none; font-size: 1.2rem; }
-        .nav-links a { margin-right: 20px; text-decoration: none; color: #555; }
-        .nav-links a:hover { color: #1565c0; }
+        :root {
+            --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+            --text: #334155; --text-strong: #0f172a; --muted: #64748b;
+            --primary: #2563eb; --primary-dark: #1d4ed8;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
+        .navbar { position: sticky; top: 20px; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); margin:20px; margin-bottom:20px;}
+        .nav-left { display: flex; align-items: center; gap: 24px; }
+        .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text-strong); letter-spacing: 0.01em; }
+        .nav-links a { margin-right: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
+        .nav-links a.active { color: var(--primary); border-color: var(--primary); }
+        .nav-user { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--muted); position:relative; }
+        .profile-dropdown { display: none; position: absolute; right: 0; top: 36px; background: #fff; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); min-width: 180px; z-index: 100; }
+        .profile-dropdown div { font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px; }
+        .profile-dropdown a { display: block; padding: 8px 12px; text-align: right; color: #0288D1; font-weight: 600; }
+        .profile-dropdown a.logout-link { color: inherit; font-weight: normal; }
         
         .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         h2 { margin-top: 0; color: #333; }
@@ -181,19 +194,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 <body>
 
     <nav class="navbar">
-        <div style="display:flex; align-items:center">
-            <img src="image.png" alt="Logo" style="height:40px;vertical-align:middle;margin-right:10px;">
+        <div class="nav-left">
+            <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
             <a href="upload.php" class="nav-brand">Finance Doctor</a>
-            <div class="nav-links" style="margin-left: 40px;">
+            <div class="nav-links">
                 <a href="upload.php">Dashboard</a>
                 <a href="view_saved_reports.php">All Reports</a>
-                <a href="bulk_import.php" style="color: #1565c0; font-weight: bold;">Bulk Allocate</a>
+                <a href="bulk_import.php" class="active">Bulk Allocate</a>
             </div>
         </div>
-        <div>
-            <a href="logout.php" style="color: #c62828; text-decoration: none; font-size: 14px;">Logout</a>
+        <div class="nav-user">
+            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
+            <div id="profileDropdown" class="profile-dropdown">
+                <div>
+                    <?php echo htmlspecialchars($userDesignation); ?>
+                </div>
+                <a href="profile.php">My Profile</a>
+                <a href="logout.php" class="logout-link">Logout</a>
+            </div>
         </div>
     </nav>
+    <script>
+        // Simple dropdown toggle
+        const profilePic = document.getElementById('profilePic');
+        const profileDropdown = document.getElementById('profileDropdown');
+        document.addEventListener('click', function(e) {
+            if (profilePic.contains(e.target)) {
+                profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
+            } else if (!profileDropdown.contains(e.target)) {
+                profileDropdown.style.display = 'none';
+            }
+        });
+    </script>
 
     <div class="container">
         <h2>Bulk Client Allocation</h2>
@@ -246,5 +278,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         </div>
     </div>
 
+    <script>
+        // Dropdown script for profile
+        const profilePic = document.getElementById('profilePic');
+        const dropdown = document.getElementById('profileDropdown');
+        if(profilePic) {
+            profilePic.onclick = (e) => {
+                dropdown.style.display = (dropdown.style.display === 'block') ? 'none' : 'block';
+                e.stopPropagation();
+            };
+        }
+        window.onclick = () => { if(dropdown) dropdown.style.display = 'none'; }
+    </script>
 </body>
 </html>

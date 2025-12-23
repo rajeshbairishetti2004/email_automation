@@ -5,9 +5,13 @@
 // - Added: Bulk reassignment functionality and split owner columns
 
 require_once 'auth.php';
-require_once 'db_config.php';
+requireAuth();
+$currentUser = getCurrentUser();
+$userDesignation = $currentUser['designation'] ?? '';
+$navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
+$myId = $currentUser['id'] ?? ($_SESSION['user_id'] ?? 0); // <-- Add this line to define $myId
 
-requireAuth(); // Ensure login
+require_once 'db_config.php';
 
 $pdo = getPdo();
 $successMessage = '';
@@ -51,10 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type']) && $_P
         $errorMessage = "Error during reassignment: " . $e->getMessage();
     }
 }
-
-$navUser = $_SESSION['username'] ?? 'User';
-$currentPage = basename($_SERVER['PHP_SELF']);
-$myId = (int)($_SESSION['user_id'] ?? 0);
 
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
@@ -135,8 +135,24 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
     <style>
-        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #f7f9fb; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        :root {
+            --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+            --text: #334155; --text-strong: #0f172a; --muted: #64748b;
+            --primary: #2563eb; --primary-dark: #1d4ed8;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
+        .navbar { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); }
+        .nav-left { display: flex; align-items: center; gap: 24px; }
+        .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text-strong); letter-spacing: 0.01em; }
+        .nav-links a { margin-right: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
+        .nav-links a.active { color: var(--primary); border-color: var(--primary); }
+        .nav-user { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--muted); position:relative; }
+        .profile-dropdown { display: none; position: absolute; right: 0; top: 36px; background: #fff; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); min-width: 180px; z-index: 100; }
+        .profile-dropdown div { font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px; }
+        .profile-dropdown a { display: block; padding: 8px 12px; text-align: right; color: #0288D1; font-weight: 600; }
+        .profile-dropdown a.logout-link { color: inherit; font-weight: normal; }
+        
         h1 { margin-bottom: 20px; font-family: 'Poppins', sans-serif; color: #0288D1; }
         
         table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -250,23 +266,39 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body>
 
-<nav class="navbar" style="background:#fff;border-bottom:1px solid #e0e0e0;padding:15px 30px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.05);margin-bottom:20px;font-family:'Segoe UI',system-ui,sans-serif;">
-    <div style="display:flex;align-items:center;">
-        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">
-            <img src="image.png" alt="Logo" style="height:40px;vertical-align:middle;margin-right:10px;">
-            Finance Doctor
-        </a>
-        <div class="nav-links" style="display:flex;gap:18px;">
-            <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'upload.php' ? 'color:#1565c0;' : ''; ?>">Dashboard</a>
-            <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'view_saved_reports.php' ? 'color:#1565c0;' : ''; ?>">All Reports</a>
-            <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'bulk_import.php' ? 'color:#1565c0;' : ''; ?>">Bulk Allocate</a>
+<nav class="navbar">
+    <div class="nav-left">
+        <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
+        <a href="upload.php" class="nav-brand">Finance Doctor</a>
+        <div class="nav-links">
+            <a href="upload.php">Dashboard</a>
+            <a href="view_saved_reports.php" class="active">All Reports</a>
+            <a href="bulk_import.php">Bulk Allocate</a>
         </div>
     </div>
-    <div class="nav-user" style="display:flex;align-items:center;gap:12px;font-size:0.95rem;color:#777;">
-        <span>👤 <?php echo htmlspecialchars($navUser); ?></span>
-        <a href="logout.php" class="btn-logout" style="text-decoration:none;padding:6px 14px;background-color:#ffebee;color:#c62828;border-radius:6px;font-weight:700;font-size:0.85rem;">Logout</a>
+    <div class="nav-user">
+        <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
+        <div id="profileDropdown" class="profile-dropdown">
+            <div>
+                <?php echo htmlspecialchars($userDesignation); ?>
+            </div>
+            <a href="profile.php">My Profile</a>
+            <a href="logout.php" class="logout-link">Logout</a>
+        </div>
     </div>
 </nav>
+<script>
+    // Simple dropdown toggle
+    const profilePic = document.getElementById('profilePic');
+    const profileDropdown = document.getElementById('profileDropdown');
+    document.addEventListener('click', function(e) {
+        if (profilePic.contains(e.target)) {
+            profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
+        } else if (!profileDropdown.contains(e.target)) {
+            profileDropdown.style.display = 'none';
+        }
+    });
+</script>
 
 <div class="container">
 
@@ -488,3 +520,5 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
         });
     }
 </script>
+</body>
+</html>
