@@ -36,15 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type']) && $_P
             $selectedIds = array_filter(array_map('intval', $selectedIds));
             
             if (!empty($selectedIds)) {
-                // Update assigned_to for selected clients
+                // Update reviewer assignment for selected clients
                 $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
-                $updateStmt = $pdo->prepare("UPDATE clients SET assigned_to = ? WHERE id IN ($placeholders)");
+                $updateStmt = $pdo->prepare("UPDATE clients SET review_assigned_to = ?, updated_at = NOW() WHERE id IN ($placeholders)");
                 
                 $params = array_merge([$newOwnerId], $selectedIds);
                 $updateStmt->execute($params);
                 
                 $affectedRows = $updateStmt->rowCount();
-                $successMessage = "Successfully reassigned $affectedRows client(s).";
+                $successMessage = "Successfully assigned reviewer for $affectedRows client(s).";
             }
         }
     } catch (Exception $e) {
@@ -59,7 +59,7 @@ $myId = (int)($_SESSION['user_id'] ?? 0);
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'mine';
-$sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'created_at';
+$sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
 $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
 $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $limit       = 20;
@@ -89,7 +89,9 @@ if ($filter !== '' && in_array($filter, $validStates, true)) {
 }
 
 if ($ownerFilter === 'mine' || $ownerFilter === '') {
-    $whereParts[] = "c.assigned_to = ?";
+    // Show where user is RM or Reviewer
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = $myId;
     $params[] = $myId;
 } elseif ($ownerFilter === 'all') {
     // no additional filter
@@ -108,8 +110,8 @@ $totalPages = max(1, (int)ceil($totalRows / $limit));
 
 // 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 // Validate sort column to prevent SQL injection
-$allowedSorts = ['id', 'name', 'created_at', 'priority', 'report_state'];
-$sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'created_at';
+$allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state'];
+$sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'updated_at';
 
 // Priority sorting needs special handling for NULL and High/Normal/Low ordering
 $orderByClause = '';
@@ -125,14 +127,16 @@ if ($sortColumn === 'priority') {
 }
 
 $stmt = $pdo->prepare("
-    SELECT c.id, c.name, c.as_on, c.created_at, c.total_amount, c.profit, 
-           c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to,
+    SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
+           c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
            c.priority,
-           creator.username as created_by_username,
-           assignee.username as assigned_to_username
+           creator.username AS created_by_username,
+           rm.username AS rm_username,
+           reviewer.username AS reviewer_username
     FROM clients c
-    LEFT JOIN users creator ON c.created_by = creator.id
-    LEFT JOIN users assignee ON c.assigned_to = assignee.id
+    LEFT JOIN users creator  ON c.created_by = creator.id
+    LEFT JOIN users rm       ON c.assigned_to = rm.id
+    LEFT JOIN users reviewer ON c.review_assigned_to = reviewer.id
     {$where}
     {$orderByClause}
     LIMIT ? OFFSET ?
@@ -248,13 +252,37 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
             width: 18px;
             height: 18px;
         }
+        
+        .top-bar {
+            background: #fff;
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .top-bar img {
+            height: 40px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        .top-bar .brand-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #2c3e50;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
 
 <nav class="navbar" style="background:#fff;border-bottom:1px solid #e0e0e0;padding:15px 30px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.05);margin-bottom:20px;font-family:'Segoe UI',system-ui,sans-serif;">
     <div style="display:flex;align-items:center;">
-        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">Finance Doctor</a>
+        <a href="upload.php" class="nav-brand" style="font-size:1.25rem;font-weight:700;color:#2c3e50;text-decoration:none;margin-right:32px;">
+            <img src="image.png" alt="Logo" style="height:40px;vertical-align:middle;margin-right:10px;">
+            Finance Doctor
+        </a>
         <div class="nav-links" style="display:flex;gap:18px;">
             <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'upload.php' ? 'color:#1565c0;' : ''; ?>">Dashboard</a>
             <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>" style="text-decoration:none;color:#555;font-weight:600;<?php echo $currentPage === 'view_saved_reports.php' ? 'color:#1565c0;' : ''; ?>">All Reports</a>
@@ -335,7 +363,8 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                             Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
-                    <th>Review Drafted By</th>
+                    <th>Drafted By</th>
+                    <th>RM</th>
                     <th>Review Assigned To</th>
                     <th>
                         <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
@@ -343,8 +372,8 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         </a>
                     </th>
                     <th>
-                        <a href="?sort=created_at&order=<?php echo ($sortBy === 'created_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            Created At <?php if ($sortBy === 'created_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        <a href="?sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Last Updated <?php if ($sortBy === 'updated_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
                     <th>
@@ -417,18 +446,28 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                     </td>
                     <td>
-                        <?php if (!empty($c['created_by_username'])): ?>
-                            <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                <?php echo htmlspecialchars($c['created_by_username']); ?>
-                            </span>
+                        <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+                        <?php if ($currState === 'pending'): ?>
+                            <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
                         <?php else: ?>
-                            <span style="color: #999; font-size: 0.85em;">Unassigned</span>
+                            <?php if (!empty($c['created_by_username'])): ?>
+                                <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                    <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                </span>
+                            <?php else: ?>
+                                <span style="color: #999; font-size: 0.85em;">System</span>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </td>
                     <td>
-                        <?php if (!empty($c['assigned_to_username'])): ?>
-                            <span class="badge" style="background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                <?php echo htmlspecialchars($c['assigned_to_username']); ?>
+                        <span style="color:#333; font-weight:600;">
+                            <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                        </span>
+                    </td>
+                    <td>
+                        <?php if (!empty($c['reviewer_username'])): ?>
+                            <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                <?php echo htmlspecialchars($c['reviewer_username']); ?>
                             </span>
                         <?php else: ?>
                             <span style="color: #999; font-size: 0.85em;">Unassigned</span>
@@ -444,10 +483,10 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </td>
                     <td>
-                        <?php if (!empty($c['created_at'])): ?>
+                        <?php if (!empty($c['updated_at'])): ?>
                             <span style="color: #555; font-size: 0.9em;">
-                                <?php echo date('M j, Y', strtotime($c['created_at'])); ?><br>
-                                <span style="color: #999; font-size: 0.85em;"><?php echo date('g:i A', strtotime($c['created_at'])); ?></span>
+                                <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
+                                <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
                             </span>
                         <?php else: ?>
                             <span style="color: #999; font-size: 0.85em;">N/A</span>
@@ -477,7 +516,7 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     if ($q !== '') $params['q'] = $q;
                     if ($filter !== '') $params['filter'] = $filter;
                     if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
-                    if ($sortBy !== 'created_at') $params['sort'] = $sortBy;
+                    if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
                     if ($sortOrder !== 'DESC') $params['order'] = strtolower($sortOrder);
                     $url = 'view_saved_reports.php?' . http_build_query($params);
                     echo "<a href=\"{$url}\">{$p}</a> ";

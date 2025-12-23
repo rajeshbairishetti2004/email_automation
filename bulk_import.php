@@ -182,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
     <nav class="navbar">
         <div style="display:flex; align-items:center">
+            <img src="image.png" alt="Logo" style="height:40px;vertical-align:middle;margin-right:10px;">
             <a href="upload.php" class="nav-brand">Finance Doctor</a>
             <div class="nav-links" style="margin-left: 40px;">
                 <a href="upload.php">Dashboard</a>
@@ -246,4 +247,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     </div>
 
 </body>
-</html>G
+</html>
