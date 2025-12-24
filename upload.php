@@ -665,7 +665,6 @@ $userDesignation = $currentUser['designation'] ?? '';
             <nav class="context-navbar">
                 <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
                 <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
-                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
                 
                 <?php foreach ($allUsers as $u): ?>
                     <?php if ($u['id'] != $currentUserId): ?>
