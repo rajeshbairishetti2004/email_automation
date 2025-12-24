@@ -197,6 +197,15 @@ try {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
+            // --- SECURITY: FETCH TARGET CLIENT NAME ---
+            $stmtClient = $pdo->prepare("SELECT name FROM clients WHERE id = :id LIMIT 1");
+            $stmtClient->execute([':id' => $clientId]);
+            $targetClientName = $stmtClient->fetchColumn();
+            
+            if (!$targetClientName) {
+                throw new Exception("Client not found with ID: " . $clientId);
+            }
+
             $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
             if (!is_dir($baseDir)) {
                 mkdir($baseDir, 0777, true);
@@ -210,6 +219,39 @@ try {
                 for ($i = 0; $i < $count; $i++) {
                     if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) {
                         $rawName = basename($_FILES['files']['name'][$i]);
+                        
+                        // --- SECURITY: STRICT NAME MATCH VALIDATION ---
+                        // Normalize both filenames and client name for comparison
+                        $normalizedFile = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $rawName));
+                        $normalizedClient = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $targetClientName));
+                        
+                        // Check if client name exists in the filename
+                        if (strpos($normalizedFile, $normalizedClient) === false) {
+                            // Try matching individual name parts (e.g., "Jatin" and "Sharma" separately)
+                            $nameParts = preg_split('/\s+/', $targetClientName);
+                            $partFound = false;
+                            
+                            if (count($nameParts) > 1) {
+                                foreach ($nameParts as $part) {
+                                    $normalizedPart = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $part));
+                                    if (!empty($normalizedPart) && strpos($normalizedFile, $normalizedPart) !== false) {
+                                        $partFound = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // If no match found, reject the upload
+                            if (!$partFound) {
+                                throw new Exception(
+                                    "❌ Security Alert: Filename does not match the client. " .
+                                    "You are trying to upload a file for <strong>" . htmlspecialchars($targetClientName) . "</strong>, " .
+                                    "but the file is named <strong>" . htmlspecialchars($rawName) . "</strong>. " .
+                                    "Please ensure the filename contains the client's name."
+                                );
+                            }
+                        }
+                        
                         // Keep spaces and common filename characters
                         $fileName = preg_replace('/[^\w\s\._-]/u', '', $rawName);
                         $targetPath = $baseDir . '/' . $fileName;

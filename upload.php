@@ -31,11 +31,12 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId): array
     $where  = '1=1';
     $params = [];
     if ($context === 'mine') {
-        $where = 'assigned_to = :uid';
-        $params[':uid'] = $userId;
+        // Use positional placeholders to avoid duplicate named-param issues on some PDO drivers
+        $where = '(assigned_to = ? OR review_assigned_to = ?)';
+        $params = [$userId, $userId];
     } elseif (ctype_digit($context)) {
-        $where = 'assigned_to = :uid';
-        $params[':uid'] = (int)$context;
+        $where = '(assigned_to = ? OR review_assigned_to = ?)';
+        $params = [(int)$context, (int)$context];
     }
 
     $sql = "SELECT
@@ -206,7 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 intro_text = :intro_text,
                 closing_text = :closing_text,
                 rationale_text = :rationale_text,
-                report_state = :report_state
+            report_state = :report_state,
+            created_by = :created_by,
+            updated_at = NOW()
             WHERE id = :id');
 
         $insertClient = $pdo->prepare('INSERT INTO clients
@@ -291,6 +294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':closing_text'       => DEFAULT_CLOSING,
                     ':rationale_text'     => DEFAULT_RATIONALE,
                     ':report_state'       => 'draft',
+                    ':created_by'         => $currentUserId,
                     ':id'                 => $existingId,
                 ]);
 
@@ -650,12 +654,12 @@ $userDesignation = $currentUser['designation'] ?? '';
     <div class="wrap">
         <div class="page-header">
             <div>
-        <h1>Client Review of <?= $currentReviewPeriod ?></h1>
-        <p class="lead">Overview of performance, workload, and delivery status.</p>
-    </div>
+                <h1>Quarterly Review of <?php echo date('F Y'); ?></h1>
+            </div>
+
             <nav class="context-navbar">
                 <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
-                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Workspace</a>
+                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
                 
                 <?php foreach ($allUsers as $u): ?>
                     <?php if ($u['id'] != $currentUserId): ?>
@@ -708,6 +712,7 @@ $userDesignation = $currentUser['designation'] ?? '';
 
        
        
+        <!-- Review not started block removed as requested -->
 
         <div class="upload-section">
             <h3>Upload & Generate Reports</h3>
