@@ -1312,7 +1312,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     }
                 });
             </script>
-
+            <?php require_once 'recommendations.php'; ?>
             <h3>4. Appropriate Scheme Selection</h3>
             <table class="report-table">
                 <tr>
@@ -1347,6 +1347,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                                 <option value="Redeem" <?php echo ($s['action_step'] ?? '') === 'Redeem' ? 'selected' : ''; ?>>Redeem</option>
                                 <option value="Partially Redeem" <?php echo ($s['action_step'] ?? '') === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
                                 <option value="Under Observation" <?php echo ($s['action_step'] ?? '') === 'Under Observation' ? 'selected' : ''; ?>>Under Observation</option>
+                                <option value="Recommended" <?php echo ($s['action_step'] ?? '') === 'Recommended' ? 'selected' : ''; ?>>Recommended</option>
                             </select>
                         </td>
                         <td>
