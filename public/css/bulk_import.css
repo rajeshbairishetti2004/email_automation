@@ -122,3 +122,87 @@
     box-shadow: 0 4px 16px rgba(41, 182, 246, 0.18);
     border-color: #4FC3F7;
 }
+
+/* --- Meeting Tracker Modal & Toast Styles --- */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    z-index: 9999;
+}
+.modal-box {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    padding: 32px 28px 22px 28px;
+    max-width: 95vw;
+    min-width: 320px;
+    position: relative;
+}
+.modal-buttons {
+    margin-top: 18px;
+    text-align: right;
+}
+.modal-btn {
+    padding: 10px 22px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 700;
+    font-size: 15px;
+    background: #0288D1;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.modal-btn-confirm {
+    background: linear-gradient(135deg, #4FC3F7 0%, #0288D1 100%);
+}
+.modal-btn-confirm:hover {
+    background: linear-gradient(135deg, #0288D1 0%, #29B6F6 100%);
+}
+.wf-btn {
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    transition: box-shadow 0.2s, background 0.2s;
+}
+.btn-approve {
+    background: #43a047;
+    color: #fff;
+}
+.btn-approve:hover {
+    background: #388e3c;
+}
+.btn-reject {
+    background: #e53935;
+    color: #fff;
+}
+.btn-reject:hover {
+    background: #b71c1c;
+}
+
+/* Toast notification */
+.toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #424242 0%, #212121 100%);
+    color: #fff;
+    border-radius: 8px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+}
+.toast.show {
+    opacity: 1;
+    pointer-events: auto;
+}

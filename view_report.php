@@ -2490,5 +2490,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
     // ...existing code...
     </script>
+    <?php include 'meeting_tracker.php'; ?>
 </body>
 </html>
