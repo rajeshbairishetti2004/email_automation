@@ -122,10 +122,11 @@ if ($sortColumn === 'priority') {
     $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
 }
 
+// Update the SELECT query to include meeting_status and meeting_remarks:
 $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
            c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
-           c.priority,
+           c.priority, c.meeting_status, c.meeting_remarks,
            creator.username AS created_by_username,
            rm.username AS rm_username,
            reviewer.username AS reviewer_username
@@ -284,6 +285,8 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                             Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
+                    <th>Meeting Status</th>
+                    <th>Meeting Remarks</th>
                     <th>Action</th>
                 </tr>
             <?php foreach ($clients as $c): 
@@ -404,6 +407,24 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td>
+                    <td>
+                        <?php
+                            $meetingStatus = $c['meeting_status'] ?? '';
+                            if ($meetingStatus === 'yes') {
+                                echo '<span style="color: #388e3c; font-weight:600;">Completed</span>';
+                            } elseif ($meetingStatus === 'no') {
+                                echo '<span style="color: #e53935; font-weight:600;">Not Done</span>';
+                            } else {
+                                echo '<span style="color: #999;">-</span>';
+                            }
+                        ?>
+                    </td>
+                    <td>
+                        <?php
+                            $remarks = trim($c['meeting_remarks'] ?? '');
+                            echo $remarks !== '' ? htmlspecialchars($remarks) : '<span style="color:#999;">-</span>';
+                        ?>
+                    </td>
                     <td>
                         <?php if (($c['report_state'] ?? '') === 'pending'): ?>
                             <a href="upload.php" style="font-weight: 600; color:#0288D1;">Upload Files</a>
