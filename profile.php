@@ -41,25 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $email = trim($_POST['email']);
     $mobile = trim($_POST['mobile']);
     $designation = trim($_POST['designation']);
-    $oldPasswordInput = $_POST['old_password'] ?? '';
 
-    $stmtPwd = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
-    $stmtPwd->execute([$userId]);
-    $storedHash = $stmtPwd->fetchColumn();
-
-    if (!password_verify($oldPasswordInput, $storedHash)) {
-        $error = "You have entered incorrect old password.";
+    $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
+    $stmtCheck->execute([$username, $userId]);
+    if ($stmtCheck->fetch()) {
+        $error = "Username already exists.";
     } else {
-        $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
-        $stmtCheck->execute([$username, $userId]);
-        if ($stmtCheck->fetch()) {
-            $error = "Username already exists.";
-        } else {
-            $stmt = $pdo->prepare("UPDATE users SET username = ?, name = ?, email = ?, mobile = ?, designation = ? WHERE id = ?");
-            $stmt->execute([$username, $name, $email, $mobile, $designation, $userId]);
-            $message = "Profile updated successfully!";
-            $_SESSION['username'] = $username;
-        }
+        $stmt = $pdo->prepare("UPDATE users SET username = ?, name = ?, email = ?, mobile = ?, designation = ? WHERE id = ?");
+        $stmt->execute([$username, $name, $email, $mobile, $designation, $userId]);
+        $message = "Profile updated successfully!";
+        $_SESSION['username'] = $username;
     }
 }
 
@@ -138,8 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                 </select>
             </div>
             <div class="form-group" style="border-top:1px solid #eee; padding-top:15px;">
-                <label style="color:#d32f2f;">Current Password (to save changes)</label>
-                <input type="password" name="old_password" required>
             </div>
             <button type="submit" name="update_profile" class="nav-button">Update Details</button>
         </form>

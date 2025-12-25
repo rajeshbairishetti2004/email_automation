@@ -156,159 +156,34 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 <head>
     <title>Stored Client Reports</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="public/css/styles.css">
-    <style>
-        :root {
-            --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
-            --text: #334155; --text-strong: #0f172a; --muted: #64748b;
-            --primary: #2563eb; --primary-dark: #1d4ed8;
-            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        }
-        body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
-        .navbar { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); }
-        .nav-left { display: flex; align-items: center; gap: 24px; }
-        .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text-strong); letter-spacing: 0.01em; }
-        .nav-links a { margin-right: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
-        .nav-links a.active { color: var(--primary); border-color: var(--primary); }
-        .nav-user { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--muted); position:relative; }
-        .profile-dropdown { display: none; position: absolute; right: 0; top: 36px; background: #fff; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); min-width: 180px; z-index: 100; }
-        .profile-dropdown div { font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px; }
-        .profile-dropdown a { display: block; padding: 8px 12px; text-align: right; color: #0288D1; font-weight: 600; }
-        .profile-dropdown a.logout-link { color: inherit; font-weight: normal; }
-        
-        h1 { margin-bottom: 20px; font-family: 'Poppins', sans-serif; color: #0288D1; }
-        
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        th, td { padding: 12px 15px; font-size: 14px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f1f8e9; color: #333; font-weight: 600; }
-        tr:hover { background: #f9f9f9; }
-        
-        a { text-decoration: none; color: #0056b3; }
-        a:hover { text-decoration: underline; }
+    <!-- <link rel="stylesheet" href="public/css/styles.css"> -->
+    <link rel="stylesheet" href="public/css/view_saved_reports.css">
 
-        .nav-bar { margin-bottom: 20px; }
-        .nav-button { display: inline-block; margin-right: 10px; padding: 8px 16px; background-color: #0288D1; color: #fff; border-radius: 5px; text-decoration: none; font-size: 14px; font-weight: 500; }
-        .nav-button:hover { background-color: #01579B; }
-
-        .search-box { margin-top: 10px; }
-        .search-box input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 250px; }
-        .search-box button { padding: 8px 15px; background: #0288D1; color: white; border: none; border-radius: 4px; cursor: pointer; }
-
-        .pagination { margin-top: 20px; font-size: 14px; }
-        .pagination a { margin-right: 5px; padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; color: #333; }
-        .pagination strong { padding: 5px 10px; background: #0288D1; color: white; border-radius: 4px; margin-right: 5px; }
-        
-        /* Workflow Status Badges */
-        .badge { padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; border: 1px solid transparent; display: inline-block; min-width: 60px; text-align: center;}
-        .badge-pending { background: #fff7ed; color: #9a3412; border-color: #fde68a; }
-        .badge-draft { background: #e0e0e0; color: #555; border-color: #ccc; }
-        .badge-ready { background: #fff3cd; color: #856404; border-color: #ffeeba; }
-        .badge-reviewed { background: #d4edda; color: #155724; border-color: #c3e6cb; }
-        .badge-sent { background: #cce5ff; color: #004085; border-color: #b8daff; }
-        .badge-rejected { background: #f8d7da; color: #721c24; border-color: #f5c6cb; cursor: help; }
-        
-        /* Bulk Actions Bar */
-        .bulk-actions-bar {
-            background: #e8f5e9;
-            border: 1px solid #c8e6c9;
-            border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 20px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        .bulk-actions-bar select, .bulk-actions-bar button {
-            padding: 8px 12px;
-            border: 1px solid #999;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .bulk-actions-bar button {
-            background: #4caf50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .bulk-actions-bar button:hover {
-            background: #388e3c;
-        }
-        .bulk-selection-info {
-            font-size: 13px;
-            color: #333;
-            font-weight: 500;
-        }
-        
-        /* Message Alerts */
-        .alert {
-            padding: 12px 15px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        /* Checkbox Styling */
-        input[type="checkbox"] {
-            cursor: pointer;
-            width: 18px;
-            height: 18px;
-        }
-        
-        .top-bar {
-            background: #fff;
-            padding: 15px 30px;
-            display: flex;
-            align-items: center;
-            border-bottom: 1px solid #e0e0e0;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .top-bar img {
-            height: 40px;
-            vertical-align: middle;
-            margin-right: 10px;
-        }
-        .top-bar .brand-text {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #2c3e50;
-            text-decoration: none;
-        }
-    </style>
 </head>
 <body>
 
 <nav class="navbar">
     <div class="nav-left">
-        <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
-        <a href="upload.php" class="nav-brand">Finance Doctor</a>
+        <div class="top-bar">
+            <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
+            <a href="upload.php" class="nav-brand">Finance Doctor</a>
+         </div>
         <div class="nav-links">
             <a href="upload.php">Dashboard</a>
             <a href="view_saved_reports.php" class="active">All Reports</a>
             <a href="bulk_import.php">Bulk Allocate</a>
         </div>
     </div>
-    <div class="nav-user">
-        <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-        <div id="profileDropdown" class="profile-dropdown">
-            <div>
-                <?php echo htmlspecialchars($userDesignation); ?>
+     <div class="nav-user" style="position:relative;">
+            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
+            <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:36px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:100;">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
+                    <?= htmlspecialchars($userDesignation) ?>
+                </div>
+                <a href="profile.php" style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">My Profile</a>
+                <a href="logout.php" class="logout-link" style="display:block; padding:8px 12px; text-align:right;">Logout</a>
             </div>
-            <a href="profile.php">My Profile</a>
-            <a href="logout.php" class="logout-link">Logout</a>
         </div>
-    </div>
 </nav>
 <script>
     // Simple dropdown toggle
@@ -393,7 +268,7 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     </th>
                     <th>Drafted By</th>
                     <th>RM</th>
-                    <th>Reviewer</th>
+                    <th>Review Assigned to</th>
                     <th>
                         <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                             Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>

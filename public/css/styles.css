@@ -1,4 +1,4 @@
-/* -----------------------------
+/* /* -----------------------------
    GLOBAL STYLE (Matches Python project)
 -------------------------------- */
 body {
@@ -97,7 +97,7 @@ tr:last-child td {
 
 /* Navigation buttons */
 .nav-bar {
-    margin-bottom: 20px;
+  margin-bottom: 20px;
 }
 
 .nav-button {
@@ -341,3 +341,12 @@ tr:last-child td {
 td[style*="padding: 0"] {
     padding: 0 !important;
 }
+
+.navbar {
+    margin: 0 !important;
+}
+
+.nav-brand {
+    text-decoration: none !important;
+    border-bottom: none !important;
+} 
