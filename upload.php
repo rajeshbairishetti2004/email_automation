@@ -26,7 +26,7 @@ function safePercent($num, $den)
     return (int)round(($num / $den) * 100);
 }
 
-function fetchDashboardStats(PDO $pdo, string $context, int $userId): array
+function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
 {
     $where  = '1=1';
     $params = [];
@@ -42,6 +42,11 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId): array
         $params = [(int)$context, (int)$context];
         $where = '(assigned_to = ? OR review_assigned_to = ?)';
         $params = [(int)$context, (int)$context];
+    }
+    // Add cycle filter if set
+    if ($cycleFilter !== '') {
+        $where .= ' AND review_cycle = ?';
+        $params[] = $cycleFilter;
     }
 
     $sql = "SELECT
@@ -116,6 +121,8 @@ function mergeClientArrays(array &$target, array $source): void
     }
 }
 
+$cycleFilter = isset($_GET['cycle_filter']) ? $_GET['cycle_filter'] : '';
+
 $viewContext = $_GET['view_context'] ?? 'mine';
 $targetName  = 'My';
 if ($viewContext === 'all') {
@@ -127,7 +134,7 @@ if ($viewContext === 'all') {
 $usersStmt = $pdo->query('SELECT id, username FROM users ORDER BY username ASC');
 $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId);
+$viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter);
 $completionRate  = safePercent($viewStats['count_sent'], max(1, $viewStats['total']));
 $uploadError     = '';
 
@@ -472,8 +479,21 @@ $userDesignation = $currentUser['designation'] ?? '';
 
     <div class="wrap">
         <div class="page-header">
-            <div>
-                <h1>Quarterly Review of <?php echo date('F Y'); ?></h1>
+            <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
+                <h1 style="margin:0;">Quarterly Review of <?php echo date('F Y'); ?></h1>
+                <!-- Add Cycle Dropdown horizontally aligned to the right -->
+                <form method="get" id="cycleForm" style="margin:0;">
+                    <select name="cycle_filter" onchange="this.form.submit()" style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff; margin-left:20px;">
+                        <option value="" <?php if($cycleFilter==='') echo 'selected'; ?>>All Cycles</option>
+                        <option value="RJ" <?php if($cycleFilter==='RJ') echo 'selected'; ?>>RJ</option>
+                        <option value="RM" <?php if($cycleFilter==='RM') echo 'selected'; ?>>RM</option>
+                        <option value="RF" <?php if($cycleFilter==='RF') echo 'selected'; ?>>RF</option>
+                    </select>
+                    <!-- Preserve view_context in the form if present -->
+                    <?php if (isset($_GET['view_context'])): ?>
+                        <input type="hidden" name="view_context" value="<?php echo htmlspecialchars($_GET['view_context']); ?>">
+                    <?php endif; ?>
+                </form>
             </div>
 
             <nav class="context-navbar">

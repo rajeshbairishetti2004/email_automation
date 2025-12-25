@@ -1861,7 +1861,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                             alert(data.message);
                         }
                     });
-                });
             }
         });
 
@@ -2488,6 +2487,21 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         .catch(err => alert('Delete error.'));
     }
 
+    // Add this helper function if you use parseUploadedFile() anywhere in this file or in included files
+    if (!function_exists('parseUploadedFile')) {
+        /**
+         * Dummy parseUploadedFile implementation.
+         * Replace this with your actual file parsing logic if needed.
+         */
+        function parseUploadedFile($filePath) {
+            // Example: return file info or parsed data
+            return [
+                'filename' => basename($filePath),
+                'size' => is_file($filePath) ? filesize($filePath) : 0,
+                'parsed' => false // or your parsed data
+            ];
+        }
+    }
     // ...existing code...
     </script>
     <?php include 'meeting_tracker.php'; ?>

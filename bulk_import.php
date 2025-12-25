@@ -78,6 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 $rawAum      = $row['G'] ?? 0;
                 $rawPriority = trim($row['A'] ?? '');
 
+                // --- NEW: Clean/Validate review_cycle value ---
+                $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
+
                 // Skip empty rows
                 if (empty($rawName)) continue;
 
@@ -125,9 +128,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     $upd = $pdo->prepare("
                         UPDATE clients SET 
                             assigned_to = :assign, 
-                                review_assigned_to = :reviewer,
+                            review_assigned_to = :reviewer,
                             total_amount = :aum,
                             priority = :prio,
+                            review_cycle = :cycle,
                             updated_at = NOW()
                         WHERE id = :id
                     ");
@@ -136,6 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                         ':reviewer' => $reviewerId,
                         ':aum'      => $cleanAum,
                         ':prio'     => $rawPriority,
+                        ':cycle'    => $reviewCycleValue,
                         ':id'       => (int)$exists
                     ]);
                     $summary['updated']++;
@@ -143,9 +148,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     // INSERT (Default state: 'pending')
                     $ins = $pdo->prepare("
                         INSERT INTO clients 
-                        (name, assigned_to, review_assigned_to, total_amount, priority, report_state, created_at, created_by) 
+                        (name, assigned_to, review_assigned_to, total_amount, priority, review_cycle, report_state, created_at, created_by) 
                         VALUES 
-                        (:name, :assign, :reviewer, :aum, :prio, 'pending', NOW(), :creator)
+                        (:name, :assign, :reviewer, :aum, :prio, :cycle, 'pending', NOW(), :creator)
                     ");
                     $ins->execute([
                         ':name'     => $rawName,
@@ -153,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                         ':reviewer' => $reviewerId,
                         ':aum'      => $cleanAum,
                         ':prio'     => $rawPriority,
+                        ':cycle'    => $reviewCycleValue,
                         ':creator'  => $currentUserId
                     ]);
                     $summary['inserted']++;

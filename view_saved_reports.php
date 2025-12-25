@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type']) && $_P
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+$cycleFilter = isset($_GET['cycle_filter']) ? trim($_GET['cycle_filter']) : '';
 $sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
 $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
 $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
@@ -74,14 +75,15 @@ if ($q !== '') {
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
-
 $validStates = ['pending', 'draft', 'ready', 'reviewed', 'sent'];
 if ($filter !== '' && in_array($filter, $validStates, true)) {
-    // Explicit filter requested (e.g., user clicked a card)
     $whereParts[] = "c.report_state = ?";
     $params[] = $filter;
 }
-
+if ($cycleFilter !== '') {
+    $whereParts[] = "c.review_cycle = ?";
+    $params[] = $cycleFilter;
+}
 if ($ownerFilter === 'mine') {
     // Show where user is RM or Reviewer
     $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
@@ -127,6 +129,7 @@ $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
            c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
            c.priority, c.meeting_status, c.meeting_remarks,
+           c.review_cycle,
            creator.username AS created_by_username,
            rm.username AS rm_username,
            reviewer.username AS reviewer_username
@@ -150,6 +153,26 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Fetch all users for reassignment dropdown
 $allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
 $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// 1. Fetch counts for each Cycle
+$cycleCountStmt = $pdo->query("SELECT review_cycle, COUNT(*) as total FROM clients WHERE review_cycle IS NOT NULL AND review_cycle != '' GROUP BY review_cycle");
+$cycleTotals = $cycleCountStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+$allCyclesTotal = array_sum($cycleTotals);
+
+// 2. Fetch counts for each Status (Report State)
+$statusCountStmt = $pdo->query("SELECT report_state, COUNT(*) as total FROM clients GROUP BY report_state");
+$statusTotals = $statusCountStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+$allStatesTotal = array_sum($statusTotals);
+
+// 3. Fetch counts for each Owner (user)
+$ownerCountStmt = $pdo->query("SELECT u.id, u.username, COUNT(c.id) as total FROM users u LEFT JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) GROUP BY u.id, u.username");
+$ownerTotals = [];
+foreach ($ownerCountStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $ownerTotals[$row['id']] = [
+        'username' => $row['username'],
+        'total' => (int)$row['total']
+    ];
+}
 
 ?>
 <!DOCTYPE html>
@@ -212,25 +235,41 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
     <?php endif; ?>
 
     <form method="get" class="search-box" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-        <input type="text" name="q" placeholder="Search by name or date..." value="<?php echo htmlspecialchars($q); ?>">
+        <input type="text" name="q" placeholder="Search by name..." value="<?php echo htmlspecialchars($q); ?>">
+
+        <select name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
+            <option value="">All Cycles (<?php echo $allCyclesTotal; ?>)</option>
+            <option value="RJ" <?php echo ($cycleFilter === 'RJ') ? 'selected' : ''; ?>>RJ (<?php echo $cycleTotals['RJ'] ?? 0; ?>)</option>
+            <option value="RM" <?php echo ($cycleFilter === 'RM') ? 'selected' : ''; ?>>RM (<?php echo $cycleTotals['RM'] ?? 0; ?>)</option>
+            <option value="RF" <?php echo ($cycleFilter === 'RF') ? 'selected' : ''; ?>>RF (<?php echo $cycleTotals['RF'] ?? 0; ?>)</option>
+        </select>
+
         <select name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
-            <option value="all" <?php echo ($ownerFilter === 'all' || $ownerFilter === '') ? 'selected' : ''; ?>>All Owners / Global View</option>
-            <option value="mine" <?php echo ($ownerFilter === 'mine') ? 'selected' : ''; ?>>My Reports</option>
+            <option value="all" <?php echo ($ownerFilter === 'all' || $ownerFilter === '') ? 'selected' : ''; ?>>
+                All Owners / Global View (<?php echo array_sum(array_column($ownerTotals, 'total')); ?>)
+            </option>
+            <option value="mine" <?php echo ($ownerFilter === 'mine') ? 'selected' : ''; ?>>
+                My Reports
+            </option>
             <?php
-            $userOptions = $pdo->query("SELECT id, username FROM users ORDER BY username ASC")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($userOptions as $uOpt): ?>
-                <option value="<?php echo (int)$uOpt['id']; ?>" <?php echo ((string)$ownerFilter === (string)$uOpt['id']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($uOpt['username']); ?></option>
+            foreach ($ownerTotals as $uid => $info): ?>
+                <option value="<?php echo (int)$uid; ?>" <?php echo ((string)$ownerFilter === (string)$uid) ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($info['username']); ?> (<?php echo $info['total']; ?>)
+                </option>
             <?php endforeach; ?>
         </select>
-        <select name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
-            <option value="">All States</option>
-            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Review Not Started</option>
-            <option value="draft" <?php echo ($filter === 'draft') ? 'selected' : ''; ?>>Draft</option>
-            <option value="ready" <?php echo ($filter === 'ready') ? 'selected' : ''; ?>>Ready</option>
-            <option value="reviewed" <?php echo ($filter === 'reviewed') ? 'selected' : ''; ?>>Reviewed</option>
-            <option value="sent" <?php echo ($filter === 'sent') ? 'selected' : ''; ?>>Sent</option>
+
+        <select name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
+            <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
+            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Review Not Started (<?php echo $statusTotals['pending'] ?? 0; ?>)</option>
+            <option value="draft" <?php echo ($filter === 'draft') ? 'selected' : ''; ?>>Draft (<?php echo $statusTotals['draft'] ?? 0; ?>)</option>
+            <option value="ready" <?php echo ($filter === 'ready') ? 'selected' : ''; ?>>Ready (<?php echo $statusTotals['ready'] ?? 0; ?>)</option>
+            <option value="reviewed" <?php echo ($filter === 'reviewed') ? 'selected' : ''; ?>>Reviewed (<?php echo $statusTotals['reviewed'] ?? 0; ?>)</option>
+            <option value="sent" <?php echo ($filter === 'sent') ? 'selected' : ''; ?>>Sent (<?php echo $statusTotals['sent'] ?? 0; ?>)</option>
         </select>
-        <button type="submit">Search</button>
+
+        <button type="submit" style="background-color: #0288D1; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Search</button>
+        <a href="view_saved_reports.php" style="text-decoration: none; background-color: #666; color: white; padding: 8px 15px; border-radius: 4px; font-size: 13px;">Reset Filters</a>
     </form>
 
     <?php if (!$clients): ?>
@@ -269,6 +308,7 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     </th>
                     <th>Drafted By</th>
                     <th>RM</th>
+                    <th>Cycle</th>
                     <th>Review Assigned to</th>
                     <th>
                         <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
@@ -285,8 +325,16 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                             Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
-                    <th>Meeting Status</th>
-                    <th>Meeting Remarks</th>
+                    <th>
+                        <a href="?sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                        </a>
+                    </th>
                     <th>Action</th>
                 </tr>
             <?php foreach ($clients as $c): 
@@ -368,6 +416,11 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     <td>
                         <span style="color:#333; font-weight:600;">
                             <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
+                            <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
                         </span>
                     </td>
                     <td>

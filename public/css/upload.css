@@ -83,6 +83,7 @@ p.lead { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%); }
 .completion-value { font-size: 22px; font-weight: 800; color: var(--text-strong); }
 
+/* --- UPLOAD SECTION --- */
 .upload-section {
     max-width: 900px;
     margin: 26px auto 0;
@@ -92,6 +93,12 @@ p.lead { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
     border-radius: 16px;
     box-shadow: var(--shadow);
     text-align: center;
+    /* Remove fixed height so content can expand naturally */
+    /* height: 20px; */
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .upload-section h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-strong); }
 .upload-section p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
