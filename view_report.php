@@ -15,6 +15,12 @@ requireAuth();
 $pdo = getPdo();
 $clientId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+
+// [PATCH] Fetch New Schemes for Display
+$newSchemesStmt = $pdo->prepare("SELECT * FROM client_new_schemes WHERE client_id = ?");
+$newSchemesStmt->execute([$clientId]);
+$newSchemes = $newSchemesStmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Do not redirect away for POST (AJAX) requests even if id is missing
 if ($clientId <= 0) {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -1058,6 +1064,7 @@ function submitMeetingData() {
     <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
 
         <form method="POST" id="reportForm">
+                        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
             <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
             
             <input type="hidden" name="workflow_action" id="workflowActionInput" value="">
@@ -1369,6 +1376,7 @@ function submitMeetingData() {
             </script>
 
             <h3>4. Appropriate Scheme Selection</h3>
+
             <table class="report-table">
                 <tr>
                     <th colspan="3">Present Schemes</th>
@@ -1425,6 +1433,139 @@ function submitMeetingData() {
                     </tr>
                 <?php endforeach; ?>
             </table>
+
+
+            </table>
+            </div> <!-- End of Product Selection section -->
+
+<div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+    <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
+        New Recommended Schemes (Optional)
+    </h3>
+    <table class="table" id="newSchemesTable" style="width: 100%; margin-bottom: 15px;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 10px;">Scheme Name</th>
+                <th style="padding: 10px;">Amount (₹)</th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody id="newSchemesBody">
+            <?php if (!empty($newSchemes)): ?>
+                <?php foreach ($newSchemes as $ns): ?>
+                <tr>
+                    <td><input type="text" name="new_scheme_name[]" value="<?php echo htmlspecialchars($ns['scheme_name']); ?>" class="form-control" placeholder="e.g. HDFC Top 100" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></td>
+                    <td><input type="text" name="new_scheme_amount[]" value="<?php echo htmlspecialchars($ns['amount']); ?>" class="form-control" placeholder="0" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></td>
+                    <td><button type="button" onclick="this.closest('tr').remove()" style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">&times;</button></td>
+                </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+    <button type="button" onclick="addNewSchemeRow()" style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: 500;">
+        + Add Scheme
+    </button>
+    <script>
+    // [PATCH] Auto-Save Script with Visual Feedback
+    // Ensure we have a valid Client ID from PHP
+    const currentClientId = <?php echo isset($client['id']) ? (int)$client['id'] : (isset($clientId) ? (int)$clientId : 0); ?>;
+
+    function addNewSchemeRow() {
+        const tbody = document.getElementById('newSchemesBody');
+        const row = `
+            <tr>
+                <td>
+                    <input type="text" name="new_scheme_name[]" class="form-control scheme-input" 
+                           placeholder="e.g. HDFC Top 100" 
+                           oninput="debouncedSave()" 
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </td>
+                <td>
+                    <input type="number" name="new_scheme_amount[]" class="form-control scheme-input" 
+                           placeholder="0" 
+                           oninput="debouncedSave()" 
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </td>
+                <td>
+                    <button type="button" onclick="removeRowAndSave(this)" 
+                            style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">&times;</button>
+                </td>
+            </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', row);
+    }
+
+    function removeRowAndSave(btn) {
+        btn.closest('tr').remove();
+        saveSchemesNow(); // Save immediately on delete
+    }
+
+    // Debounce: Wait 1 second after typing stops before saving
+    let saveTimer;
+    function debouncedSave() {
+        // Show "Saving..." indicator
+        const title = document.querySelector('.section-card h3');
+        if(title && !title.innerHTML.includes('Saving')) {
+             title.innerHTML = "New Recommended Schemes <span style='color:orange; font-size:12px;'>(Saving...)</span>";
+        }
+        
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveSchemesNow, 1000);
+    }
+
+    function saveSchemesNow() {
+        if (currentClientId <= 0) {
+            console.error("Cannot save: Invalid Client ID");
+            return;
+        }
+
+        // Collect Data
+        const names = document.getElementsByName('new_scheme_name[]');
+        const amounts = document.getElementsByName('new_scheme_amount[]');
+        const schemes = [];
+
+        for (let i = 0; i < names.length; i++) {
+            if (names[i].value.trim() !== '') {
+                schemes.push({
+                    name: names[i].value,
+                    amount: amounts[i].value
+                });
+            }
+        }
+
+        // Send AJAX Request
+        fetch('save_schemes_ajax.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_id: currentClientId,
+                schemes: schemes
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const title = document.querySelector('.section-card h3');
+            if(data.status === 'success') {
+                title.innerHTML = "New Recommended Schemes <span style='color:green; font-size:12px;'>✓ Saved</span>";
+                setTimeout(() => { title.innerHTML = "New Recommended Schemes (Optional)"; }, 2000);
+            } else {
+                title.innerHTML = "New Recommended Schemes <span style='color:red; font-size:12px;'>⚠ Error</span>";
+                console.error('Server Error:', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Network Error:', error);
+        });
+    }
+    
+    // Attach listener to existing inputs on load
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.scheme-input').forEach(input => {
+            input.addEventListener('input', debouncedSave);
+        });
+    });
+</script>
+</div>
 
             <?php require_once 'rationale.php'; ?>
 

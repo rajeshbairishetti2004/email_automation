@@ -1,6 +1,5 @@
 <?php
 // email_handler.php
-// ... (Code is unchanged from the last successful update) ...
 require_once __DIR__ . '/vendor/autoload.php';
 require_once 'db_config.php';
 require_once 'env_loader.php';
@@ -540,6 +539,56 @@ function handleEmailSending($clientId) {
             <?php endforeach; ?>
             </tbody>
         </table>
+
+        <?php
+        // ---------------------------------------------------------
+        // [PATCH START] NEW RECOMMENDED SCHEMES (Clean Version)
+        // ---------------------------------------------------------
+
+        // 1. Fetch New Schemes
+        // Ensure we use the correct variable for ID. Using $clientId provided to function
+        $targetId = isset($clientId) ? $clientId : 0;
+
+        $nsStmt = $pdo->prepare("SELECT * FROM client_new_schemes WHERE client_id = ?");
+        $nsStmt->execute([$targetId]);
+        $emailNewSchemes = $nsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 2. Only show this section if there are actually schemes to show
+        if (!empty($emailNewSchemes)) {
+            $messagePart = '<div style="margin-top: 20px; margin-bottom: 20px;">';
+            
+            // Title
+            $messagePart .= '<h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-bottom: 10px; font-size: 16px;">New Recommended Schemes</h3>';
+            
+            // Table Start
+            $messagePart .= '<table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #ddd;">';
+            $messagePart .= '<thead>';
+            $messagePart .= '<tr style="background-color: #f2f2f2;">';
+            $messagePart .= '<th style="padding: 10px; text-align: left; border-bottom: 1px solid #ddd; color: #333;">Scheme Name</th>';
+            $messagePart .= '<th style="padding: 10px; text-align: right; border-bottom: 1px solid #ddd; color: #333;">Amount (₹)</th>';
+            $messagePart .= '</tr>';
+            $messagePart .= '</thead>';
+            $messagePart .= '<tbody>';
+            
+            // Rows
+            foreach ($emailNewSchemes as $ns) {
+                $messagePart .= '<tr>';
+                $messagePart .= '<td style="padding: 10px; border-bottom: 1px solid #eee; color: #555;">' . htmlspecialchars($ns['scheme_name']) . '</td>';
+                $messagePart .= '<td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; color: #555; font-weight: bold;">' . number_format($ns['amount']) . '</td>';
+                $messagePart .= '</tr>';
+            }
+            
+            // Table End
+            $messagePart .= '</tbody>';
+            $messagePart .= '</table>';
+            $messagePart .= '</div>';
+            
+            echo $messagePart; // Output to buffer
+        }
+        // ---------------------------------------------------------
+        // [PATCH END]
+        // ---------------------------------------------------------
+        ?>
 
         <?php if (trim($rationaleText) !== ''): ?>
             <div style="margin-top: 20px; border: 1px solid #29B6F6; border-radius: 4px; overflow: hidden;">
