@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type']) && $_P
     }
 }
 
+// 1. Get Filter Inputs
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
@@ -70,13 +71,15 @@ $whereParts = [];
 $params = [];
 
 // Build WHERE clause
+
+// Build WHERE clause for filtered set
+$whereParts = [];
+$params = [];
 if ($q !== '') {
     $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
-    $params[] = '%' . $q . '%';
-    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%'; $params[] = '%' . $q . '%';
 }
-$validStates = ['pending', 'draft', 'ready', 'reviewed', 'sent'];
-if ($filter !== '' && in_array($filter, $validStates, true)) {
+if ($filter !== '' && in_array($filter, ['pending','draft','ready','reviewed','sent'])) {
     $whereParts[] = "c.report_state = ?";
     $params[] = $filter;
 }
@@ -85,23 +88,71 @@ if ($cycleFilter !== '') {
     $params[] = $cycleFilter;
 }
 if ($ownerFilter === 'mine') {
-    // Show where user is RM or Reviewer
     $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = $myId;
-    $params[] = $myId;
-} elseif ($ownerFilter === 'all' || $ownerFilter === '') {
-    // no additional filter, show all clients
-} elseif (ctype_digit($ownerFilter)) {
-    // Show where selected user is RM or Reviewer
+    $params[] = $myId; $params[] = $myId;
+} elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
     $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = (int)$ownerFilter;
-    $params[] = (int)$ownerFilter;
+    $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+}
+$whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+
+// --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
+$cycleTotals = [];
+$cycleCountStmt = $pdo->prepare("SELECT c.review_cycle, COUNT(*) as total FROM clients c $whereClause GROUP BY c.review_cycle");
+$cycleCountStmt->execute($params);
+foreach ($cycleCountStmt as $row) {
+    $cycleTotals[$row['review_cycle']] = (int)$row['total'];
+}
+$allCyclesTotal = array_sum($cycleTotals);
+
+// For Owner dropdown: only filter by cycle (not by state)
+$ownerWhereParts = [];
+$ownerParams = [];
+if ($cycleFilter !== '') {
+    $ownerWhereParts[] = "c.review_cycle = ?";
+    $ownerParams[] = $cycleFilter;
+}
+$whereOwner = $ownerWhereParts ? 'WHERE ' . implode(' AND ', $ownerWhereParts) : '';
+
+$ownerTotals = [];
+$ownerCountStmt = $pdo->prepare("SELECT u.id, u.username, COUNT(c.id) as total 
+    FROM users u 
+    INNER JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) $whereOwner 
+    GROUP BY u.id, u.username HAVING total > 0");
+$ownerCountStmt->execute($ownerParams);
+foreach ($ownerCountStmt as $row) {
+    $ownerTotals[$row['id']] = [
+        'username' => $row['username'],
+        'total' => (int)$row['total']
+    ];
 }
 
-$where = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+// For State dropdown: filter by cycle + owner
+$stateWhereParts = [];
+$stateParams = [];
+if ($cycleFilter !== '') {
+    $stateWhereParts[] = "c.review_cycle = ?";
+    $stateParams[] = $cycleFilter;
+}
+if ($ownerFilter === 'mine') {
+    $stateWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $stateParams[] = $myId; $stateParams[] = $myId;
+} elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
+    $stateWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $stateParams[] = (int)$ownerFilter; $stateParams[] = (int)$ownerFilter;
+}
+$whereState = $stateWhereParts ? 'WHERE ' . implode(' AND ', $stateWhereParts) : '';
+
+$statusTotals = [];
+$statusCountStmt = $pdo->prepare("SELECT c.report_state, COUNT(*) as total FROM clients c $whereState GROUP BY c.report_state HAVING total > 0");
+$statusCountStmt->execute($stateParams);
+foreach ($statusCountStmt as $row) {
+    $statusTotals[$row['report_state']] = (int)$row['total'];
+}
+$allStatesTotal = array_sum($statusTotals);
 
 // 1. Count Total Rows
-$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$where}");
+$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$whereClause}");
 $stmtCount->execute($params);
 $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
@@ -137,42 +188,23 @@ $stmt = $pdo->prepare("
     LEFT JOIN users creator  ON c.created_by = creator.id
     LEFT JOIN users rm       ON c.assigned_to = rm.id
     LEFT JOIN users reviewer ON c.review_assigned_to = reviewer.id
-    {$where}
+    {$whereClause}
     {$orderByClause}
     LIMIT ? OFFSET ?
 ");
 
 // Add pagination parameters to the params array
-$params[] = $limit;
-$params[] = $offset;
+$paramsData = $params;
+$paramsData[] = $limit;
+$paramsData[] = $offset;
 
 // Execute with all parameters
-$stmt->execute($params);
+$stmt->execute($paramsData);
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch all users for reassignment dropdown
 $allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
 $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
-
-// 1. Fetch counts for each Cycle
-$cycleCountStmt = $pdo->query("SELECT review_cycle, COUNT(*) as total FROM clients WHERE review_cycle IS NOT NULL AND review_cycle != '' GROUP BY review_cycle");
-$cycleTotals = $cycleCountStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-$allCyclesTotal = array_sum($cycleTotals);
-
-// 2. Fetch counts for each Status (Report State)
-$statusCountStmt = $pdo->query("SELECT report_state, COUNT(*) as total FROM clients GROUP BY report_state");
-$statusTotals = $statusCountStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-$allStatesTotal = array_sum($statusTotals);
-
-// 3. Fetch counts for each Owner (user)
-$ownerCountStmt = $pdo->query("SELECT u.id, u.username, COUNT(c.id) as total FROM users u LEFT JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) GROUP BY u.id, u.username");
-$ownerTotals = [];
-foreach ($ownerCountStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $ownerTotals[$row['id']] = [
-        'username' => $row['username'],
-        'total' => (int)$row['total']
-    ];
-}
 
 ?>
 <!DOCTYPE html>
@@ -234,42 +266,49 @@ foreach ($ownerCountStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         <div class="alert alert-error"><?php echo htmlspecialchars($errorMessage); ?></div>
     <?php endif; ?>
 
-    <form method="get" class="search-box" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-        <input type="text" name="q" placeholder="Search by name..." value="<?php echo htmlspecialchars($q); ?>">
+    <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
 
-        <select name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
-            <option value="">All Cycles (<?php echo $allCyclesTotal; ?>)</option>
-            <option value="RJ" <?php echo ($cycleFilter === 'RJ') ? 'selected' : ''; ?>>RJ (<?php echo $cycleTotals['RJ'] ?? 0; ?>)</option>
-            <option value="RM" <?php echo ($cycleFilter === 'RM') ? 'selected' : ''; ?>>RM (<?php echo $cycleTotals['RM'] ?? 0; ?>)</option>
-            <option value="RF" <?php echo ($cycleFilter === 'RF') ? 'selected' : ''; ?>>RF (<?php echo $cycleTotals['RF'] ?? 0; ?>)</option>
+        <input type="text" name="q" placeholder="Search..." value="<?= htmlspecialchars($q) ?>">
+
+        <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
+            <option value="">All Cycles</option>
+            <?php foreach(['RJ', 'RM', 'RF'] as $c): ?>
+                <option value="<?= $c ?>" <?= $cycleFilter === $c ? 'selected' : '' ?>><?= $c ?></option>
+            <?php endforeach; ?>
         </select>
 
-        <select name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
-            <option value="all" <?php echo ($ownerFilter === 'all' || $ownerFilter === '') ? 'selected' : ''; ?>>
-                All Owners / Global View (<?php echo array_sum(array_column($ownerTotals, 'total')); ?>)
-            </option>
-            <option value="mine" <?php echo ($ownerFilter === 'mine') ? 'selected' : ''; ?>>
-                My Reports
-            </option>
-            <?php
-            foreach ($ownerTotals as $uid => $info): ?>
-                <option value="<?php echo (int)$uid; ?>" <?php echo ((string)$ownerFilter === (string)$uid) ? 'selected' : ''; ?>>
-                    <?php echo htmlspecialchars($info['username']); ?> (<?php echo $info['total']; ?>)
+        <select id="owner-filter" name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
+            <option value="all">All Owners / Global View</option>
+            <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
+            <?php foreach ($ownerTotals as $uid => $info): ?>
+                <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($info['username']) ?>
                 </option>
             <?php endforeach; ?>
         </select>
 
-        <select name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
+        <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
             <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
-            <option value="pending" <?php echo ($filter === 'pending') ? 'selected' : ''; ?>>Review Not Started (<?php echo $statusTotals['pending'] ?? 0; ?>)</option>
-            <option value="draft" <?php echo ($filter === 'draft') ? 'selected' : ''; ?>>Draft (<?php echo $statusTotals['draft'] ?? 0; ?>)</option>
-            <option value="ready" <?php echo ($filter === 'ready') ? 'selected' : ''; ?>>Ready (<?php echo $statusTotals['ready'] ?? 0; ?>)</option>
-            <option value="reviewed" <?php echo ($filter === 'reviewed') ? 'selected' : ''; ?>>Reviewed (<?php echo $statusTotals['reviewed'] ?? 0; ?>)</option>
-            <option value="sent" <?php echo ($filter === 'sent') ? 'selected' : ''; ?>>Sent (<?php echo $statusTotals['sent'] ?? 0; ?>)</option>
+            <option value="pending" <?= ($filter === 'pending') ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending'] ?? 0 ?>)</option>
+            <option value="draft" <?= ($filter === 'draft') ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft'] ?? 0 ?>)</option>
+            <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready'] ?? 0 ?>)</option>
+            <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
+            <option value="sent" <?= ($filter === 'sent') ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent'] ?? 0 ?>)</option>
         </select>
 
         <button type="submit" style="background-color: #0288D1; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Search</button>
         <a href="view_saved_reports.php" style="text-decoration: none; background-color: #666; color: white; padding: 8px 15px; border-radius: 4px; font-size: 13px;">Reset Filters</a>
+    </form>
+
+    <script>
+    // Ensure IDs match: cycle-filter, owner-filter, stateFilter
+    function updateDropdownsAndSubmit(e) {
+        document.getElementById('filterForm').submit();
+    }
+    document.getElementById('cycle-filter').addEventListener('change', updateDropdownsAndSubmit);
+    document.getElementById('owner-filter').addEventListener('change', updateDropdownsAndSubmit);
+    document.getElementById('stateFilter').addEventListener('change', updateDropdownsAndSubmit);
+    </script>
     </form>
 
     <?php if (!$clients): ?>
@@ -548,6 +587,63 @@ foreach ($ownerCountStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             }
         });
     }
+
+    // --- Enhanced Linked Filtering Logic ---
+    document.getElementById('cycle-filter').addEventListener('change', function() {
+        const selectedCycle = this.value;
+        const ownerSelect = document.getElementById('owner-filter');
+        const stateSelect = document.getElementById('stateFilter'); // The 3rd dropdown
+
+        if (!selectedCycle) {
+            document.querySelector('.search-box').submit();
+            return;
+        }
+
+        ownerSelect.innerHTML = '<option>Updating Owners...</option>';
+        stateSelect.innerHTML = '<option>Updating States...</option>';
+
+        fetch(`get_filtered_owners.php?cycle=${encodeURIComponent(selectedCycle)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 1. Update Owner Dropdown with counts
+                    ownerSelect.innerHTML = '';
+                    const ownerDefault = document.createElement('option');
+                    ownerDefault.value = "all";
+                    ownerDefault.textContent = `All Owners in ${selectedCycle} (${data.cycle_total})`;
+                    ownerSelect.appendChild(ownerDefault);
+
+                    data.owners.forEach(owner => {
+                        const opt = document.createElement('option');
+                        opt.value = owner.id;
+                        opt.textContent = `${owner.name} (${owner.client_count})`;
+                        ownerSelect.appendChild(opt);
+                    });
+
+                    // 2. Update State Dropdown with counts
+                    const states = ['pending', 'draft', 'ready', 'reviewed', 'sent'];
+                    const stateLabels = {
+                        'pending': 'Review Not Started',
+                        'draft': 'Draft',
+                        'ready': 'Ready',
+                        'reviewed': 'Reviewed',
+                        'sent': 'Sent'
+                    };
+
+                    stateSelect.innerHTML = `<option value="">All States in ${selectedCycle} (${data.cycle_total})</option>`;
+                    states.forEach(s => {
+                        const count = data.status_counts[s] || 0;
+                        if (count > 0) {
+                            const opt = document.createElement('option');
+                            opt.value = s;
+                            opt.textContent = `${stateLabels[s]} (${count})`;
+                            stateSelect.appendChild(opt);
+                        }
+                    });
+                }
+            })
+            .catch(err => console.error("Filter update failed:", err));
+    });
 </script>
 </body>
 </html>

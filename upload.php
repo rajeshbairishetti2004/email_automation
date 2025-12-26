@@ -494,20 +494,17 @@ $userDesignation = $currentUser['designation'] ?? '';
                         <input type="hidden" name="view_context" value="<?php echo htmlspecialchars($_GET['view_context']); ?>">
                     <?php endif; ?>
                 </form>
+                    <?php
+                    $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : '';
+                    ?>
             </div>
 
             <nav class="context-navbar">
-                <a href="?view_context=all" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
-                <a href="?view_context=mine" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
-                
-                <?php foreach ($allUsers as $u): ?>
-                    <?php if ($u['id'] != $currentUserId): ?>
-                        <a href="?view_context=<?= $u['id'] ?>" 
-                           class="context-link <?= ($viewContext == $u['id']) ? 'active' : '' ?>">
-                           <?= htmlspecialchars($u['username']) ?>
-                        </a>
-                    <?php endif; ?>
-                <?php endforeach; ?>
+                    <a href="?view_context=all<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
+                    <a href="?view_context=mine<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
+                    <?php foreach ($allUsers as $user): ?>
+                        <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>" class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>"><?php echo htmlspecialchars($user['username']); ?></a>
+                    <?php endforeach; ?>
             </nav>
         </div>
 

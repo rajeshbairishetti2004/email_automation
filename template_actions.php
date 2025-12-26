@@ -252,8 +252,9 @@ try {
                             }
                         }
                         
-                        // Keep spaces and common filename characters
-                        $fileName = preg_replace('/[^\w\s\._-]/u', '', $rawName);
+                        // Always force .pdf extension
+                        $fileBase = preg_replace('/\.[^.]+$/', '', $rawName); // Remove any existing extension
+                        $fileName = preg_replace('/[^\w\s\._-]/u', '', $fileBase) . '.pdf';
                         $targetPath = $baseDir . '/' . $fileName;
 
                         if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $targetPath)) {
@@ -296,16 +297,17 @@ try {
             }
 
             // Allow letters, numbers, spaces, dots, underscores and hyphens
-            $newName = preg_replace('/[^\w\s\.\-_]/u', '', $newNameRaw);
-            $newName = trim($newName);
+            $newBase = preg_replace('/\.[^.]+$/', '', $newNameRaw); // Remove any extension
+            $newName = preg_replace('/[^\w\s\.\-_]/u', '', $newBase);
+            $newName = trim($newName) . '.pdf';
 
-            if ($newName === '') {
+            if ($newName === '.pdf') {
                 throw new Exception('Renamed file is empty after sanitization.');
             }
 
             $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId . '/';
             $oldPath = $baseDir . $oldName;
-            $newPath = $baseDir . $newName;
+            $newPath = $baseDir . '/' . $newName;
 
             if (!file_exists($oldPath)) {
                 throw new Exception('Original file not found.');

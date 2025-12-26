@@ -234,6 +234,9 @@ function handleEmailSending($clientId) {
         }
         /* ------------------------------------------------------- */
 
+        // Initialize email body variable to avoid undefined variable warning
+        $emailBody = '';
+
         // Build HTML email body
         ob_start();
         ?>
@@ -449,19 +452,14 @@ function handleEmailSending($clientId) {
         $chartLabels = [];
         $chartValues = [];
         $chartColors = [];
-        
         foreach ($allocations as $a) {
             $share = (float)$a['share_pct'];
             $assetName = $a['asset'];
-            
-            // Skip if value is 0 UNLESS it's Gold (Gold always shows even at 0)
             if ($share <= 0 && stripos($assetName, 'Gold') === false) {
                 continue;
             }
-            
             $chartLabels[] = $assetName . ' (' . number_format($share, 2) . '%)';
             $chartValues[] = $share;
-            
             if (stripos($assetName, 'Equity') !== false) {
                 $chartColors[] = '#36A2EB';
             } elseif (stripos($assetName, 'Debt') !== false) {
@@ -472,8 +470,6 @@ function handleEmailSending($clientId) {
                 $chartColors[] = '#e55353';
             }
         }
-        
-        // Construct QuickChart.io URL
         $chartConfig = [
             'type' => 'pie',
             'data' => [
@@ -503,56 +499,36 @@ function handleEmailSending($clientId) {
                 ]
             ]
         ];
-        
         $chartUrl = 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig));
-        ?>
-        <div style="text-align: center; margin: 20px 0;">
-            <img src="<?php echo htmlspecialchars($chartUrl); ?>" alt="Asset Allocation" style="max-width: 100%; max-height: 300px; width: auto; height: auto; border: none; border-radius: 4px;">
-        </div>
-        </table>
 
-        <h4>4. Appropriate Scheme Selection</h4>
+        // Embed the chart as an image in the email body (works in most email clients)
+        echo '<div style="text-align: center; margin: 20px 0;">'
+            . '<img src="' . htmlspecialchars($chartUrl) . '" alt="Asset Allocation" style="max-width: 100%; max-height: 300px; width: auto; height: auto; border: none; border-radius: 4px;">'
+            . '</div>';
+
+        // --- Schemes Table Section ---
+        ?>
+        <h4>4. Recommended Schemes</h4>
         <table>
-            <colgroup>
-                <col style="width: 26%;">
-                <col style="width: 16%;">
-                <col style="width: 17%;">
-                <col style="width: 15%;">
-                <col style="width: 16%;">
-                <col style="width: 10%;">
-            </colgroup>
             <thead>
-                <tr>
-                    <th colspan="3">Present Schemes</th>
-                    <th rowspan="2" style="width: 18%;">Action Step</th>
-                    <th colspan="2">Recommended Schemes</th>
-                </tr>
                 <tr>
                     <th>Scheme Name</th>
                     <th>SIP/SWP</th>
-                    <th>Value as of <?php echo htmlspecialchars($asOn); ?></th>
-                    <th>Scheme Name</th>
-                    <th>Amount</th>
+                    <th>Current Value</th>
+                    <th>Action Step</th>
+                    <th>Recommended Scheme</th>
+                    <th>Recommended Amount</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($schemes as $s): 
-                    // FIX: If all values in the row (SIP and Current Value) are 0, remove the row.
-                    $sipVal = (float)($s['sip_swp'] ?? 0);
-                    $currVal = (float)($s['current_value'] ?? 0);
-                    
-                    if ($sipVal <= 0 && $currVal <= 0) {
-                        continue;
-                    }
-
-                    // Color Logic for Action Step
-                    $act = strtolower(trim($s['action_step'] ?? ''));
-                    $aClass = '';
-                    if ($act == 'continue') $aClass = 'action-continue';
-                    elseif ($act == 'drop') $aClass = 'action-drop';
-                    elseif ($act == 'switch') $aClass = 'action-switch';
-                    elseif (strpos($act, 'redeem') !== false) $aClass = 'action-redeem';
-                ?>
+            <?php foreach ($schemes as $s): 
+                $act = strtolower(trim($s['action_step'] ?? ''));
+                $aClass = '';
+                if ($act == 'continue') $aClass = 'action-continue';
+                elseif ($act == 'drop') $aClass = 'action-drop';
+                elseif ($act == 'switch') $aClass = 'action-switch';
+                elseif (strpos($act, 'redeem') !== false) $aClass = 'action-redeem';
+            ?>
                 <tr>
                     <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
                     <td><?php echo formatAmount((float)$s['sip_swp']); ?></td>
@@ -561,7 +537,7 @@ function handleEmailSending($clientId) {
                     <td><?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?></td>
                     <td class="text-center"><?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?></td>
                 </tr>
-                <?php endforeach; ?>
+            <?php endforeach; ?>
             </tbody>
         </table>
 
