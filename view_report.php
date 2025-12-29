@@ -1326,8 +1326,12 @@ function submitMeetingData() {
             </div>
 
             <h3>3. Appropriate Asset Allocation</h3>
-            <div style="max-width: 100%; margin: 20px auto; display: flex; justify-content: center;">
+            <div style="max-width: 100%; margin: 20px auto; display: flex; flex-direction:column; align-items: center;">
                 <canvas id="allocationChart" style="max-height: 300px; max-width: 100%;"></canvas>
+                <?php if (empty($allocations)): ?>
+                    <div style="color:#e55353; font-size:15px; margin-top:10px;">No asset allocation data available for this client.</div>
+                <?php endif; ?>
+                <pre style="font-size:12px; color:#888; background:#f8f8f8; padding:6px 10px; border-radius:6px; margin-top:10px; max-width:600px; overflow-x:auto;">Debug: <?php echo htmlspecialchars(json_encode($allocations)); ?></pre>
             </div>
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1344,22 +1348,17 @@ function submitMeetingData() {
                     if (!$hasGold) {
                         $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
                     }
-                    
                     $chartLabels = [];
                     $chartValues = [];
                     $chartColors = [];
-                    
                     foreach ($allocations as $a) {
                         $shareVal = (float)$a['share_pct'];
                         $assetName = $a['asset'];
-                        
                         if ($shareVal <= 0 && stripos($assetName, 'Gold') === false) {
                             continue;
                         }
-                        
                         $chartLabels[] = $assetName . ' (' . number_format($shareVal, 2) . '%)';
                         $chartValues[] = $shareVal;
-                        
                         if (stripos($assetName, 'Equity') !== false) {
                             $chartColors[] = '#36A2EB';
                         } elseif (stripos($assetName, 'Debt') !== false) {
@@ -1370,14 +1369,12 @@ function submitMeetingData() {
                             $chartColors[] = '#e55353';
                         }
                     }
-                    
                     echo json_encode([
                         'labels' => $chartLabels,
                         'values' => $chartValues,
                         'colors' => $chartColors
                     ]);
                 ?>;
-                
                 const ctx = document.getElementById('allocationChart').getContext('2d');
                 new Chart(ctx, {
                     type: 'pie',
