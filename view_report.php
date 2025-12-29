@@ -722,6 +722,7 @@ function submitMeetingData() {
             width: 100%;
             background-color: white; 
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
         }
         .header {
             max-width: 1200px; 
@@ -945,6 +946,52 @@ function submitMeetingData() {
         .modal-btn:hover:not(:disabled) {
             transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
+        /* --- ANNEXURE ACTION BUTTONS --- */
+.annex-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.annex-edit, .annex-delete {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid transparent;
+}
+
+/* Edit Button Styling (Blue Theme) */
+.annex-edit {
+    color: #0288D1;
+    background: #e3f2fd;
+    border-color: #b3e5fc;
+}
+
+.annex-edit:hover {
+    background: #0288D1;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+/* Delete Button Styling (Red Theme) */
+.annex-delete {
+    color: #dc3545;
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+.annex-delete:hover {
+    background: #dc3545;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.2);
+}
     </style>
 </head>
 <body>
@@ -1046,9 +1093,9 @@ function submitMeetingData() {
         </div>
     </div>
 <?php endif; ?>
-
 <div class="main-content">
- // Nothing to see here, move along.   
+
+ 
     <div class="nav-bar">
         <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
         <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
@@ -1148,11 +1195,14 @@ function submitMeetingData() {
                             <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;" data-filename="<?php echo htmlspecialchars($file); ?>">
                                 <span>📎 <strong><?php echo htmlspecialchars($file); ?></strong></span>
                                 <?php if ($canEditAttachments): ?>
-                                    <span style="font-size: 12px;">
-                                        <a href="#" class="annex-edit" data-filename="<?php echo htmlspecialchars($file); ?>">✏️ Edit</a>
-                                        &nbsp;
-                                        <a href="#" class="annex-delete" data-filename="<?php echo htmlspecialchars($file); ?>">🗑 Delete</a>
-                                    </span>
+                                   <span class="annex-actions">
+    <a href="#" class="annex-edit" data-filename="<?php echo htmlspecialchars($file); ?>">
+        <i class="fa-solid fa-pen-to-square"></i> Edit
+    </a>
+    <a href="#" class="annex-delete" data-filename="<?php echo htmlspecialchars($file); ?>">
+        <i class="fa-solid fa-trash-can"></i> Delete
+    </a>
+</span>
                                 <?php else: ?>
                                     <span style="font-size: 11px; color: #999;">(Read Only)</span>
                                 <?php endif; ?>
