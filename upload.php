@@ -561,7 +561,7 @@ $userDesignation = $currentUser['designation'] ?? '';
                     <input type="hidden" id="clientSearch" value="<?php echo htmlspecialchars($_GET['auto_search']); ?>">
                 </div>
             <?php else: ?>
-                <input type="text" id="clientSearch" class="search-box" placeholder="Search client name...">
+                
             <?php endif; ?>
                         <button type="button" id="refreshFiles" class="refresh-icon-btn" title="Clear selected files">
                                 <span class="refresh-svg-icon" id="refreshSvgIcon">
