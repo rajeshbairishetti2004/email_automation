@@ -1088,13 +1088,24 @@ function submitMeetingData() {
                 }
             }
             ?>
-            <div class="card" style="margin-top: 20px; border-left: 4px solid #17a2b8;">
-                <label class="card-title">📂 Report Attachments</label>
-                
+            <div class="card" style="margin-top: 20px; border-left: 4px solid #17a2b8; position:relative;">
+                <label class="card-title" style="display:flex; align-items:center; justify-content:space-between;">
+                  <span>📂 Report Attachments</span>
+                  <button type="button" id="refreshAttachments" class="refresh-icon-btn" title="Clear attachments" style="margin-left:auto; background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center;">
+                    <span class="refresh-svg-icon" id="refreshAttachmentsIcon">
+                      <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M23.5 8.5A11 11 0 1 0 27 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                        <polygon points="27,16 23,13.5 23,18.5" fill="#0288D1"/>
+                        <path d="M8.5 23.5A11 11 0 1 0 5 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                        <polygon points="5,16 9,18.5 9,13.5" fill="#0288D1"/>
+                      </svg>
+                    </span>
+                  </button>
+                </label>
+
                 <?php if ($canEditAttachments): ?>
                     <div style="margin-bottom: 15px; padding: 10px; background: #eefbff; border-radius: 4px;">
                         <input type="file" id="ajax_attachment_upload" multiple style="width: auto;" onchange="uploadAttachment()">
-                        
                         <span id="upload_spinner" style="display:none; margin-left: 10px; font-weight: bold; color: #0288D1;">
                             ⏳ Uploading...
                         </span>
@@ -1122,6 +1133,34 @@ function submitMeetingData() {
                     <?php endif; ?>
                 </ul>
                 <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
+                <style>
+                .refresh-icon-btn .refresh-svg-icon { display:inline-block; vertical-align:middle; }
+                .refresh-icon-btn .refresh-svg-icon.rotating { animation: refresh-rotate 0.6s linear; }
+                @keyframes refresh-rotate { 100% { transform: rotate(360deg); } }
+                .refresh-icon-btn { background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center; box-shadow:none; border-radius:50%; transition:background 0.15s; }
+                .refresh-icon-btn:hover { background:rgba(2,136,209,0.08); }
+                </style>
+                <script>
+                const refreshAttachmentsBtn = document.getElementById('refreshAttachments');
+                const refreshAttachmentsIcon = document.getElementById('refreshAttachmentsIcon');
+                if (refreshAttachmentsBtn && refreshAttachmentsIcon) {
+                                    refreshAttachmentsBtn.addEventListener('click', function() {
+                                        refreshAttachmentsIcon.classList.add('rotating');
+                                        fetch('delete_attachments.php?client_id=<?php echo (int)$clientId; ?>', { method: 'POST' })
+                                            .then(r => r.json())
+                                            .then(data => {
+                                                const list = document.getElementById('attachment_list');
+                                                if (list) list.innerHTML = '<li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>';
+                                                // Also clear annexures if present
+                                                const annexList = document.getElementById('annexures_list');
+                                                if (annexList) annexList.innerHTML = '<li style="color: #777; font-style: italic;">No annexures available.</li>';
+                                            })
+                                            .finally(() => {
+                                                refreshAttachmentsIcon.classList.remove('rotating');
+                                            });
+                                    });
+                }
+                </script>
             </div>
             
             <?php

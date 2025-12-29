@@ -552,7 +552,17 @@ $userDesignation = $currentUser['designation'] ?? '';
         <!-- Review not started block removed as requested -->
         <!-- Review not started block removed as requested -->
 
-        <div class="upload-section">
+        <div class="upload-section" style="position:relative;">
+                        <button type="button" id="refreshFiles" class="refresh-icon-btn" title="Clear selected files">
+                                <span class="refresh-svg-icon" id="refreshSvgIcon">
+                                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M23.5 8.5A11 11 0 1 0 27 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                                        <polygon points="27,16 23,13.5 23,18.5" fill="#0288D1"/>
+                                        <path d="M8.5 23.5A11 11 0 1 0 5 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                                        <polygon points="5,16 9,18.5 9,13.5" fill="#0288D1"/>
+                                    </svg>
+                                </span>
+                        </button>
             <h3>Upload & Generate Reports</h3>
             <p>Attach Excel and PDF files. We will parse and build the reports.</p>
             <?php if ($uploadError !== ''): ?>
@@ -581,11 +591,12 @@ $userDesignation = $currentUser['designation'] ?? '';
                 const fileInput = document.getElementById('client_files');
                 const fileList = document.getElementById('fileList');
                 const selectedFiles = document.getElementById('selectedFiles');
-                
+                const refreshBtn = document.getElementById('refreshFiles');
+                const refreshSvgIcon = document.getElementById('refreshSvgIcon');
+
                 fileInput.addEventListener('change', function() {
                     selectedFiles.innerHTML = '';
                     const files = Array.from(this.files);
-                    
                     if (files.length > 0) {
                         files.forEach((file, index) => {
                             const li = document.createElement('li');
@@ -598,6 +609,19 @@ $userDesignation = $currentUser['designation'] ?? '';
                     } else {
                         fileList.style.display = 'none';
                     }
+                });
+
+                refreshBtn.addEventListener('click', function() {
+                    // Start rotation
+                    refreshSvgIcon.classList.add('rotating');
+                    // Simulate clearing files
+                    setTimeout(function() {
+                        fileInput.value = '';
+                        selectedFiles.innerHTML = '';
+                        fileList.style.display = 'none';
+                        // Stop rotation
+                        refreshSvgIcon.classList.remove('rotating');
+                    }, 600); // Duration of rotation (ms)
                 });
             </script>
         </div> <!-- end .wrap main content -->
