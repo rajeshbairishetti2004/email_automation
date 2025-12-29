@@ -1051,7 +1051,7 @@ function submitMeetingData() {
     
     <div class="nav-bar">
         <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
-        <a href="upload.php" class="nav-button">Upload New Files</a>
+        <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
         <?php if ($prevId): ?>
             <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
         <?php endif; ?>
