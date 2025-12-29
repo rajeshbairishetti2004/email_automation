@@ -464,6 +464,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // [PATCH] Save New Recommended Schemes Synchronously
+                // This ensures data is saved immediately when changing state/clicking save
+                if (isset($_POST['new_scheme_name']) && is_array($_POST['new_scheme_name'])) {
+                    // 1. Clear old entries for this client first
+                    $delNs = $pdo->prepare("DELETE FROM client_new_schemes WHERE client_id = ?");
+                    $delNs->execute([$clientId]);
+
+                    // 2. Insert the current data from the form
+                    $insNs = $pdo->prepare("INSERT INTO client_new_schemes (client_id, scheme_name, amount) VALUES (?, ?, ?)");
+                    
+                    foreach ($_POST['new_scheme_name'] as $idx => $name) {
+                        $name = trim($name);
+                        // [CRITICAL] Use trim() to keep text like "5 Lakhs"
+                        $amt = trim($_POST['new_scheme_amount'][$idx] ?? '');
+                        
+                        if ($name !== '') {
+                            $insNs->execute([$clientId, $name, $amt]);
+                        }
+                    }
+                }
                 // --- SAVE GOAL STATUSES (From Dropdowns) ---
                 if (isset($_POST['goal_status']) && is_array($_POST['goal_status'])) {
                     $stmtGoalStatus = $pdo->prepare("UPDATE client_goals SET status = :status WHERE id = :id");
