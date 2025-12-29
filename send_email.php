@@ -84,16 +84,17 @@ function syncCcFromSelect() {
         selectAll.checked = total > 0 && selected.length === total;
     }
 
-    syncCheckboxesFromSelect();
+    // Checkbox sync removed
 }
 
+// Filter CC options to exclude the currently selected sender
 // Filter CC options to exclude the currently selected sender
 function filterCcOptionsBySender() {
     const senderSelect = document.getElementById('from_email');
     const senderEmail  = senderSelect ? senderSelect.value.toLowerCase() : '';
     const select = document.getElementById('cc_multi_select');
     const datalist = document.getElementById('all-emails');
-    const checkboxList = document.getElementById('cc_checkbox_list');
+    
     if (!select || !datalist) return;
 
     const existingSelected = new Set(Array.from(select.selectedOptions).map(o => o.value));
@@ -108,9 +109,6 @@ function filterCcOptionsBySender() {
 
     select.innerHTML = '';
     datalist.innerHTML = '';
-    if (checkboxList) {
-        checkboxList.innerHTML = '';
-    }
 
     mergedOptions.forEach(email => {
         if (!email) return;
@@ -125,21 +123,6 @@ function filterCcOptionsBySender() {
         const opt2 = document.createElement('option');
         opt2.value = email;
         datalist.appendChild(opt2);
-
-        if (checkboxList) {
-            const label = document.createElement('label');
-            label.className = 'cc-checkbox-item';
-
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.value = email;
-            checkbox.checked = existingSelected.has(email);
-            checkbox.addEventListener('change', onCcCheckboxChange);
-
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(email));
-            checkboxList.appendChild(label);
-        }
     });
 
     syncCcFromSelect();
@@ -261,7 +244,6 @@ function updateCcSummary(selectedEmails) {
                             <?php endforeach; ?>
                         </select>
 
-                        <div class="cc-checkboxes" id="cc_checkbox_list" aria-label="CC options checklist"></div>
 
                         <input type="text" name="cc_emails" id="cc_emails"
                                placeholder="Enter or paste emails (comma separated)"

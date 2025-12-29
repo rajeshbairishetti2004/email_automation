@@ -1481,10 +1481,10 @@ function submitMeetingData() {
                            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                 </td>
                 <td>
-                    <input type="number" name="new_scheme_amount[]" class="form-control scheme-input" 
-                           placeholder="0" 
-                           oninput="debouncedSave()" 
-                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                          <input type="text" name="new_scheme_amount[]" class="form-control scheme-input" 
+                              placeholder="Enter amount" 
+                              oninput="debouncedSave()" 
+                              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                 </td>
                 <td>
                     <button type="button" onclick="removeRowAndSave(this)" 
