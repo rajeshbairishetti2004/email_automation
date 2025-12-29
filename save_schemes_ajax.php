@@ -43,8 +43,7 @@ try {
         
         foreach ($schemes as $s) {
             $name = trim($s['name'] ?? '');
-            $amount = floatval($s['amount'] ?? 0);
-            
+            $amount = trim($s['amount'] ?? '');           
             // Only save valid rows
             if ($name !== '') {
                 $insStmt->execute([$clientId, $name, $amount]);
