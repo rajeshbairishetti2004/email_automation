@@ -1048,7 +1048,7 @@ function submitMeetingData() {
 <?php endif; ?>
 
 <div class="main-content">
-    
+ // Nothing to see here, move along.   
     <div class="nav-bar">
         <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
         <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
