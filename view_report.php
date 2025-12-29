@@ -957,6 +957,14 @@ function submitMeetingData() {
         </div>
         
         <div class="header-right">
+            <button onclick="location.reload()" title="Refresh Page" style="background:transparent; border:none; cursor:pointer; margin-right:16px; font-size:20px; color:#007bff;">
+                <span style="display:inline-block; vertical-align:middle;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 0-.908-.418A6 6 0 1 0 8 2v1z"/>
+                        <path d="M8 1a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 0-1H8.707A5.978 5.978 0 0 1 8 1z"/>
+                    </svg>
+                </span>
+            </button>
             <div class="profile-pic" onclick="toggleDropdown()">
                 <?= $initials ?>
             </div>
