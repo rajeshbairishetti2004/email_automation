@@ -503,6 +503,7 @@ $userDesignation = $currentUser['designation'] ?? '';
                     <a href="?view_context=all<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
                     <a href="?view_context=mine<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
                     <?php foreach ($allUsers as $user): ?>
+                        <?php if ((int)$user['id'] === $currentUserId) continue; // Skip logged-in user ?>
                         <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>" class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>"><?php echo htmlspecialchars($user['username']); ?></a>
                     <?php endforeach; ?>
             </nav>

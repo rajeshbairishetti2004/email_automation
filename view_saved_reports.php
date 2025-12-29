@@ -281,6 +281,7 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
             <option value="all">All Owners / Global View</option>
             <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
             <?php foreach ($ownerTotals as $uid => $info): ?>
+                <?php if ((int)$uid === (int)$myId) continue; // Skip logged-in user ?>
                 <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
                     <?= htmlspecialchars($info['username']) ?>
                 </option>
@@ -645,5 +646,3 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
             .catch(err => console.error("Filter update failed:", err));
     });
 </script>
-</body>
-</html>
