@@ -553,6 +553,16 @@ $userDesignation = $currentUser['designation'] ?? '';
         <!-- Review not started block removed as requested -->
 
         <div class="upload-section" style="position:relative;">
+            <?php if (!empty($_GET['auto_search'])): ?>
+                <div class="client-static-header" style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #0288D1;">
+                        Client Name: <span style="color: #333;"><?php echo htmlspecialchars($_GET['auto_search']); ?></span>
+                    </h3>
+                    <input type="hidden" id="clientSearch" value="<?php echo htmlspecialchars($_GET['auto_search']); ?>">
+                </div>
+            <?php else: ?>
+                
+            <?php endif; ?>
                         <button type="button" id="refreshFiles" class="refresh-icon-btn" title="Clear selected files">
                                 <span class="refresh-svg-icon" id="refreshSvgIcon">
                                     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -587,6 +597,18 @@ $userDesignation = $currentUser['designation'] ?? '';
                 </div>
             </form>
             <script>
+                // Auto-fill client search input from URL param 'auto_search'
+                (function() {
+                    function getQueryParam(name) {
+                        const url = new URL(window.location.href);
+                        return url.searchParams.get(name) || '';
+                    }
+                    var autoSearch = getQueryParam('auto_search');
+                    if (autoSearch) {
+                        var input = document.getElementById('clientSearchInput');
+                        if (input) input.value = autoSearch;
+                    }
+                })();
                 // Only one button will be visible now
                 const fileInput = document.getElementById('client_files');
                 const fileList = document.getElementById('fileList');

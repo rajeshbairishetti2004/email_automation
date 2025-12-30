@@ -520,9 +520,17 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                     </td>
                     <td>
                         <?php if (($c['report_state'] ?? '') === 'pending'): ?>
-                            <a href="upload.php" style="font-weight: 600; color:#0288D1;">Upload Files</a>
+                            <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                               style="font-weight: 600; color:#0288D1; text-decoration:none;">
+                                📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
+                            </a>
                         <?php else: ?>
-                            <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" style="font-weight: 600; color:#0288D1;">Open</a>
+                            <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" 
+                               style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
+                            <span style="color:#ccc; margin:0 6px;">|</span>
+                            <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                               style="font-size:0.9em; color:#555; text-decoration:none;" 
+                               title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
                         <?php endif; ?>
                     </td>
                 </tr>
