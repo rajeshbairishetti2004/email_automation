@@ -9,15 +9,48 @@ $currentUser = getCurrentUser();
 // Add scheme to master_schemes
 if (isset($_POST['add_to_board'])) {
     $name = trim($_POST['name'] ?? '');
-    $cat = trim($_POST['cat'] ?? '');
-    if ($name && $cat) {
-        $stmt = $pdo->prepare("INSERT IGNORE INTO master_schemes (scheme_name, category, created_by) VALUES (?, ?, ?)");
-        $stmt->execute([$name, $cat, $_SESSION['user_id']]);
-        echo 'success';
-    } else {
+    $cat  = trim($_POST['cat'] ?? '');
+
+    if (!$name || !$cat) {
         http_response_code(400);
         echo 'Invalid input';
+        exit;
     }
+
+    // 🔍 Check if scheme already exists (any category)
+    $check = $pdo->prepare(
+        "SELECT category FROM master_schemes WHERE scheme_name = ? LIMIT 1"
+    );
+    $check->execute([$name]);
+    $existing = $check->fetch(PDO::FETCH_ASSOC);
+
+    if ($existing) {
+        // Map DB category to user-friendly label
+        $labels = [
+            'recommended' => 'Recommended',
+            'observation' => 'Under Observation',
+            'drop'        => 'Exit/Drop'
+        ];
+        $section = $labels[$existing['category']] ?? $existing['category'];
+
+        if ($existing['category'] !== $cat) {
+            http_response_code(409);
+            echo "$name is already present in $section schemes.";
+        } else {
+            http_response_code(409);
+            echo "$name is already present in $section schemes.";
+        }
+        exit;
+    }
+
+    // ✅ Insert if not exists at all
+    $stmt = $pdo->prepare(
+        "INSERT INTO master_schemes (scheme_name, category, created_by)
+         VALUES (?, ?, ?)"
+    );
+    $stmt->execute([$name, $cat, $_SESSION['user_id']]);
+
+    echo 'success';
     exit;
 }
 
