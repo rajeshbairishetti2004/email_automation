@@ -428,8 +428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Backend security check is in handleEmailSending() - no need to check here
         // because $reportState is not yet loaded at this point in the code
         handleEmailSending($clientId);
-        // Instead of exit, set a flag to show meeting modal after reload
-        header('Location: view_report.php?id=' . $clientId . '&show_meeting_modal=1');
+        // Instead of exit, mark as sent and show success flash
+        header('Location: view_report.php?id=' . $clientId . '&sent=1');
         exit;
     }
 
@@ -646,59 +646,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 
 
 ?>
-<?php if (isset($_GET['show_meeting_modal']) && $_GET['show_meeting_modal'] == '1'): ?>
-<div id="meetingPromptOverlay" class="modal-overlay" style="display:flex; background: rgba(0,0,0,0.7); z-index: 9999; position:fixed; top:0; left:0; width:100vw; height:100vh; align-items:center; justify-content:center;">
-    <div style="background:#fff; border-radius:8px; max-width:400px; width:100%; padding:32px 24px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-        <p style="font-size: 15px; font-weight: 600;">Has the client meeting been completed?</p>
-        <div style="display:flex; gap:10px; margin: 18px 0;">
-            <button type="button" class="wf-btn btn-approve" id="btnMeetingYes" style="flex:1; padding: 12px;">Yes, Completed</button>
-            <button type="button" class="wf-btn btn-reject" id="btnMeetingNo" style="flex:1; padding: 12px;">No / Scheduled Later</button>
-        </div>
-        <div id="remarksContainer" style="margin-top: 15px; display:none;">
-            <label style="font-size: 12px; color: #666;">Meeting Remarks / Discussion Points:</label>
-            <textarea id="meetingRemarks" class="large-textarea" style="min-height: 80px; margin-top: 5px; width:100%;" placeholder="What was discussed?"></textarea>
-            <button type="button" class="modal-btn modal-btn-confirm" style="margin-top:12px;" onclick="submitMeetingData()">Save Meeting Status</button>
-        </div>
-    </div>
-</div>
-<script>
-let selectedMeetingStatus = 'pending';
-const btnYes = document.getElementById('btnMeetingYes');
-const btnNo = document.getElementById('btnMeetingNo');
-const remarksContainer = document.getElementById('remarksContainer');
-btnYes.addEventListener('click', function() {
-    selectedMeetingStatus = 'yes';
-    remarksContainer.style.display = 'block';
-});
-btnNo.addEventListener('click', function() {
-    selectedMeetingStatus = 'no';
-    remarksContainer.style.display = 'block';
-});
-function submitMeetingData() {
-    if (selectedMeetingStatus === 'pending') {
-        alert('Please select Yes or No for the meeting status.');
-        return;
-    }
-    const remarks = document.getElementById('meetingRemarks').value;
-    fetch('meeting_tracker.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            action: 'save_meeting_status',
-            client_id: <?php echo (int)$clientId; ?>,
-            status: selectedMeetingStatus,
-            remarks: remarks
-        })
-    }).then(r => r.json()).then(data => {
-        document.getElementById('meetingPromptOverlay').style.display = 'none';
-        alert('Meeting status updated!');
-        location.href = 'view_report.php?id=<?php echo (int)$clientId; ?>';
-    }).catch(() => {
-        alert('Failed to save meeting status.');
-    });
-}
-</script>
-<?php endif; ?>
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -2804,6 +2752,5 @@ function submitMeetingData() {
 
     // ...existing code...
     </script>
-        <?php include 'meeting_tracker.php'; ?>
 </body>
 </html>

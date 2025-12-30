@@ -214,6 +214,44 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- <link rel="stylesheet" href="public/css/styles.css"> -->
     <link rel="stylesheet" href="public/css/view_saved_reports.css">
+    <style>
+    /* [PATCH] Meeting Column Styles */
+    .meet-select {
+        padding: 6px 10px;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        background-color: #fff;
+        font-size: 13px;
+        color: #495057;
+        cursor: pointer;
+        outline: none;
+        width: 100px; /* Fixed width for alignment */
+    }
+    .meet-select:focus {
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+
+    .meet-btn {
+        display: inline-block;
+        background-color: #e3f2fd; /* Light Blue Background */
+        color: #1976d2;            /* Darker Blue Text */
+        border: 1px solid #90caf9; /* Blue Border */
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .meet-btn:hover {
+        background-color: #bbdefb;
+        border-color: #64b5f6;
+        transform: translateY(-1px);
+    }
+    </style>
 
 </head>
 <body>
@@ -365,13 +403,13 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                             Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
-                    <th>
-                        <a href="?sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                    <th style="text-align: center; width: 120px;">
+                        <a href="?sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
                             Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
-                    <th>
-                        <a href="?sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                    <th style="text-align: center; width: 140px;">
+                        <a href="?sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
                             Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                         </a>
                     </th>
@@ -500,23 +538,26 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </td>
                     <td><?php echo $statusHtml; ?></td>
-                    <td>
-                        <?php
-                            $meetingStatus = $c['meeting_status'] ?? '';
-                            if ($meetingStatus === 'yes') {
-                                echo '<span style="color: #388e3c; font-weight:600;">Completed</span>';
-                            } elseif ($meetingStatus === 'no') {
-                                echo '<span style="color: #e53935; font-weight:600;">Not Done</span>';
-                            } else {
-                                echo '<span style="color: #999;">-</span>';
-                            }
-                        ?>
+                    <td style="text-align: center;">
+                        <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                                class="meet-select"
+                                id="meet_select_<?php echo $c['id']; ?>">
+                            <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
+                            <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
+                            <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
+                        </select>
                     </td>
-                    <td>
-                        <?php
-                            $remarks = trim($c['meeting_remarks'] ?? '');
-                            echo $remarks !== '' ? htmlspecialchars($remarks) : '<span style="color:#999;">-</span>';
-                        ?>
+
+                    <td style="text-align: center;">
+                        <button type="button" 
+                                id="meet_btn_<?php echo $c['id']; ?>"
+                                class="meet-btn"
+                                onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                        </button>
+                        
+                        <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
                     </td>
                     <td>
                         <?php if (($c['report_state'] ?? '') === 'pending'): ?>
@@ -653,4 +694,95 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
             })
             .catch(err => console.error("Filter update failed:", err));
     });
+</script>
+
+<div id="listMeetingModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 24px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.2); font-family: 'Inter', sans-serif;">
+        <h3 style="margin-top: 0; color: #1976d2; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+            <span>📝</span> Meeting Remarks
+        </h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">Enter details about the discussion:</p>
+        
+        <input type="hidden" id="current_modal_client_id">
+        <textarea id="listModalRemarks" rows="5" style="width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: 8px; font-family: inherit; margin-bottom: 20px; resize: vertical; font-size: 14px;" placeholder="e.g., Client agreed to increase SIP..."></textarea>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" onclick="closeListMeetingModal()" style="padding: 8px 16px; border: 1px solid #ced4da; background: #fff; color: #555; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+            <button type="button" onclick="saveListMeetingRemarks()" style="padding: 8px 20px; border: none; background: #1976d2; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">Save Remarks</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Handle Dropdown Change
+    function handleListMeetingChange(select, clientId) {
+        const status = select.value;
+        const remarksBtn = document.getElementById('meet_btn_' + clientId);
+        const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
+
+        if (status === 'yes') {
+            openListMeetingModal(clientId);
+            remarksBtn.style.display = 'inline-block';
+        } else {
+            // Save 'No' or 'Pending' immediately
+            saveData(clientId, status, storedRemarks, false);
+            remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
+        }
+    }
+
+    // 2. Open Modal
+    function openListMeetingModal(clientId) {
+        const remarks = document.getElementById('remarks_store_' + clientId).value;
+        document.getElementById('current_modal_client_id').value = clientId;
+        document.getElementById('listModalRemarks').value = remarks;
+        document.getElementById('listMeetingModal').style.display = 'flex';
+        document.getElementById('listModalRemarks').focus();
+    }
+
+    // 3. Close Modal
+    function closeListMeetingModal() {
+        document.getElementById('listMeetingModal').style.display = 'none';
+    }
+
+    // 4. Save
+    function saveListMeetingRemarks() {
+        const clientId = document.getElementById('current_modal_client_id').value;
+        const remarks = document.getElementById('listModalRemarks').value;
+        const select = document.getElementById('meet_select_' + clientId);
+        const status = select ? select.value : 'yes'; // Default to yes if saving remarks
+        
+        saveData(clientId, status, remarks, true);
+    }
+
+    // 5. AJAX Save
+    function saveData(clientId, status, remarks, isModal) {
+        const formData = new URLSearchParams();
+        formData.append('action', 'save_meeting_status');
+        formData.append('client_id', clientId);
+        formData.append('status', status);
+        formData.append('remarks', remarks);
+
+        fetch('meeting_tracker.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if(data.success) {
+                const store = document.getElementById('remarks_store_' + clientId);
+                if(store) store.value = remarks;
+                
+                const btn = document.getElementById('meet_btn_' + clientId);
+                if(btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
+
+                if(isModal) {
+                    closeListMeetingModal();
+                    if(typeof showToast === 'function') showToast("Meeting remarks saved!");
+                }
+            } else {
+                alert("Error: " + data.error);
+            }
+        });
+    }
 </script>

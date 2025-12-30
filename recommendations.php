@@ -2,13 +2,11 @@
 // recommendations.php
 // Logic to cross-reference client schemes with master strategy and provide sticky alerts
 
-
 if (!isset($pdo) || !isset($clientId)) {
     return; // Safety check for inclusion
 }
 
 // [PATCH] Stop execution if report is Locked (Reviewed or Sent)
-// This prevents pop-ups from appearing on finalized reports.
 if (isset($isLocked) && $isLocked) {
     return;
 }
@@ -40,7 +38,7 @@ if (isset($schemes) && is_array($schemes)) {
 .strategy-sticky-container {
     position: fixed;
     bottom: 24px;
-    left: 24px; /* Placed on the left side to avoid toast/other notifications */
+    left: 24px;
     width: 320px;
     z-index: 9999;
     display: flex;
@@ -124,10 +122,11 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
     <?php foreach ($strategyMatches as $match): ?>
         <?php 
             $class = ''; $title = ''; $targetVal = ''; $icon = '';
+            // [FIX] Map categories to valid Dropdown Options (Continue, Drop, Under Observation)
             switch($match['category']) {
                 case 'recommended':
                     $class = 'popup-recommended'; $title = 'Suggested Action: Recommended'; 
-                    $targetVal = 'Recommended'; $icon = '⭐'; break;
+                    $targetVal = 'Continue'; $icon = '⭐'; break; // Fixed: Set to 'Continue'
                 case 'observation':
                     $class = 'popup-observation'; $title = 'Suggested Action: Under Observation'; 
                     $targetVal = 'Under Observation'; $icon = '👁️'; break;
@@ -143,7 +142,7 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
                 <button type="button" class="btn-action btn-accept" 
                         onclick="applyStrategy(<?php echo $match['id']; ?>, '<?php echo $targetVal; ?>')">Accept</button>
                 <button type="button" class="btn-action btn-reject" 
-                        onclick="dismissStrategy(<?php echo $match['id']; ?>)">Reject</button>
+                        onclick="dismissStrategy(<?php echo $match['id']; ?>, '<?php echo addslashes($match['name']); ?>')">Reject</button>
             </div>
         </div>
     <?php endforeach; ?>
@@ -168,8 +167,8 @@ function applyStrategy(schemeId, value) {
         dropdown.parentElement.style.backgroundColor = "#dcfce7";
         setTimeout(() => { dropdown.parentElement.style.backgroundColor = "transparent"; }, 1500);
 
-        // 4. Remove the sticky card
-        dismissStrategy(schemeId);
+        // 4. Remove the sticky card (passing name null since we accepted it)
+        dismissStrategy(schemeId, null);
         
         if(typeof showToast === 'function') {
             showToast(`Applied "${value}" to scheme.`);
@@ -180,14 +179,29 @@ function applyStrategy(schemeId, value) {
 }
 
 /**
- * Removes the card from the UI
+ * Removes the card from the UI and clears table highlighting
  */
-function dismissStrategy(id) {
+function dismissStrategy(id, schemeName) {
+    // 1. Remove the Popup Card
     const card = document.getElementById('strategy-popup-' + id);
     if (card) {
         card.style.opacity = '0';
         card.style.transform = 'translateX(-20px)';
         setTimeout(() => { card.remove(); }, 300);
+    }
+
+    // 2. [FIX] Remove the Highlight from the Table Row (if rejected)
+    if (schemeName) {
+        // Find row by data-scheme-name attribute
+        // We use CSS.escape or quotes to handle names with spaces/special chars
+        const row = document.querySelector(`tr[data-scheme-name="${CSS.escape(schemeName)}"]`) || 
+                    document.querySelector(`tr[data-scheme-name="${schemeName}"]`);
+        
+        if (row) {
+            // Override the !important CSS from the style block
+            row.style.setProperty('background-color', 'transparent', 'important');
+            row.style.transition = 'background-color 0.5s ease';
+        }
     }
 }
 </script>
