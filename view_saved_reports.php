@@ -206,6 +206,21 @@ $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
 $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
+// --- AJAX endpoint for client name search ---
+if (isset($_GET['search_client']) && isset($_GET['q'])) {
+    require_once 'db_config.php';
+    $pdo = getPdo();
+    $q = trim($_GET['q']);
+    $stmt = $pdo->prepare("SELECT DISTINCT name FROM clients WHERE name LIKE ? ORDER BY name ASC LIMIT 10");
+    $stmt->execute(["%$q%"]);
+    $clients = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $clients[] = $row['name'];
+    }
+    header('Content-Type: application/json');
+    echo json_encode($clients);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -305,8 +320,10 @@ $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
     <?php endif; ?>
 
     <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-
-        <input type="text" name="q" placeholder="Search..." value="<?= htmlspecialchars($q) ?>">
+        <div style="position:relative; flex:1;">
+            <input type="text" name="q" id="client-search" placeholder="Search..." value="" autocomplete="off">
+            <div id="client-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;z-index:1000;border:1px solid #e2e8f0;border-top:none;max-height:200px;overflow-y:auto;"></div>
+        </div>
 
         <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
             <option value="">All Cycles</option>

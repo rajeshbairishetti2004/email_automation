@@ -289,7 +289,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         <!-- XLSX Upload Form -->
         <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin-bottom: 32px;">
             <input type="file" name="scheme_file" accept=".xlsx" required style="flex:unset; padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
-            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload Master XLSX</button>
+            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload</button>
         </form>
 
         <div class="scheme-grid">
@@ -353,15 +353,42 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 dropdown.style.display = 'block';
             });
     }
-    // Add scheme to master_schemes
+
+    // Show error alert at the top of the board
+    function showErrorAlert(message) {
+        // Remove any existing alert
+        let oldAlert = document.getElementById('error-alert');
+        if (oldAlert) oldAlert.remove();
+
+        // Create new alert
+        let alertDiv = document.createElement('div');
+        alertDiv.id = 'error-alert';
+        alertDiv.style = "background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);";
+        alertDiv.innerHTML = `<span><i class="fa-solid fa-circle-exclamation" style="margin-right: 10px;"></i> ${message}</span>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: #dc2626; cursor: pointer; font-size: 20px; line-height: 1;">&times;</button>`;
+        let contentWrap = document.querySelector('.content-wrap');
+        contentWrap.insertBefore(alertDiv, contentWrap.firstChild);
+    }
+
+    // Add scheme to master_schemes (from dropdown)
     function selectScheme(name, category) {
         let formData = new FormData();
         formData.append('add_to_board', true);
         formData.append('name', name);
         formData.append('cat', category);
         fetch('api_manage_schemes.php', { method: 'POST', body: formData })
-            .then(() => location.reload());
+            .then(async res => {
+                let text = await res.text();
+                if (res.ok && text === 'success') {
+                    location.reload();
+                } else if (res.status === 409) {
+                    showErrorAlert(text);
+                } else {
+                    showErrorAlert("An unexpected error occurred. Please try again.");
+                }
+            });
     }
+
     // Delete scheme from master_schemes
     function deleteScheme(id) {
         if (!confirm('Are you sure you want to delete this scheme?')) return;
