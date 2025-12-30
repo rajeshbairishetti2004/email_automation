@@ -2,8 +2,15 @@
 // recommendations.php
 // Logic to cross-reference client schemes with master strategy and provide sticky alerts
 
+
 if (!isset($pdo) || !isset($clientId)) {
     return; // Safety check for inclusion
+}
+
+// [PATCH] Stop execution if report is Locked (Reviewed or Sent)
+// This prevents pop-ups from appearing on finalized reports.
+if (isset($isLocked) && $isLocked) {
+    return;
 }
 
 // 1. Fetch the master strategy list
