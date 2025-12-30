@@ -320,6 +320,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <?php endif; ?>
 
     <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+        <!-- Remove the old search input if present -->
+        <!-- <input type="text" name="q" placeholder="Search..." value="<?= htmlspecialchars($q) ?>"> -->
         <div style="position:relative; flex:1;">
             <input type="text" name="q" id="client-search" placeholder="Search..." value="" autocomplete="off">
             <div id="client-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;z-index:1000;border:1px solid #e2e8f0;border-top:none;max-height:200px;overflow-y:auto;"></div>
@@ -801,5 +803,62 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 alert("Error: " + data.error);
             }
         });
+    }
+</script>
+
+<script>
+    // --- Client Name Autocomplete for Search Box ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const input = document.getElementById('client-search');
+        const dropdown = document.getElementById('client-search-dropdown');
+        if (!input) return;
+        input.addEventListener('input', function() {
+            let val = input.value.trim();
+            if (val.length < 1) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                return;
+            }
+            fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        dropdown.innerHTML = data.map(name =>
+                            `<div style="padding:8px 12px;cursor:pointer;" 
+                                onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
+                        ).join('');
+                        dropdown.style.display = 'block';
+                    } else {
+                        dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
+                        dropdown.style.display = 'block';
+                    }
+                });
+        });
+        // Prevent filter form submit on filter change if search box is not filled
+        document.getElementById('cycle-filter').addEventListener('change', function(e) {
+            if (input.value.trim().length === 0) {
+                document.getElementById('filterForm').submit();
+            }
+        });
+        document.getElementById('owner-filter').addEventListener('change', function(e) {
+            if (input.value.trim().length === 0) {
+                document.getElementById('filterForm').submit();
+            }
+        });
+        document.getElementById('stateFilter').addEventListener('change', function(e) {
+            if (input.value.trim().length === 0) {
+                document.getElementById('filterForm').submit();
+            }
+        });
+        document.addEventListener('click', function(e) {
+            if (!dropdown.contains(e.target) && e.target !== input) {
+                dropdown.style.display = 'none';
+            }
+        });
+    });
+    function selectClientName(name) {
+        document.getElementById('client-search').value = name;
+        document.getElementById('client-search-dropdown').style.display = 'none';
+        document.getElementById('filterForm').submit();
     }
 </script>
