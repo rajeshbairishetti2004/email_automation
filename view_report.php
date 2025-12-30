@@ -1458,7 +1458,7 @@ function submitMeetingData() {
                                    data-scheme-id="<?php echo (int)$s['id']; ?>"
                                    data-field="recommended_scheme"
                                    value="<?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?>"
-                                   placeholder="Enter recommended scheme..." <?php echo $isLocked ? 'readonly' : ''; ?>>
+                                   placeholder="Enter scheme details" <?php echo $isLocked ? 'readonly' : ''; ?>>
                         </td>
                         <td>
                             <input type="text" 
@@ -1479,7 +1479,7 @@ function submitMeetingData() {
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
-        New Recommended Schemes (Optional)
+        Recommended Schemes
     </h3>
     <table class="table" id="newSchemesTable" style="width: 100%; margin-bottom: 15px;">
         <thead>
@@ -1606,7 +1606,9 @@ function submitMeetingData() {
 </script>
 </div>
 
+
             <?php require_once 'rationale.php'; ?>
+            <?php require_once 'recommendations.php'; ?>
 
             <h3>Annexures</h3>
             <ul id="annexures_list">

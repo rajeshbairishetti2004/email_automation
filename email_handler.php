@@ -575,8 +575,8 @@ function handleEmailSending($clientId) {
                 $messagePart .= '<tr>';
                 // Standard <td> gets the correct padding and border
                 $messagePart .= '<td>' . htmlspecialchars($ns['scheme_name']) . '</td>';
-                // Use 'text-right' and 'font-bold' classes for the amount
-                $messagePart .= '<td class="text-right font-bold">' . htmlspecialchars($ns['amount']) . '</td>';
+                // Use 'text-right' class defined in your CSS
+                $messagePart .= '<td class="text-right">' . htmlspecialchars($ns['amount']) . '</td>';
                 $messagePart .= '</tr>';
             }
             
