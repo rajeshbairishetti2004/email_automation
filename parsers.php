@@ -535,3 +535,19 @@ function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $
 
     return $clients;
 }
+
+function parse_scheme_xlsx($filepath) {
+    $names = [];
+    $spreadsheet = IOFactory::load($filepath);
+    $sheet = $spreadsheet->getActiveSheet();
+    foreach ($sheet->getRowIterator() as $row) {
+        $cellIterator = $row->getCellIterator();
+        $cellIterator->setIterateOnlyExistingCells(false);
+        $cell = $cellIterator->current();
+        $val = trim((string)$cell->getValue());
+        if ($val !== '' && strtolower($val) !== 'scheme_name') { // skip header if present
+            $names[] = $val;
+        }
+    }
+    return $names;
+}

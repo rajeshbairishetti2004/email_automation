@@ -312,6 +312,7 @@ function handleEmailSending($clientId) {
             .action-drop { background-color: #FFCDD2; color: #C62828; text-align: center; font-weight: bold; border-radius: 4px; }
             .action-switch { background-color: #FFF9C4; color: #FBC02D; text-align: center; font-weight: bold; border-radius: 4px; }
             .action-redeem { background-color: #F5F5F5; color: #616161; text-align: center; font-weight: bold; border-radius: 4px; }
+            .action-observation { background-color: #E3F2FD; color: #0288D1; text-align: center; font-weight: bold; border-radius: 4px; }
         </style>
         </head>
         <body>
@@ -527,6 +528,8 @@ function handleEmailSending($clientId) {
                 elseif ($act == 'drop') $aClass = 'action-drop';
                 elseif ($act == 'switch') $aClass = 'action-switch';
                 elseif (strpos($act, 'redeem') !== false) $aClass = 'action-redeem';
+                // [FIX] Add styling for Under Observation
+                elseif (strpos($act, 'observation') !== false) $aClass = 'action-observation';
             ?>
                 <tr>
                     <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
@@ -575,8 +578,8 @@ function handleEmailSending($clientId) {
                 $messagePart .= '<tr>';
                 // Standard <td> gets the correct padding and border
                 $messagePart .= '<td>' . htmlspecialchars($ns['scheme_name']) . '</td>';
-                // Use 'text-right' and 'font-bold' classes for the amount
-                $messagePart .= '<td class="text-right font-bold">' . htmlspecialchars($ns['amount']) . '</td>';
+                // Use 'text-right' class defined in your CSS
+                $messagePart .= '<td class="text-right">' . htmlspecialchars($ns['amount']) . '</td>';
                 $messagePart .= '</tr>';
             }
             

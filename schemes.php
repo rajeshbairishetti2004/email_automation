@@ -2,37 +2,43 @@
 // schemes.php
 require_once 'auth.php';
 require_once 'db_config.php';
+require_once 'parsers.php'; // <-- Add this to use XLSX parser
 
 requireAuth();
 $pdo = getPdo();
 $currentUser = getCurrentUser();
 
-// --- 1. HANDLE FORM SUBMISSIONS (POST ACTIONS) ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-    
-    if ($action === 'add') {
-        $category = $_POST['category'] ?? ''; 
-        $schemeName = trim($_POST['scheme_name'] ?? '');
-        if (!empty($schemeName)) {
-            $stmt = $pdo->prepare("INSERT INTO master_schemes (category, scheme_name, created_by) VALUES (?, ?, ?)");
-            $stmt->execute([$category, $schemeName, $_SESSION['user_id']]);
-        }
-    } elseif ($action === 'delete') {
-        $id = (int)$_POST['id'];
-        $stmt = $pdo->prepare("DELETE FROM master_schemes WHERE id = ?");
-        $stmt->execute([$id]);
-    } elseif ($action === 'edit') {
-        $id = (int)$_POST['id'];
-        $newName = trim($_POST['new_scheme_name'] ?? '');
-        if (!empty($newName)) {
-            $stmt = $pdo->prepare("UPDATE master_schemes SET scheme_name = ? WHERE id = ?");
-            $stmt->execute([$newName, $id]);
+// --- A. Handle XLSX File Upload ---
+if (isset($_POST['import_schemes'])) {
+    if ($_FILES['scheme_file']['name']) {
+        $filename = $_FILES['scheme_file']['tmp_name'];
+        // Use parser from parsers.php to extract scheme names from XLSX
+        $schemeNames = parse_scheme_xlsx($filename); // expects array of names
+        foreach ($schemeNames as $scheme) {
+            $scheme = trim($scheme);
+            if ($scheme) {
+                $stmt = $pdo->prepare("INSERT IGNORE INTO schemes (scheme_name) VALUES (?)");
+                $stmt->execute([$scheme]);
+            }
         }
     }
-    
-    // Redirect to prevent form resubmission and refresh list
-    header("Location: schemes.php");
+}
+
+// --- B. Handle AJAX Live Search (show all schemes with add icon) ---
+if (isset($_GET['search_query'])) {
+    $search = trim($_GET['search_query']);
+    $cat = trim($_GET['category']);
+    $stmt = $pdo->prepare("SELECT scheme_name FROM schemes WHERE scheme_name LIKE ? ORDER BY scheme_name ASC LIMIT 20");
+    $stmt->execute(["%$search%"]);
+    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($results) {
+        foreach ($results as $row) {
+            $name = htmlspecialchars($row['scheme_name']);
+            echo "<div class='search-result-item' onclick=\"selectScheme('{$name}', '{$cat}')\"><span>{$name}</span><i class='fas fa-plus-circle text-success'></i></div>";
+        }
+    } else {
+        echo "<div class='p-2 text-muted'>No schemes found</div>";
+    }
     exit;
 }
 
@@ -42,7 +48,6 @@ $allSchemes = [
     'observation' => [],
     'drop'        => []
 ];
-
 $stmt = $pdo->query("SELECT category, id, scheme_name FROM master_schemes ORDER BY scheme_name ASC");
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     if (isset($allSchemes[$row['category']])) {
@@ -281,97 +286,141 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             <p>Categorize and manage fund recommendations for client reports.</p>
         </div>
 
+        <!-- XLSX Upload Form -->
+        <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin-bottom: 32px;">
+            <input type="file" name="scheme_file" accept=".xlsx" required style="flex:unset; padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
+            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload</button>
+        </form>
+
         <div class="scheme-grid">
-            <?php 
-            $config = [
-                'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check', 'color' => 'success', 'class' => 'col-recommended'],
-                'observation' => ['title' => 'Observation', 'icon' => 'eye', 'color' => 'warning', 'class' => 'col-observation'],
-                'drop'        => ['title' => 'Exit / Drop', 'icon' => 'circle-xmark', 'color' => 'danger', 'class' => 'col-drop']
-            ];
-
-            foreach ($config as $key => $sec): ?>
-                <div class="scheme-col <?= $sec['class'] ?>">
-                    <h3>
-                        <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i> 
-                        <?= $sec['title'] ?>
-                    </h3>
-                    
-                    <form class="add-form" method="POST">
-                        <input type="hidden" name="action" value="add">
-                        <input type="hidden" name="category" value="<?= $key ?>">
-                        <input type="text" name="scheme_name" placeholder="Enter fund name..." required autocomplete="off">
-                        <button type="submit" class="btn-add" style="background:var(--<?= $sec['color'] ?>)">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
-                    </form>
-
-                    <ul class="scheme-list">
-                        <?php if (empty($allSchemes[$key])): ?>
-                            <li class="empty-msg">No schemes in this list yet.</li>
-                        <?php else: ?>
-                            <?php foreach($allSchemes[$key] as $scheme): ?>
-                                <li class="scheme-item" id="item-<?= $scheme['id'] ?>">
-                                    
-                                    <div class="display-mode">
-                                        <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
-                                        <div class="action-btns">
-                                            <button class="btn-icon btn-edit" onclick="toggleEdit(<?= $scheme['id'] ?>, true)" title="Edit Name">
-                                                <i class="fa-solid fa-pen-to-square"></i>
-                                            </button>
-                                            <form method="POST" style="display:inline" onsubmit="return confirm('Are you sure you want to delete this scheme?');">
-                                                <input type="hidden" name="action" value="delete">
-                                                <input type="hidden" name="id" value="<?= $scheme['id'] ?>">
-                                                <button type="submit" class="btn-icon btn-del" title="Delete">
-                                                    <i class="fa-solid fa-trash-can"></i>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </div>
-
-                                    <form method="POST" class="edit-mode">
-                                        <input type="hidden" name="action" value="edit">
-                                        <input type="hidden" name="id" value="<?= $scheme['id'] ?>">
-                                        <input type="text" name="new_scheme_name" value="<?= htmlspecialchars($scheme['scheme_name']) ?>" required>
-                                        <button type="submit" class="btn-icon btn-save" title="Save Changes">
-                                            <i class="fa-solid fa-check"></i>
-                                        </button>
-                                        <button type="button" class="btn-icon btn-cancel" onclick="toggleEdit(<?= $scheme['id'] ?>, false)" title="Cancel">
-                                            <i class="fa-solid fa-xmark"></i>
-                                        </button>
-                                    </form>
-
-                                </li>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </ul>
+        <?php
+        $config = [
+            'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check', 'color' => 'success', 'class' => 'col-recommended'],
+            'observation' => ['title' => 'Observation', 'icon' => 'eye', 'color' => 'warning', 'class' => 'col-observation'],
+            'drop'        => ['title' => 'Exit / Drop', 'icon' => 'circle-xmark', 'color' => 'danger', 'class' => 'col-drop']
+        ];
+        foreach ($config as $key => $sec): ?>
+            <div class="scheme-col <?= $sec['class'] ?>">
+                <h3>
+                    <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
+                    <?= $sec['title'] ?>
+                </h3>
+                <div class="add-form" style="margin-bottom:18px; position:relative;">
+                    <input type="text" placeholder="Search or enter fund name..." onkeyup="handleSearch(this, '<?= $key ?>')" autocomplete="off">
+                    <button type="button" class="btn-add" style="background:var(--<?= $sec['color'] ?>); pointer-events:none; opacity:0.7;"><i class="fa-solid fa-plus"></i></button>
+                    <div class="search-results-dropdown shadow-sm border" style="display:none; position:absolute; width:100%;"></div>
                 </div>
-            <?php endforeach; ?>
+                <ul class="scheme-list">
+                <?php if (empty($allSchemes[$key])): ?>
+                    <li class="empty-msg">No schemes in this list yet.</li>
+                <?php else: ?>
+                    <?php foreach($allSchemes[$key] as $scheme): ?>
+                    <li class="scheme-item" id="item-<?= $scheme['id'] ?>">
+                        <div class="display-mode">
+                            <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
+                            <div class="action-btns">
+                                <button class="btn-icon btn-edit" onclick="toggleEdit(<?= $scheme['id'] ?>, true)" title="Edit Name"><i class="fa-solid fa-pen-to-square"></i></button>
+                                <button class="btn-icon btn-del" onclick="deleteScheme(<?= $scheme['id'] ?>)" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                        <form class="edit-mode" style="display:none;" onsubmit="return false;">
+                            <input type="text" value="<?= htmlspecialchars($scheme['scheme_name']) ?>" required>
+                            <button class="btn-icon btn-save" title="Save Changes"><i class="fa-solid fa-check"></i></button>
+                            <button type="button" class="btn-icon btn-cancel" onclick="toggleEdit(<?= $scheme['id'] ?>, false)" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+                        </form>
+                    </li>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                </ul>
+            </div>
+        <?php endforeach; ?>
         </div>
     </div>
 
     <script>
-        /**
-         * Toggles between display mode and inline edit mode
-         */
-        function toggleEdit(id, isEditMode) {
-            const row = document.getElementById('item-' + id);
-            const displayDiv = row.querySelector('.display-mode');
-            const editForm = row.querySelector('.edit-mode');
-            
-            if (isEditMode) {
-                displayDiv.style.display = 'none';
-                editForm.style.display = 'flex';
-                // Focus the input and move cursor to end
-                const input = editForm.querySelector('input');
-                input.focus();
-                const val = input.value;
-                input.value = '';
-                input.value = val;
-            } else {
-                displayDiv.style.display = 'flex';
-                editForm.style.display = 'none';
-            }
+    // Live search for schemes (shows all from schemes table)
+    function handleSearch(input, category) {
+        let query = input.value;
+        let dropdown = input.parentElement.querySelector('.search-results-dropdown');
+        if (query.length < 1) {
+            dropdown.style.display = 'none';
+            return;
         }
+        fetch(`schemes.php?search_query=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`)
+            .then(res => res.text())
+            .then(data => {
+                dropdown.innerHTML = data;
+                dropdown.style.display = 'block';
+            });
+    }
+
+    // Show error alert at the top of the board
+    function showErrorAlert(message) {
+        // Remove any existing alert
+        let oldAlert = document.getElementById('error-alert');
+        if (oldAlert) oldAlert.remove();
+
+        // Create new alert
+        let alertDiv = document.createElement('div');
+        alertDiv.id = 'error-alert';
+        alertDiv.style = "background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);";
+        alertDiv.innerHTML = `<span><i class="fa-solid fa-circle-exclamation" style="margin-right: 10px;"></i> ${message}</span>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: #dc2626; cursor: pointer; font-size: 20px; line-height: 1;">&times;</button>`;
+        let contentWrap = document.querySelector('.content-wrap');
+        contentWrap.insertBefore(alertDiv, contentWrap.firstChild);
+    }
+
+    // Add scheme to master_schemes (from dropdown)
+    function selectScheme(name, category) {
+        let formData = new FormData();
+        formData.append('add_to_board', true);
+        formData.append('name', name);
+        formData.append('cat', category);
+        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            .then(async res => {
+                let text = await res.text();
+                if (res.ok && text === 'success') {
+                    location.reload();
+                } else if (res.status === 409) {
+                    showErrorAlert(text);
+                } else {
+                    showErrorAlert("An unexpected error occurred. Please try again.");
+                }
+            });
+    }
+
+    // Delete scheme from master_schemes
+    function deleteScheme(id) {
+        if (!confirm('Are you sure you want to delete this scheme?')) return;
+        let formData = new FormData();
+        formData.append('delete_scheme', true);
+        formData.append('id', id);
+        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            .then(() => location.reload());
+    }
     </script>
+    <style>
+    /* Styling for the dropdown results */
+    .search-results-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        z-index: 1050;
+        max-height: 250px;
+        overflow-y: auto;
+    }
+    .search-result-item {
+        padding: 8px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+    .search-result-item:hover { background-color: #f8f9fa; }
+    .action-icons i { font-size: 0.8rem; }
+    </style>
 </body>
 </html>
