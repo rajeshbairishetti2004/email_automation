@@ -1,3 +1,11 @@
+/* Action Observation Highlight */
+.action-observation {
+    background-color: #E3F2FD;
+    color: #0288D1;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 4px;
+}
 /* /* -----------------------------
    GLOBAL STYLE (Matches Python project)
 -------------------------------- */
