@@ -1357,8 +1357,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <?php if (empty($allocations)): ?>
                     <div style="color:#e55353; font-size:15px; margin-top:10px;">No asset allocation data available for this client.</div>
                 <?php endif; ?>
-                <pre style="font-size:12px; color:#888; background:#f8f8f8; padding:6px 10px; border-radius:6px; margin-top:10px; max-width:600px; overflow-x:auto;">Debug: <?php echo htmlspecialchars(json_encode($allocations)); ?></pre>
-            </div>
+                </div>
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
@@ -1469,7 +1468,8 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     $recommendedScheme = $recommendationAccepted ? ($s['recommended_scheme'] ?? '') : '';
                 ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
+                        
+                       <td class="present-scheme-name"><?php echo htmlspecialchars($s['scheme_name']); ?></td>
                         <td><?php echo (float)$s['sip_swp'] == 0 ? '-' : formatAmount((float)$s['sip_swp']); ?></td>
                         <td><?php echo formatAmount((float)$s['current_value']); ?></td>
                         <td>
@@ -2780,6 +2780,46 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
         })
         .catch(err => alert('Delete error.'));
     }
+
+ document.addEventListener('change', function(e) {
+    // Check if the changed element is an action-dropdown
+    if (e.target && e.target.classList.contains('action-dropdown')) {
+        const select = e.target;
+        const selectedValue = select.value;
+        const row = select.closest('tr');
+        const recommendedInput = row.querySelector('input[data-field="recommended_scheme"]');
+        
+        // 1. AUTO-FILL: If Switch, Partially Redeem, Drop, or Redeem is selected
+        const triggerStatuses = ['Switch', 'Partially Redeem', 'Drop', 'Redeem'];
+        
+        if (triggerStatuses.includes(selectedValue)) {
+            const presentSchemeName = row.querySelector('.present-scheme-name').textContent.trim();
+            
+            // Fill if currently empty
+            if (recommendedInput && recommendedInput.value.trim() === "") {
+                recommendedInput.value = presentSchemeName;
+                // Trigger existing AJAX save
+                recommendedInput.dispatchEvent(new Event('blur'));
+                
+                // Visual feedback
+                recommendedInput.style.backgroundColor = "#fff3cd"; 
+                setTimeout(() => { recommendedInput.style.backgroundColor = ""; }, 800);
+            }
+        } 
+        // 2. AUTO-CLEAR: If Continue is selected, clear the input
+        else if (selectedValue === 'Continue') {
+            if (recommendedInput && recommendedInput.value.trim() !== "") {
+                recommendedInput.value = "";
+                // Trigger existing AJAX save to clear DB
+                recommendedInput.dispatchEvent(new Event('blur'));
+                
+                // Visual feedback (Red flash to show deletion)
+                recommendedInput.style.backgroundColor = "#ffe6e6"; 
+                setTimeout(() => { recommendedInput.style.backgroundColor = ""; }, 800);
+            }
+        }
+    }
+});
 
     // ...existing code...
     </script>
