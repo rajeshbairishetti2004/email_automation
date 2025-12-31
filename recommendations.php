@@ -6,16 +6,16 @@ if (!isset($pdo) || !isset($clientId)) {
     return; // Safety check for inclusion
 }
 
-// [PATCH] Stop execution if report is Locked (Reviewed or Sent)
+// Stop execution if report is Locked (Reviewed or Sent)
 if (isset($isLocked) && $isLocked) {
-    return;
+    return; //
 }
 
 // 1. Fetch the master strategy list
 $masterStmt = $pdo->query("SELECT scheme_name, category FROM master_schemes");
-$masterSchemes = $masterStmt->fetchAll(PDO::FETCH_ASSOC);
+$masterSchemes = $masterStmt->fetchAll(PDO::FETCH_ASSOC); //
 
-// 2. Identify matches and grab their specific client_scheme IDs for linking
+// 2. Identify matches
 $strategyMatches = [];
 if (isset($schemes) && is_array($schemes)) {
     foreach ($schemes as $s) {
@@ -23,30 +23,76 @@ if (isset($schemes) && is_array($schemes)) {
         foreach ($masterSchemes as $ms) {
             if (strcasecmp($clientSchemeName, trim($ms['scheme_name'])) === 0) {
                 $strategyMatches[] = [
-                    'id' => $s['id'], // ID from client_schemes table for the Accept trigger
+                    'id' => $s['id'], 
                     'name' => $clientSchemeName,
                     'category' => $ms['category']
                 ];
             }
         }
     }
-}
+} //
 ?>
 
 <style>
-/* Sticky Widget Container */
-.strategy-sticky-container {
+/* 1. Toggle Button at Bottom Right */
+.strategy-toggle-trigger {
     position: fixed;
     bottom: 24px;
-    left: 24px;
-    width: 320px;
-    z-index: 9999;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    background: #0288D1;
+    color: white;
+    border: none;
+    border-radius: 50%;
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    cursor: pointer;
+    z-index: 10000;
+    font-size: 24px;
+    transition: all 0.3s ease;
+}
+.strategy-toggle-trigger:hover { 
+    transform: scale(1.1); 
+    background: #0277bd; 
 }
 
-/* Modal-like Card Styling */
+/* 2. Container (Hidden by default, aligned to right) */
+.strategy-sticky-container {
+    position: fixed;
+    bottom: 90px; 
+    right: 24px; 
+    width: 320px;
+    z-index: 9999;
+    display: none; /* Controlled by JS */
+    flex-direction: column;
+    gap: 12px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* 3. Header for Close All */
+.strategy-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 5px;
+}
+.btn-close-all {
+    background: #475569;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Card Styling */
 .strategy-popup-card {
     background: #ffffff;
     border-radius: 12px;
@@ -54,12 +100,12 @@ if (isset($schemes) && is_array($schemes)) {
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
     border: 1px solid #e2e8f0;
     border-left: 6px solid #cbd5e1;
-    animation: slideInLeft 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     transition: all 0.3s ease;
 }
 
-@keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(-50px); }
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(50px); }
     to { opacity: 1; transform: translateX(0); }
 }
 
@@ -86,26 +132,10 @@ if (isset($schemes) && is_array($schemes)) {
     line-height: 1.3;
 }
 
-/* Accept/Reject Buttons */
-.popup-actions {
-    display: flex;
-    gap: 8px;
-}
-
-.btn-action {
-    flex: 1;
-    padding: 8px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-    border: none;
-    transition: all 0.2s;
-}
-
+.popup-actions { display: flex; gap: 8px; }
+.btn-action { flex: 1; padding: 8px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
 .btn-accept { background: #16a34a; color: white; }
 .btn-reject { background: #cbd5e1; color: #475569; }
-.btn-action:hover { opacity: 0.9; transform: scale(1.02); }
 
 /* Table Highlighting */
 <?php foreach ($strategyMatches as $match): ?>
@@ -118,15 +148,22 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
 <?php endforeach; ?>
 </style>
 
-<div class="strategy-sticky-container">
+<button type="button" class="strategy-toggle-trigger" id="strategyToggleBtn" onclick="toggleRecommendations()" title="Show Recommendations">
+    💡
+</button>
+
+<div class="strategy-sticky-container" id="strategyMainContainer">
+    <div class="strategy-header">
+        <button type="button" class="btn-close-all" onclick="toggleRecommendations()">✕ Close All</button>
+    </div>
+
     <?php foreach ($strategyMatches as $match): ?>
         <?php 
             $class = ''; $title = ''; $targetVal = ''; $icon = '';
-            // [FIX] Map categories to valid Dropdown Options (Continue, Drop, Under Observation)
             switch($match['category']) {
                 case 'recommended':
                     $class = 'popup-recommended'; $title = 'Suggested Action: Recommended'; 
-                    $targetVal = 'Continue'; $icon = '⭐'; break; // Fixed: Set to 'Continue'
+                    $targetVal = 'Continue'; $icon = '⭐'; break;
                 case 'observation':
                     $class = 'popup-observation'; $title = 'Suggested Action: Under Observation'; 
                     $targetVal = 'Under Observation'; $icon = '👁️'; break;
@@ -150,57 +187,73 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
 
 <script>
 /**
- * Finds the dropdown in the main table and updates it
+ * Toggles the recommendation panel visibility
+ */
+function toggleRecommendations() {
+    const container = document.getElementById('strategyMainContainer');
+    const trigger = document.getElementById('strategyToggleBtn');
+    
+    if (container.style.display === 'flex') {
+        container.style.display = 'none';
+        trigger.style.background = '#0288D1';
+        trigger.innerHTML = '💡';
+    } else {
+        container.style.display = 'flex';
+        trigger.style.background = '#475569';
+        trigger.innerHTML = '✕';
+    }
+}
+
+/**
+ * Updates the dropdown in the main table and saves via existing AJAX
  */
 function applyStrategy(schemeId, value) {
-    // 1. Locate the dropdown in the client schemes table using data-scheme-id
     const dropdown = document.querySelector(`select[data-scheme-id="${schemeId}"]`);
     
     if (dropdown) {
         dropdown.value = value;
         
-        // 2. Trigger the existing 'change' event listener so it auto-saves via AJAX
+        // Trigger 'change' for existing AJAX auto-save
         const event = new Event('change', { bubbles: true });
         dropdown.dispatchEvent(event);
         
-        // 3. Visual feedback in the table
+        // Visual feedback in table
         dropdown.parentElement.style.backgroundColor = "#dcfce7";
         setTimeout(() => { dropdown.parentElement.style.backgroundColor = "transparent"; }, 1500);
 
-        // 4. Remove the sticky card (passing name null since we accepted it)
+        // Remove card from UI
         dismissStrategy(schemeId, null);
         
         if(typeof showToast === 'function') {
             showToast(`Applied "${value}" to scheme.`);
         }
-    } else {
-        alert("Could not find the scheme in the table. Please refresh.");
     }
 }
 
 /**
- * Removes the card from the UI and clears table highlighting
+ * Removes card and checks if panel should auto-close
  */
 function dismissStrategy(id, schemeName) {
-    // 1. Remove the Popup Card
     const card = document.getElementById('strategy-popup-' + id);
     if (card) {
         card.style.opacity = '0';
-        card.style.transform = 'translateX(-20px)';
-        setTimeout(() => { card.remove(); }, 300);
+        card.style.transform = 'translateX(20px)';
+        setTimeout(() => { 
+            card.remove(); 
+            
+            // Auto-close if no cards left
+            const remaining = document.querySelectorAll('.strategy-popup-card');
+            if (remaining.length === 0) {
+                toggleRecommendations();
+                document.getElementById('strategyToggleBtn').style.display = 'none';
+            }
+        }, 300);
     }
 
-    // 2. [FIX] Remove the Highlight from the Table Row (if rejected)
     if (schemeName) {
-        // Find row by data-scheme-name attribute
-        // We use CSS.escape or quotes to handle names with spaces/special chars
-        const row = document.querySelector(`tr[data-scheme-name="${CSS.escape(schemeName)}"]`) || 
-                    document.querySelector(`tr[data-scheme-name="${schemeName}"]`);
-        
+        const row = document.querySelector(`tr[data-scheme-name="${CSS.escape(schemeName)}"]`);
         if (row) {
-            // Override the !important CSS from the style block
             row.style.setProperty('background-color', 'transparent', 'important');
-            row.style.transition = 'background-color 0.5s ease';
         }
     }
 }
