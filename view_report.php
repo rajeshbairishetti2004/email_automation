@@ -1437,13 +1437,15 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 });
             </script>
 
+                        <!-- =========================
+                 4. Appropriate Scheme Selection
+                 ========================= -->
             <h3>4. Appropriate Scheme Selection</h3>
-
             <table class="report-table">
                 <tr>
                     <th colspan="3">Present Schemes</th>
                     <th rowspan="2">Action Step</th>
-                    <th colspan="2">Recommended Schemes</th>
+                    <th colspan="2">Scheme Changes</th>
                 </tr>
                 <tr>
                     <th>Scheme Name</th>
@@ -1452,42 +1454,52 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     <th>Scheme Name</th>
                     <th>Amount</th>
                 </tr>
-                <?php foreach ($schemes as $s): 
+                <?php
+                // --- Recommendations popup control ---
+                $recommendationCookieKey = "recommendation_shown_{$clientId}_{$reportState}";
+                $recommendationAccepted = (isset($_COOKIE[$recommendationCookieKey]) && $_COOKIE[$recommendationCookieKey] === '1');
+                foreach ($schemes as $s):
                     // FILTER: If both SIP and Value are 0, skip this row
                     if ((float)$s['sip_swp'] == 0 && (float)$s['current_value'] == 0) {
                         continue;
                     }
+                    $schemeId = (int)$s['id'];
+                    // If recommendations not accepted, force default to Continue and blank recommended_scheme
+                    $actionStep = $recommendationAccepted ? ($s['action_step'] ?? 'Continue') : 'Continue';
+                    $recommendedScheme = $recommendationAccepted ? ($s['recommended_scheme'] ?? '') : '';
                 ?>
                     <tr>
                         <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
                         <td><?php echo (float)$s['sip_swp'] == 0 ? '-' : formatAmount((float)$s['sip_swp']); ?></td>
                         <td><?php echo formatAmount((float)$s['current_value']); ?></td>
                         <td>
-                            <select name="action_step[<?php echo (int)$s['id']; ?>]" 
-                                    class="action-dropdown" 
-                                    data-scheme-id="<?php echo (int)$s['id']; ?>" <?php echo $isLocked ? 'disabled' : ''; ?>>
-                                <option value="Continue" <?php echo ($s['action_step'] ?? 'Continue') === 'Continue' ? 'selected' : ''; ?>>Continue</option>
-                                <option value="Drop" <?php echo ($s['action_step'] ?? '') === 'Drop' ? 'selected' : ''; ?>>Drop</option>
-                                <option value="Switch" <?php echo ($s['action_step'] ?? '') === 'Switch' ? 'selected' : ''; ?>>Switch</option>
-                                <option value="Redeem" <?php echo ($s['action_step'] ?? '') === 'Redeem' ? 'selected' : ''; ?>>Redeem</option>
-                                <option value="Partially Redeem" <?php echo ($s['action_step'] ?? '') === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
-                                <option value="Under Observation" <?php echo ($s['action_step'] ?? '') === 'Under Observation' ? 'selected' : ''; ?>>Under Observation</option>
+                            <select name="action_step[<?php echo $schemeId; ?>]"
+                                    class="action-dropdown"
+                                    data-scheme-id="<?php echo $schemeId; ?>"
+                                    onchange="autoFillSchemeName(this, '<?php echo htmlspecialchars(addslashes($s['scheme_name'])); ?>')"
+                                    <?php echo $isLocked ? 'disabled' : ''; ?>>
+                                <option value="Continue" <?php echo $actionStep === 'Continue' ? 'selected' : ''; ?>>Continue</option>
+                                <option value="Drop" <?php echo $actionStep === 'Drop' ? 'selected' : ''; ?>>Drop</option>
+                                <option value="Switch" <?php echo $actionStep === 'Switch' ? 'selected' : ''; ?>>Switch</option>
+                                <option value="Partially Redeem" <?php echo $actionStep === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
+                                <option value="Under Observation" <?php echo $actionStep === 'Under Observation' ? 'selected' : ''; ?>>Under Observation</option>
                             </select>
                         </td>
                         <td>
-                            <input type="text" 
-                                   name="recommended_scheme[<?php echo (int)$s['id']; ?>]"
-                                   class="scheme-input" 
-                                   data-scheme-id="<?php echo (int)$s['id']; ?>"
+                            <input type="text"
+                                   name="recommended_scheme[<?php echo $schemeId; ?>]"
+                                   class="scheme-input"
+                                   id="recommended_scheme_<?php echo $schemeId; ?>"
+                                   data-scheme-id="<?php echo $schemeId; ?>"
                                    data-field="recommended_scheme"
-                                   value="<?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?>"
+                                   value="<?php echo htmlspecialchars($recommendedScheme); ?>"
                                    placeholder="Enter scheme details" <?php echo $isLocked ? 'readonly' : ''; ?>>
                         </td>
                         <td>
-                            <input type="text" 
-                                   name="recommended_amount[<?php echo (int)$s['id']; ?>]"
-                                   class="scheme-input" 
-                                   data-scheme-id="<?php echo (int)$s['id']; ?>"
+                            <input type="text"
+                                   name="recommended_amount[<?php echo $schemeId; ?>]"
+                                   class="scheme-input"
+                                   data-scheme-id="<?php echo $schemeId; ?>"
                                    data-field="recommended_amount"
                                    value="<?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?>"
                                    placeholder="Amount / Note" <?php echo $isLocked ? 'readonly' : ''; ?>>
@@ -1495,10 +1507,32 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                     </tr>
                 <?php endforeach; ?>
             </table>
-
-
-            </table>
-            </div> <!-- End of Product Selection section -->
+            <script>
+            // =========================
+            // Appropriate Scheme Selection JS
+            // =========================
+            // Autofill scheme name in "Scheme Changes" when action is Drop/Switch/Partially Redeem
+            function autoFillSchemeName(select, schemeName) {
+                var val = select.value;
+                var schemeId = select.getAttribute('data-scheme-id');
+                var input = document.getElementById('recommended_scheme_' + schemeId);
+                if (!input) return;
+                if (val === 'Drop' || val === 'Switch' || val === 'Partially Redeem') {
+                    if (input.value.trim() === '' || input.value.trim() === schemeName) {
+                        input.value = schemeName;
+                        // Optionally trigger blur for autosave if needed:
+                        if (typeof input.blur === 'function') input.blur();
+                    }
+                } else if (val === 'Continue' || val === 'Under Observation') {
+                    // Clear the field when switched back to Continue/Under Observation
+                    input.value = '';
+                    if (typeof input.blur === 'function') input.blur();
+                }
+            }
+            </script>
+            <!-- =========================
+                 End Appropriate Scheme Selection
+                 ========================= -->
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
