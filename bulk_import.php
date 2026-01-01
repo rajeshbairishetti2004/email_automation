@@ -46,7 +46,6 @@ while ($uRow = $uStmt->fetch(PDO::FETCH_ASSOC)) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) {
     
-    // Get the Target Tag from input (e.g., "RJ", "RM")
     $targetTag = trim($_POST['target_tag'] ?? '');
     
     if (empty($targetTag)) {
@@ -57,36 +56,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         try {
             $spreadsheet = IOFactory::load($file);
             $sheet = $spreadsheet->getActiveSheet();
-            $rows = $sheet->toArray(null, true, true, true); // Returns A, B, C indexed array
+            $rows = $sheet->toArray(null, true, true, true);
 
-            // Loop through rows (Start from Row 2 to skip headers)
             foreach ($rows as $rowIndex => $row) {
                 if ($rowIndex < 2) continue; // Skip Header
 
-                // --- 1. PARSE COLUMNS BASED ON NEW FORMAT ---
-                // Col A: Priority
-                // Col B: Name
-                // Col E: Tags (Quarter)
-                // Col G: AUM
-                // Col H: Relationship Manager
-                    // Col I: Reviewer (Review Assigned To)
-
                 $rawName     = trim($row['B'] ?? '');
-                    $rawRM       = trim($row['H'] ?? ''); // Relationship Manager name
-                    $rawReviewer = trim($row['I'] ?? ''); // Reviewer name
-                $rawTag      = trim($row['E'] ?? ''); // The Quarter/Tag
+                $rawRM       = trim($row['H'] ?? '');
+                $rawReviewer = trim($row['I'] ?? '');
+                $rawTag      = trim($row['E'] ?? '');
                 $rawAum      = $row['G'] ?? 0;
                 $rawPriority = trim($row['A'] ?? '');
 
-                // --- NEW: Clean/Validate review_cycle value ---
-                $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
-
-                // Skip empty rows
                 if (empty($rawName)) continue;
 
-                // --- 2. FILTER BY TAG/QUARTER ---
-                // Only process if the Excel Tag matches the Input Tag
-                // Using stripos for the Tag itself to be user-friendly (case-insensitive tag check)
+                // FILTER BY TAG/QUARTER
                 if (stripos($rawTag, $targetTag) === false) {
                     $summary['skipped']++;
                     continue; 
@@ -94,73 +78,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
                 $summary['processed']++;
 
-                // --- 3. SMART LOOKUP ---
+                // SMART LOOKUP
                 $assignedToId = null;
-                $lookupKey = strtolower($rawRM); // Convert Excel name to lowercase
-                    $reviewerId   = null;
+                $reviewerId   = null;
+                $rmKey        = strtolower($rawRM);
+                $revKey       = strtolower($rawReviewer);
 
-                    $rmKey = strtolower($rawRM);
-                    $revKey = strtolower($rawReviewer);
-
-                if (!empty($lookupKey) && isset($allUsers[$lookupKey])) {
-                    $assignedToId = $allUsers[$lookupKey];
+                if (!empty($rmKey) && isset($allUsers[$rmKey])) {
+                    $assignedToId = $allUsers[$rmKey];
                     $summary['assigned']++;
                 } else {
                     $summary['unassigned']++;
                 }
-                
-                    if (!empty($revKey) && isset($allUsers[$revKey])) {
-                        $reviewerId = $allUsers[$revKey];
-                    }
+                if (!empty($revKey) && isset($allUsers[$revKey])) {
+                    $reviewerId = $allUsers[$revKey];
+                }
 
-                // Clean Amount
-                $cleanAum = (float)preg_replace('/[^0-9\.-]/', '', (string)$rawAum);
+                // --- AUM CLEANING & CRORE CONVERSION ---
+                $cleanAumVal = preg_replace('/[^-0-9.]/', '', (string)$rawAum);
+                $numericAum  = (float)$cleanAumVal;
+                $aumInCrores = $numericAum / 10000000; // Conversion Logic
 
-                // --- 4. DB UPSERT (Insert or Update) ---
-                
-                // Check if client exists
+                $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
+
+                // DB UPSERT
                 $chk = $pdo->prepare("SELECT id FROM clients WHERE name = :name LIMIT 1");
                 $chk->execute([':name' => $rawName]);
                 $exists = $chk->fetchColumn();
 
                 if ($exists) {
-                    // UPDATE
-                    $upd = $pdo->prepare("
-                        UPDATE clients SET 
-                            assigned_to = :assign, 
-                            review_assigned_to = :reviewer,
-                            total_amount = :aum,
-                            priority = :prio,
-                            review_cycle = :cycle,
-                            updated_at = NOW()
-                        WHERE id = :id
-                    ");
-                    $upd->execute([
-                        ':assign'   => $assignedToId,
-                        ':reviewer' => $reviewerId,
-                        ':aum'      => $cleanAum,
-                        ':prio'     => $rawPriority,
-                        ':cycle'    => $reviewCycleValue,
-                        ':id'       => (int)$exists
-                    ]);
+                    $upd = $pdo->prepare("UPDATE clients SET assigned_to=:assign, review_assigned_to=:reviewer, total_amount=:aum, aum=:aum_val, priority=:prio, review_cycle=:cycle, updated_at=NOW() WHERE id=:id");
+                    $upd->execute([':assign'=>$assignedToId, ':reviewer'=>$reviewerId, ':aum'=>$aumInCrores, ':aum_val'=>$aumInCrores, ':prio'=>$rawPriority, ':cycle'=>$reviewCycleValue, ':id'=>(int)$exists]);
                     $summary['updated']++;
                 } else {
-                    // INSERT (Default state: 'pending')
-                    $ins = $pdo->prepare("
-                        INSERT INTO clients 
-                        (name, assigned_to, review_assigned_to, total_amount, priority, review_cycle, report_state, created_at, created_by) 
-                        VALUES 
-                        (:name, :assign, :reviewer, :aum, :prio, :cycle, 'pending', NOW(), :creator)
-                    ");
-                    $ins->execute([
-                        ':name'     => $rawName,
-                        ':assign'   => $assignedToId,
-                        ':reviewer' => $reviewerId,
-                        ':aum'      => $cleanAum,
-                        ':prio'     => $rawPriority,
-                        ':cycle'    => $reviewCycleValue,
-                        ':creator'  => $currentUserId
-                    ]);
+                    $ins = $pdo->prepare("INSERT INTO clients (name, assigned_to, review_assigned_to, total_amount, aum, priority, review_cycle, report_state, created_at, created_by) VALUES (:name, :assign, :reviewer, :aum, :aum_val, :prio, :cycle, 'pending', NOW(), :creator)");
+                    $ins->execute([':name'=>$rawName, ':assign'=>$assignedToId, ':reviewer'=>$reviewerId, ':aum'=>$aumInCrores, ':aum_val'=>$aumInCrores, ':prio'=>$rawPriority, ':cycle'=>$reviewCycleValue, ':creator'=>$currentUserId]);
                     $summary['inserted']++;
                 }
             }

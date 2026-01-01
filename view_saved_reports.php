@@ -389,212 +389,223 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             </div>
 
             <table>
-                <tr>
-                    <th style="width: 40px;">
-                        <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll(this)">
-                    </th>
-                    <th>
-                        <a href="?sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th>
-                        <a href="?sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th>Drafted By</th>
-                    <th>RM</th>
-                    <th>Cycle</th>
-                    <th>Review Assigned to</th>
-                    <th>
-                        <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th>
-                        <a href="?sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            Last Updated <?php if ($sortBy === 'updated_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th>
-                        <a href="?sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                            Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th style="text-align: center; width: 120px;">
-                        <a href="?sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
-                            Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th style="text-align: center; width: 140px;">
-                        <a href="?sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
-                            Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                        </a>
-                    </th>
-                    <th>Action</th>
-                </tr>
-            <?php foreach ($clients as $c): 
-                // --- WORKFLOW BADGE LOGIC ---
-                $statusHtml = '';
-                
-                // 1. Check for Rejection first
-                if (isset($c['review_not_ok']) && $c['review_not_ok'] == 1) {
-                    $comment = htmlspecialchars($c['review_comment'] ?? '');
-                    $statusHtml = "<span class='badge badge-rejected' title='RM Comment: $comment'>NOT OK</span>";
-                } 
-                // 2. Otherwise check state
-                else {
-                    $state = $c['report_state'] ?? 'draft'; // Default to draft if null
-                    $badgeClass = 'badge-' . $state;
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll(this)">
+                        </th>
+                        <th>
+                            <a href="?sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="?sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th>AUM (Cr)</th>
+                        <th>Drafted By</th>
+                        <th>RM</th>
+                        <th>Cycle</th>
+                        <th>Review Assigned to</th>
+                        <th>
+                            <a href="?sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="?sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                Last Updated <?php if ($sortBy === 'updated_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th>
+                            <a href="?sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th style="text-align: center; width: 120px;">
+                            <a href="?sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
+                                Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th style="text-align: center; width: 140px;">
+                            <a href="?sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?>" style="color: #333; text-decoration: none;">
+                                Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
+                        <th>AUM (Cr)</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($clients as $c): 
+                    // --- WORKFLOW BADGE LOGIC ---
+                    $statusHtml = '';
+                    
+                    // 1. Check for Rejection first
+                    if (isset($c['review_not_ok']) && $c['review_not_ok'] == 1) {
+                        $comment = htmlspecialchars($c['review_comment'] ?? '');
+                        $statusHtml = "<span class='badge badge-rejected' title='RM Comment: $comment'>NOT OK</span>";
+                    } 
+                    // 2. Otherwise check state
+                    else {
+                        $state = $c['report_state'] ?? 'draft'; // Default to draft if null
+                        $badgeClass = 'badge-' . $state;
 
-                    // Special display names
-                    if ($state === 'sent') {
-                        $displayText = 'Email Sent';
-                    } elseif ($state === 'pending') {
-                        $displayText = 'Review Not Started';
-                        // ensure class exists for pending visual
-                        $badgeClass = 'badge-pending';
-                    } else {
-                        $displayText = ucfirst($state);
+                        // Special display names
+                        if ($state === 'sent') {
+                            $displayText = 'Email Sent';
+                        } elseif ($state === 'pending') {
+                            $displayText = 'Review Not Started';
+                            // ensure class exists for pending visual
+                            $badgeClass = 'badge-pending';
+                        } else {
+                            $displayText = ucfirst($state);
+                        }
+
+                        $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
                     }
 
-                    $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
-                }
-
-                // Check for attachments
-                $hasAttachments = false;
-                $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
-                if (is_dir($cDir)) {
-                    // Check if directory has any files (ignoring . and ..)
-                    $files = array_diff(scandir($cDir), ['.', '..']);
-                    if (count($files) > 0) {
-                        $hasAttachments = true;
+                    // Check for attachments
+                    $hasAttachments = false;
+                    $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
+                    if (is_dir($cDir)) {
+                        // Check if directory has any files (ignoring . and ..)
+                        $files = array_diff(scandir($cDir), ['.', '..']);
+                        if (count($files) > 0) {
+                            $hasAttachments = true;
+                        }
                     }
-                }
-                
-                // Priority badge styling
-                $priorityBadgeClass = 'badge';
-                $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
-                
-                if (strtolower($priorityText) === 'high') {
-                    $priorityBadgeClass .= ' badge-ready';
-                } elseif (strtolower($priorityText) === 'low') {
-                    $priorityBadgeClass .= ' badge-draft';
-                }
-            ?>
-                <tr>
-                    <td>
-                        <input type="checkbox" class="client-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>">
-                    </td>
-                    <td><?php echo (int)$c['id']; ?></td>
-                    <td>
-                        <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
-                            <span><?php echo htmlspecialchars($c['name']); ?></span>
-                            <?php if($hasAttachments): ?>
-                                <span title="Has Attachments">📎</span>
+                    
+                    // Priority badge styling
+                    $priorityBadgeClass = 'badge';
+                    $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
+                    
+                    if (strtolower($priorityText) === 'high') {
+                        $priorityBadgeClass .= ' badge-ready';
+                    } elseif (strtolower($priorityText) === 'low') {
+                        $priorityBadgeClass .= ' badge-draft';
+                    }
+                ?>
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="client-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>">
+                        </td>
+                        <td><?php echo (int)$c['id']; ?></td>
+                        <td>
+                            <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
+                                <span><?php echo htmlspecialchars($c['name']); ?></span>
+                                <?php if($hasAttachments): ?>
+                                    <span title="Has Attachments">📎</span>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="font-weight:600; color:#1976d2;">
+                                ₹<?php echo number_format((float)($c['aum'] ?? 0), 2); ?> Cr
+                            </span>
+                        </td>
+                        <td>
+                            <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+                            <?php if ($currState === 'pending'): ?>
+                                <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
+                            <?php else: ?>
+                                <?php if (!empty($c['created_by_username'])): ?>
+                                    <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                                        <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                    </span>
+                                <?php else: ?>
+                                    <span style="color: #999; font-size: 0.85em;">System</span>
+                                <?php endif; ?>
                             <?php endif; ?>
-                        </div>
-                    </td>
-                    <td>
-                        <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
-                        <?php if ($currState === 'pending'): ?>
-                            <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
-                        <?php else: ?>
-                            <?php if (!empty($c['created_by_username'])): ?>
-                                <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                    <?php echo htmlspecialchars($c['created_by_username']); ?>
+                        </td>
+                        <td>
+                            <span style="color:#333; font-weight:600;">
+                                <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
+                                <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
+                            </span>
+                        </td>
+                        <td>
+                            <?php 
+                                $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                                $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
+                                if ($isReviewer) {
+                                    $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
+                                }
+                            ?>
+                            <?php if (!empty($c['reviewer_username'])): ?>
+                                <span class="badge" style="<?php echo $reviewerStyle; ?>">
+                                    <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                                    <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
                                 </span>
                             <?php else: ?>
-                                <span style="color: #999; font-size: 0.85em;">System</span>
+                                <span style="color: #999; font-size: 0.85em;">Unassigned</span>
                             <?php endif; ?>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <span style="color:#333; font-weight:600;">
-                            <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
-                            <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
-                        </span>
-                    </td>
-                    <td>
-                        <?php 
-                            $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
-                            $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
-                            if ($isReviewer) {
-                                $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
-                            }
-                        ?>
-                        <?php if (!empty($c['reviewer_username'])): ?>
-                            <span class="badge" style="<?php echo $reviewerStyle; ?>">
-                                <?php echo htmlspecialchars($c['reviewer_username']); ?>
-                                <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($c['priority'])): ?>
+                                <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
+                                    <?php echo $priorityText; ?>
                             </span>
-                        <?php else: ?>
-                            <span style="color: #999; font-size: 0.85em;">Unassigned</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if (!empty($c['priority'])): ?>
-                            <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
-                                <?php echo $priorityText; ?>
-                            </span>
-                        <?php else: ?>
-                            <span style="color: #999; font-size: 0.85em;">Normal</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if (!empty($c['updated_at'])): ?>
-                            <span style="color: #555; font-size: 0.9em;">
-                                <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
-                                <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
-                            </span>
-                        <?php else: ?>
-                            <span style="color: #999; font-size: 0.85em;">N/A</span>
-                        <?php endif; ?>
-                    </td>
-                    <td><?php echo $statusHtml; ?></td>
-                    <td style="text-align: center;">
-                        <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                                class="meet-select"
-                                id="meet_select_<?php echo $c['id']; ?>">
-                            <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
-                            <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
-                            <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
-                        </select>
-                    </td>
+                            <?php else: ?>
+                                <span style="color: #999; font-size: 0.85em;">Normal</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($c['updated_at'])): ?>
+                                <span style="color: #555; font-size: 0.9em;">
+                                    <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
+                                    <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
+                                </span>
+                            <?php else: ?>
+                                <span style="color: #999; font-size: 0.85em;">N/A</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?php echo $statusHtml; ?></td>
+                        <td style="text-align: center;">
+                            <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                                    class="meet-select"
+                                    id="meet_select_<?php echo $c['id']; ?>">
+                                <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
+                                <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
+                                <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
+                            </select>
+                        </td>
 
-                    <td style="text-align: center;">
-                        <button type="button" 
-                                id="meet_btn_<?php echo $c['id']; ?>"
-                                class="meet-btn"
-                                onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                        </button>
-                        
-                        <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                    </td>
-                    <td>
-                        <?php if (($c['report_state'] ?? '') === 'pending'): ?>
-                            <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
-                               style="font-weight: 600; color:#0288D1; text-decoration:none;">
-                                📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
-                            </a>
-                        <?php else: ?>
-                            <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" 
-                               style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
-                            <span style="color:#ccc; margin:0 6px;">|</span>
-                            <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
-                               style="font-size:0.9em; color:#555; text-decoration:none;" 
-                               title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
+                        <td style="text-align: center;">
+                            <button type="button" 
+                                    id="meet_btn_<?php echo $c['id']; ?>"
+                                    class="meet-btn"
+                                    onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                    style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                                Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                            </button>
+                            
+                            <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+                        </td>
+                        <td>
+                            <?php if (($c['report_state'] ?? '') === 'pending'): ?>
+                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                                   style="font-weight: 600; color:#0288D1; text-decoration:none;">
+                                    📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
+                                </a>
+                            <?php else: ?>
+                                <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" 
+                                   style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
+                                <span style="color:#ccc; margin:0 6px;">|</span>
+                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                                   style="font-size:0.9em; color:#555; text-decoration:none;" 
+                                   title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
             </table>
         </form>
 
