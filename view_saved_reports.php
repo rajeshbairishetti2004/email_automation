@@ -434,7 +434,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                 Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
-                        <th>AUM (Cr)</th>
+                
                         <th>Action</th>
                     </tr>
                 </thead>
