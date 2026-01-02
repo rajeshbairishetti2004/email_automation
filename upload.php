@@ -228,6 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $checkClient = $pdo->prepare('SELECT id FROM clients WHERE name = :name LIMIT 1');
         $updateClient = $pdo->prepare('UPDATE clients SET
                 as_on = :as_on,
+                email = :email,
                 total_amount = :total_amount,
                 profit = :profit,
                 cagr = :cagr,
@@ -246,12 +247,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE id = :id');
 
         $insertClient = $pdo->prepare('INSERT INTO clients
-            (name, as_on, total_amount, profit, cagr, xirr, absolute_return,
+            (name, email, as_on, total_amount, profit, cagr, xirr, absolute_return,
              total_goal_current, total_goal_target, total_sip,
              greeting_prefix, intro_text, closing_text, rationale_text,
              created_by, report_state, assigned_to)
             VALUES
-            (:name, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
+            (:name, :email, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
              :total_goal_current, :total_goal_target, :total_sip,
              :greeting_prefix, :intro_text, :closing_text, :rationale_text,
              :created_by, :report_state, :assigned_to)');
@@ -280,6 +281,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $firstClientId = 0;
         foreach ($allClientReports as $clientData) {
+
+            $email = $clientData['email'] ?? '';
             $clientName = trim($clientData['name'] ?? '');
             if ($clientName === '') {
                 continue;
@@ -313,6 +316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($existingId > 0) {
                 $updateClient->execute([
+                    ':email' => $email,
                     ':as_on'              => $asOn,
                     ':total_amount'       => $totalAmount,
                     ':profit'             => $profit,
@@ -340,6 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $insertClient->execute([
                     ':name'               => $clientName,
+                    ':email' => $email,
                     ':as_on'              => $asOn,
                     ':total_amount'       => $totalAmount,
                     ':profit'             => $profit,
