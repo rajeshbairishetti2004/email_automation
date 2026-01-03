@@ -359,38 +359,151 @@ function parsePortfolioSummary(string $path): array {
     return $data;
 }
 
-// parsers.php - Corrected parseGoalStatusPdf function
-
-function parseGoalStatusPdf(string $path): array {
+function parseGoalStatusPdf(string $path): array
+{
     $parser = new PdfParser();
     $pdf    = $parser->parseFile($path);
     $text   = $pdf->getText();
 
+    /* ---------- CLIENT NAME ---------- */
     $clientName = clientNameFromFilename($path) ?? '';
 
-    // EXTRACT EMAIL: Regex to find email address in the PDF header
-    $email = '';
-    if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $text, $mEmail)) {
-        $email = trim($mEmail[0]);
-    }
-
-    // Extract Date (As on...)
+    /* ---------- AS ON DATE ---------- */
     $asOn = '';
-    if (preg_match('/As on\s+([\d\/-]+)/', $text, $mDate)) {
-        $asOn = trim($mDate[1]);
+    if (preg_match('/As on\s+([\d\/-]+)/i', $text, $m)) {
+        $asOn = trim($m[1]);
     }
 
-    // ...existing goal extraction logic...
-    // Assume $goals is built here
+    /* ---------- SPLIT GOAL DETAIL SECTIONS (ONE PER GOAL PAGE) ---------- */
+    preg_match_all(
+        '/\n([A-Za-z0-9\/,&\-\s]+)\nGoal Date.*?Shortfall\s*:\s*₹?\s*-?[\d,]+/is',
+        $text,
+        $detailMatches,
+        PREG_SET_ORDER
+    );
+
+    $goalDetailMap = [];
+    foreach ($detailMatches as $m) {
+        $goalTitle = trim($m[1]);
+        $goalDetailMap[$goalTitle] = $m[0];
+    }
+
+    /* ---------- EXTRACT GOAL SUMMARY BLOCK ---------- */
+    if (!preg_match(
+        '/Goal Summary.*?Options to meet shortfall(.*?)Total\s*:/is',
+        $text,
+        $mSummary
+    )) {
+        return [
+            'client_name' => $clientName,
+            'as_on'       => $asOn,
+            'goals'       => [],
+        ];
+    }
+
+    $lines = preg_split('/\R/', trim($mSummary[1]));
+
+    /* ---------- FIND HEADER (FOR SIP COLUMN INDEX) ---------- */
+    $sipColumnIndex = null;
+    foreach ($lines as $line) {
+        if (stripos($line, 'Running SIP') !== false) {
+            $headerParts = preg_split('/\s+/', trim($line));
+            foreach ($headerParts as $i => $h) {
+                if (stripos($h, 'SIP') !== false) {
+                    $sipColumnIndex = $i;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    $goals = [];
+
+    /* ---------- PROCESS EACH GOAL ROW ---------- */
+    foreach ($lines as $line) {
+
+        $line = trim(preg_replace('/\s+/', ' ', $line));
+        if ($line === '' || stripos($line, 'Goal Date') !== false) {
+            continue;
+        }
+
+        $parts = explode(' ', $line);
+
+        /* ---- Locate Goal Date ---- */
+        $dateIndex = null;
+        foreach ($parts as $i => $p) {
+            if (preg_match('/\d{2}-[A-Za-z]{3}-\d{4}/', $p)) {
+                $dateIndex = $i;
+                break;
+            }
+        }
+        if ($dateIndex === null) continue;
+
+        /* ---- Goal Name & Date ---- */
+        $goalName = trim(implode(' ', array_slice($parts, 0, $dateIndex)));
+        $goalDate = $parts[$dateIndex];
+
+        /* ---- Remaining Columns ---- */
+        $after = array_slice($parts, $dateIndex + 1);
+        array_shift($after); // remove Years Left
+
+        if (count($after) < 3) continue;
+
+        $targetAmount = parseIndianNumber($after[0]);
+        $completion   = (float) str_replace('%', '', $after[1]);
+        $currentValue = parseIndianNumber($after[2]);
+
+        /* ---------- SIP (ONLY FROM SUMMARY TABLE) ---------- */
+        $runningSip = 0;
+        if ($sipColumnIndex !== null) {
+            $sipPos = $sipColumnIndex - ($dateIndex + 1);
+            if (isset($after[$sipPos])) {
+                $runningSip = parseIndianNumber($after[$sipPos]);
+            }
+        }
+
+        /* ---------- PROJECTED & SHORTFALL (FROM CORRECT GOAL PAGE) ---------- */
+        $projected = 0;
+        $shortfall = 0;
+
+        foreach ($goalDetailMap as $title => $sectionText) {
+            if (stripos($title, $goalName) !== false) {
+
+                if (preg_match('/Projected Completion\s*:\s*₹?\s*([\d,]+)/i', $sectionText, $mP)) {
+                    $projected = parseIndianNumber($mP[1]);
+                }
+
+                if (preg_match('/Shortfall\s*:\s*₹?\s*(-?[\d,]+)/i', $sectionText, $mS)) {
+                    $shortfall = parseIndianNumber($mS[1]);
+                }
+                break;
+            }
+        }
+
+        /* ---------- STATUS ---------- */
+        $status = ($completion >= 70) ? 'On Track' : 'Invest More';
+
+        $goals[] = [
+            'goal'          => $goalName,
+            'goal_date'     => $goalDate,
+            'target_amount' => $targetAmount,
+            'current_value' => $currentValue,
+            'running_sip'   => $runningSip,
+            'projected'     => $projected,
+            'shortfall'     => $shortfall,
+            'completion'    => $completion,
+            'status'        => $status,
+        ];
+    }
 
     return [
         'client_name' => $clientName,
-        'email'       => $email,
         'as_on'       => $asOn,
-        'goals'       => $goals ?? [],
+        'goals'       => $goals,
     ];
 }
-/* ---------- MERGING ---------- */
+
 
 function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $pdfGoal): array {
     $clients    = [];
