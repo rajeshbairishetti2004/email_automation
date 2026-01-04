@@ -586,14 +586,38 @@ $annexures = getClientAnnexures($clientId);
 $prevId = getPrevClientId($clientId);
 $nextId = getNextClientId($clientId);
 
-$name              = $client['name'];
-$asOn              = $client['as_on'] ?? '';
-$totalAmount       = (float)($client['total_amount'] ?? 0);
-$profit            = (float)($client['profit'] ?? 0);
-$cagr              = (float)($client['cagr'] ?? 0);
-$xirr              = (float)($client['xirr'] ?? 0);
-$absoluteReturnRaw = $client['absolute_return'] ?? null;
-$absoluteReturn    = ($absoluteReturnRaw !== null) ? (float)$absoluteReturnRaw : null;
+
+// --- Fallback logic for Current Situation fields ---
+// You must define $current with calculated values before this block for full effect.
+$name = $client['name'];
+$asOn = $client['as_on'] ?? '';
+
+// TOTAL AMOUNT
+$totalAmount = ($client['total_amount'] !== null)
+    ? (float)$client['total_amount']
+    : ($current['totals']['current'] ?? 0);
+
+// PROFIT
+$profit = ($client['profit'] !== null)
+    ? (float)$client['profit']
+    : ($current['totals']['profit'] ?? 0);
+
+// CAGR
+$cagr = ($client['cagr'] !== null)
+    ? (float)$client['cagr']
+    : ($current['totals']['cagr_weighted'] ?? 0);
+
+// XIRR
+$xirr = ($client['xirr'] !== null)
+    ? (float)$client['xirr']
+    : ($current['summary']['xirr'] ?? 0);
+
+// ABSOLUTE RETURN
+$absoluteReturn = ($client['absolute_return'] !== null)
+    ? (float)$client['absolute_return']
+    : ($current['totals']['absolute_return'] ?? null);
+
+
 $totalGoalCurrent  = (float)($client['total_goal_current'] ?? 0);
 $totalGoalTarget   = (float)($client['total_goal_target'] ?? 0);
 $totalSip          = (float)($client['total_sip'] ?? 0);
@@ -940,6 +964,46 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(220, 53, 69, 0.2);
 }
+
+<style>
+/* Save Current Situation hover */
+#saveCurrentSituation {
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Hover only when enabled */
+#saveCurrentSituation:not(:disabled):hover {
+    background-color: #28a745 !important; /* green */
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15);
+}
+
+/* Disabled look */
+#saveCurrentSituation:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+<style>
+/* Save Goals hover effect */
+#saveGoalsBtn {
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Hover only when enabled */
+#saveGoalsBtn:not(:disabled):hover {
+    background-color: #28a745 !important; /* green */
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15);
+}
+
+/* Disabled state */
+#saveGoalsBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+</style>
+
+</style>
+
     </style>
 </head>
 <body>
@@ -1219,34 +1283,161 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
                 <tr>
                     <td>Total Amount </td>
-                    <td id="totalAmountCell"><?php echo formatAmount($totalAmount); ?></td>
+                    <td style="padding: 0;">
+        <input type="text"
+            class="current-input"
+            id="totalAmountCell"
+            data-goal-id="0"
+            data-field="total_amount"
+            data-raw="<?php echo (float)$totalAmount; ?>"
+            value="<?php echo htmlspecialchars(formatAmount((float)$totalAmount)); ?>"
+            <?php echo $isLocked ? 'readonly' : ''; ?>
+            style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+</td>
+
                 </tr>
-                <tr>
-                    <!-- label switched dynamically by JS -->
-                    <td id="returnLabel"><?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?></td>
-                    <td id="returnValueCell">
-                        <?php
-                            if ($isOlderThan1Year == 0) {
-                                echo ($absoluteReturn !== null) ? formatPercent($absoluteReturn) : 'N/A';
-                            } else {
-                                echo formatPercent($cagr);
-                            }
-                        ?>
-                    </td>
-                </tr>
-                <?php
-                    // XIRR row is present but may be hidden initially depending on server state
-                    $showXirr = ($isOlderThan1Year == 1 && $xirr != 0);
-                ?>
-                <tr id="xirrRow" style="<?php echo $showXirr ? '' : 'display:none;'; ?>">
-                    <td>XIRR of all schemes since inception</td>
-                    <td id="xirrValueCell"><?php echo formatPercent($xirr); ?></td>
-                </tr>
+               <tr>
+    <!-- label switched dynamically by JS -->
+    <td id="returnLabel">
+        <?php echo ($isOlderThan1Year == 0) ? 'Absolute Return of schemes' : 'CAGR of current schemes'; ?>
+    </td>
+
+    <td style="padding: 0;">
+        <input type="text"
+               class="current-input"
+               data-goal-id="0"
+               data-field="<?php echo ($isOlderThan1Year == 0) ? 'absolute_return' : 'cagr'; ?>"
+               id="returnValueCell"
+               data-raw="<?php echo ($isOlderThan1Year == 0) ? (float)$absoluteReturn : (float)$cagr; ?>"
+               value="<?php
+                    if ($isOlderThan1Year == 0) {
+                        echo ($absoluteReturn !== null)
+                            ? htmlspecialchars(formatPercent($absoluteReturn))
+                            : '';
+                    } else {
+                        echo htmlspecialchars(formatPercent($cagr));
+                    }
+               ?>"
+               <?php echo $isLocked ? 'readonly' : ''; ?>
+               style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+    </td>
+</tr>
+
+<?php
+    // XIRR row visibility
+    $showXirr = ($isOlderThan1Year == 1 && $xirr != 0);
+?>
+<tr id="xirrRow" style="<?php echo $showXirr ? '' : 'display:none;'; ?>">
+    <td>XIRR of all schemes since inception</td>
+
+    <td style="padding: 0;">
+         <input type="text"
+             class="current-input"
+             data-goal-id="0"
+             data-field="xirr"
+             id="xirrValueCell"
+             data-raw="<?php echo (float)$xirr; ?>"
+             value="<?php echo htmlspecialchars(formatPercent($xirr)); ?>"
+             <?php echo $isLocked ? 'readonly' : ''; ?>
+             style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+    </td>
+</tr>
+
                 <tr>
                     <td>Profit since inception</td>
-                    <td><?php echo formatAmount($profit); ?></td>
+                   <td style="padding: 0;">
+    <input type="text"
+           class="current-input"
+           data-goal-id="0"
+           data-field="profit"
+           data-raw="<?php echo (float)$profit; ?>"
+           value="<?php echo htmlspecialchars(formatAmount((float)$profit)); ?>"
+           <?php echo $isLocked ? 'readonly' : ''; ?>
+           style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+</td>
+
                 </tr>
             </table>
+
+<div style="margin: 10px 0; text-align: right;">
+    <button type="button"
+            id="saveCurrentSituation"
+            class="wf-btn btn-ready"
+            style="padding: 8px 16px; font-size: 14px;"
+            <?php echo $isLocked ? 'disabled' : ''; ?>>
+        💾 Save Current Situation
+    </button>
+
+    <span id="saveCurrentSituationStatus"
+          style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">
+        ✓ Saved
+    </span>
+</div>
+
+
+
+<span id="currentSituationStatus"
+      style="margin-left:10px;font-size:13px;"></span>
+<script>
+
+function parseAmount(val) {
+    if (!val) return null;
+    return parseFloat(
+        val.replace(/,/g, '')
+           .replace(/rs\.?/gi, '')
+           .replace(/lakhs?/gi, '')
+           .replace(/₹/g, '')
+           .trim()
+    ) * (val.toLowerCase().includes('lakh') ? 100000 : 1);
+}
+
+function parsePercent(val) {
+    if (!val) return null;
+    return parseFloat(val.replace('%', '').trim());
+}
+
+
+document.getElementById('saveCurrentSituation').addEventListener('click', function () {
+    const payload = {
+        client_id: <?= (int)$clientId ?>,
+        total_amount: parseAmount(document.getElementById('totalAmountCell').value),
+        profit: parseAmount(document.querySelector('[data-field="profit"]').value),
+        cagr: parsePercent(document.querySelector('[data-field="cagr"]')?.value),
+        absolute_return: parsePercent(document.querySelector('[data-field="absolute_return"]')?.value),
+        xirr: parsePercent(document.getElementById('xirrValueCell')?.value)
+    };
+
+    fetch('save_current_situation.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+        const statusEl = document.getElementById('saveCurrentSituationStatus');
+
+        if (res.success) {
+            // ✅ show tick
+            statusEl.style.display = 'inline';
+
+            // ⏱ hide after 2 seconds
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 2000);
+        } else {
+            document.getElementById('currentSituationStatus').textContent = '❌ Save failed';
+        }
+    })
+    .catch(() => {
+        document.getElementById('currentSituationStatus').textContent = '❌ Save failed';
+    });
+});
+
+const btn = document.getElementById('saveCurrentSituation');
+btn.disabled = true;
+setTimeout(() => btn.disabled = false, 1500);
+
+</script>
 
             <h3>2. Objectives Progress for guiding on appropriate schemes</h3>
             <table class="report-table">
@@ -1294,6 +1485,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td style="padding: 0;">
                             <input type="text" 
                                    class="goal-input" 
+                                   class="scheme-edit"
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="current_amount"
                                    value="<?php echo htmlspecialchars(formatAmount((float)$g['current_amount'])); ?>"
@@ -1303,6 +1495,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td style="padding: 0;">
                             <input type="text" 
                                    class="goal-input" 
+                                   class="scheme-edit"
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="sip_swp"
                                    value="<?php echo (float)$g['sip_swp'] == 0 ? '-' : htmlspecialchars(formatAmount((float)$g['sip_swp'])); ?>"
@@ -1312,6 +1505,7 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                         <td style="padding: 0;">
                             <input type="text" 
                                    class="goal-input" 
+                                   class="scheme-edit"
                                    data-goal-id="<?php echo (int)$g['id']; ?>" 
                                    data-field="target_amount"
                                    value="<?php echo htmlspecialchars(formatAmount((float)$g['target_amount'])); ?>"
@@ -1337,19 +1531,46 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 <tr>
                     <td><strong>Total</strong></td>
                     <td></td>
-                    <td id="total-current-amount"><?php echo formatAmount($calculatedGoalCurrent); ?></td>
-                    <td id="total-sip-swp"><?php echo formatAmount($calculatedSip); ?></td>
+                   <td style="padding:0;">
+    <input type="text"
+           class="goal-input total-input"
+           data-goal-id="<?php echo (int)$clientId; ?>"
+           data-field="total_goal_current"
+           value="<?php echo htmlspecialchars(formatAmount((float)$calculatedGoalCurrent)); ?>"
+           <?php echo $isLocked ? 'readonly' : ''; ?>
+           style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+</td>
+
+<td style="padding:0;">
+    <input type="text"
+           class="goal-input total-input"
+           data-goal-id="<?php echo (int)$clientId; ?>"
+           data-field="total_sip"
+           value="<?php echo htmlspecialchars(formatAmount((float)$calculatedSip)); ?>"
+           <?php echo $isLocked ? 'readonly' : ''; ?>
+           style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+</td>
+
                     <td></td> <!-- Target total intentionally blank -->
                     <td></td>
                 </tr>
             </table>
             
-            <div style="margin: 10px 0; text-align: right;">
-                <button type="button" id="saveGoalsBtn" class="wf-btn btn-ready" style="padding: 8px 16px; font-size: 14px;" <?php echo $isLocked ? 'disabled' : ''; ?>>
-                    💾 Save Goals
-                </button>
-                <span id="saveGoalsStatus" style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">✓ Saved</span>
-            </div>
+<div style="margin: 10px 0; text-align: right;">
+    <button type="button"
+            id="saveGoalsBtn"
+            class="wf-btn btn-ready"
+            style="padding: 8px 16px; font-size: 14px;"
+            <?php echo $isLocked ? 'disabled' : ''; ?>>
+        💾 Save Goals
+    </button>
+
+    <span id="saveGoalsStatus"
+          style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">
+        ✓ Saved
+    </span>
+</div>
+
 
             <h3>3. Appropriate Asset Allocation</h3>
             <div style="max-width: 100%; margin: 20px auto; display: flex; flex-direction:column; align-items: center;">
@@ -1436,103 +1657,188 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
                 });
             </script>
 
-                        <!-- =========================
-                 4. Appropriate Scheme Selection
-                 ========================= -->
-            <h3>4. Appropriate Scheme Selection</h3>
-            <table class="report-table">
-                <tr>
-                    <th colspan="3">Present Schemes</th>
-                    <th rowspan="2">Action Step</th>
-                    <th colspan="2">Scheme Changes</th>
-                </tr>
-                <tr>
-                    <th>Scheme Name</th>
-                    <th>SIP/SWP</th>
-                    <th>Value as of <?php echo htmlspecialchars($asOn); ?></th>
-                    <th>Scheme Name</th>
-                    <th>Amount</th>
-                </tr>
-                <?php
-                // --- Recommendations popup control ---
-                $recommendationCookieKey = "recommendation_shown_{$clientId}_{$reportState}";
-                $recommendationAccepted = (isset($_COOKIE[$recommendationCookieKey]) && $_COOKIE[$recommendationCookieKey] === '1');
-                foreach ($schemes as $s):
-                    // FILTER: If both SIP and Value are 0, skip this row
-                    if ((float)$s['sip_swp'] == 0 && (float)$s['current_value'] == 0) {
-                        continue;
-                    }
-                    $schemeId = (int)$s['id'];
-                    // If recommendations not accepted, force default to Continue and blank recommended_scheme
-                    $actionStep = $recommendationAccepted ? ($s['action_step'] ?? 'Continue') : 'Continue';
-                    $recommendedScheme = $recommendationAccepted ? ($s['recommended_scheme'] ?? '') : '';
-                ?>
-                    <tr>
-                        
-                       <td class="present-scheme-name"><?php echo htmlspecialchars($s['scheme_name']); ?></td>
-                        <td><?php echo (float)$s['sip_swp'] == 0 ? '-' : formatAmount((float)$s['sip_swp']); ?></td>
-                        <td><?php echo formatAmount((float)$s['current_value']); ?></td>
-                        <td>
-                            <select name="action_step[<?php echo $schemeId; ?>]"
-                                    class="action-dropdown"
-                                    data-scheme-id="<?php echo $schemeId; ?>"
-                                    onchange="autoFillSchemeName(this, '<?php echo htmlspecialchars(addslashes($s['scheme_name'])); ?>')"
-                                    <?php echo $isLocked ? 'disabled' : ''; ?>>
-                                <option value="Continue" <?php echo $actionStep === 'Continue' ? 'selected' : ''; ?>>Continue</option>
-                                <option value="Drop" <?php echo $actionStep === 'Drop' ? 'selected' : ''; ?>>Drop</option>
-                                <option value="Switch" <?php echo $actionStep === 'Switch' ? 'selected' : ''; ?>>Switch</option>
-                                <option value="Partially Redeem" <?php echo $actionStep === 'Partially Redeem' ? 'selected' : ''; ?>>Partially Redeem</option>
-                                <option value="Under Observation" <?php echo $actionStep === 'Under Observation' ? 'selected' : ''; ?>>Under Observation</option>
-                            </select>
-                        </td>
-                        <td>
-                            <input type="text"
-                                   name="recommended_scheme[<?php echo $schemeId; ?>]"
-                                   class="scheme-input"
-                                   id="recommended_scheme_<?php echo $schemeId; ?>"
-                                   data-scheme-id="<?php echo $schemeId; ?>"
-                                   data-field="recommended_scheme"
-                                   value="<?php echo htmlspecialchars($recommendedScheme); ?>"
-                                   placeholder="Enter scheme details" <?php echo $isLocked ? 'readonly' : ''; ?>>
-                        </td>
-                        <td>
-                            <input type="text"
-                                   name="recommended_amount[<?php echo $schemeId; ?>]"
-                                   class="scheme-input"
-                                   data-scheme-id="<?php echo $schemeId; ?>"
-                                   data-field="recommended_amount"
-                                   value="<?php echo htmlspecialchars($s['recommended_amount'] ?? ''); ?>"
-                                   placeholder="Amount / Note" <?php echo $isLocked ? 'readonly' : ''; ?>>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </table>
-            <script>
-            // =========================
-            // Appropriate Scheme Selection JS
-            // =========================
-            // Autofill scheme name in "Scheme Changes" when action is Drop/Switch/Partially Redeem
-            function autoFillSchemeName(select, schemeName) {
-                var val = select.value;
-                var schemeId = select.getAttribute('data-scheme-id');
-                var input = document.getElementById('recommended_scheme_' + schemeId);
-                if (!input) return;
-                if (val === 'Drop' || val === 'Switch' || val === 'Partially Redeem') {
-                    if (input.value.trim() === '' || input.value.trim() === schemeName) {
-                        input.value = schemeName;
-                        // Optionally trigger blur for autosave if needed:
-                        if (typeof input.blur === 'function') input.blur();
-                    }
-                } else if (val === 'Continue' || val === 'Under Observation') {
-                    // Clear the field when switched back to Continue/Under Observation
-                    input.value = '';
-                    if (typeof input.blur === 'function') input.blur();
-                }
-            }
-            </script>
-            <!-- =========================
-                 End Appropriate Scheme Selection
-                 ========================= -->
+<!-- =========================
+     4. Appropriate Scheme Selection
+     ========================= -->
+<h3>4. Appropriate Scheme Selection</h3>
+
+<table class="report-table">
+    <tr>
+        <th colspan="3">Present Schemes</th>
+        <th rowspan="2">Action Step</th>
+        <th colspan="2">Scheme Changes</th>
+    </tr>
+    <tr>
+        <th>Scheme Name</th>
+        <th>SIP / SWP</th>
+        <th>Value as of <?= htmlspecialchars($asOn) ?></th>
+        <th>Scheme Name</th>
+        <th>Amount</th>
+    </tr>
+
+<?php if (empty($schemes)): ?>
+    <tr>
+        <td colspan="6" style="text-align:center; color:#dc3545; font-weight:600; padding:14px;">
+            ⚠ No schemes found for this client.
+        </td>
+    </tr>
+<?php else: ?>
+
+<?php foreach ($schemes as $s): 
+    $schemeId = (int)$s['id'];
+?>
+<tr>
+    <!-- Present Scheme -->
+    <td class="present-scheme-name">
+        <?= htmlspecialchars($s['scheme_name']) ?>
+    </td>
+
+    <!-- SIP / SWP -->
+    <td style="padding:0;">
+        <input type="text"
+               class="goal-input scheme-edit"
+               data-scheme-id="<?= $schemeId ?>"
+               data-field="sip_swp"
+               value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>"
+               <?= $isLocked ? 'readonly' : '' ?>
+               style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+    </td>
+
+    <!-- Current Value -->
+    <td style="padding:0;">
+        <input type="text"
+               class="goal-input scheme-edit"
+               data-scheme-id="<?= $schemeId ?>"
+               data-field="current_value"
+               value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>"
+               <?= $isLocked ? 'readonly' : '' ?>
+               style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+    </td>
+
+    <!-- Action Step -->
+    <td>
+        <select class="action-dropdown"
+                data-scheme-id="<?= $schemeId ?>"
+                onchange="autoFillSchemeName(this,'<?= htmlspecialchars(addslashes($s['scheme_name'])) ?>')"
+                <?= $isLocked ? 'disabled' : '' ?>>
+            <?php
+            $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
+            foreach ($steps as $step):
+            ?>
+                <option value="<?= $step ?>" <?= ($s['action_step'] ?? 'Continue') === $step ? 'selected' : '' ?>>
+                    <?= $step ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </td>
+
+    <!-- Recommended Scheme -->
+    <td>
+        <input type="text"
+               id="recommended_scheme_<?= $schemeId ?>"
+               class="scheme-input scheme-edit"
+               data-scheme-id="<?= $schemeId ?>"
+               data-field="recommended_scheme"
+               value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>"
+               placeholder="Enter scheme"
+               <?= $isLocked ? 'readonly' : '' ?>>
+    </td>
+
+    <!-- Recommended Amount -->
+    <td>
+        <input type="text"
+               class="scheme-input scheme-edit"
+               data-scheme-id="<?= $schemeId ?>"
+               data-field="recommended_amount"
+               value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>"
+               placeholder="Amount / Note"
+               <?= $isLocked ? 'readonly' : '' ?>>
+    </td>
+</tr>
+<?php endforeach; ?>
+<?php endif; ?>
+</table>
+
+<!-- SAVE BUTTON -->
+<div style="margin:10px 0; text-align:right;">
+    <button type="button"
+            id="saveSchemesBtn"
+            class="wf-btn btn-ready"
+            <?= $isLocked ? 'disabled' : '' ?>>
+        💾 Save Scheme Selection
+    </button>
+
+    <span id="saveSchemesStatus"
+          style="margin-left:10px; font-size:13px; color:#28a745; display:none;">
+        ✓ Saved
+    </span>
+</div>
+
+<script>
+function parseAmount(val) {
+    if (!val || val === '-') return 0;
+    return parseFloat(
+        val.replace(/,/g,'')
+           .replace(/₹/g,'')
+           .replace(/rs\.?/gi,'')
+           .trim()
+    ) || 0;
+}
+
+document.getElementById('saveSchemesBtn')?.addEventListener('click', () => {
+    const rows = {};
+
+    document.querySelectorAll('.scheme-edit').forEach(el => {
+        const id = el.dataset.schemeId;
+        const field = el.dataset.field;
+        if (!rows[id]) rows[id] = {};
+        rows[id][field] = ['sip_swp','current_value','recommended_amount'].includes(field)
+            ? parseAmount(el.value)
+            : el.value.trim();
+    });
+
+    document.querySelectorAll('.action-dropdown').forEach(sel => {
+        const id = sel.dataset.schemeId;
+        if (!rows[id]) rows[id] = {};
+        rows[id].action_step = sel.value;
+    });
+
+    fetch('save_scheme_selection.php', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            client_id: <?= (int)$clientId ?>,
+            schemes: rows
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            const s = document.getElementById('saveSchemesStatus');
+            s.style.display = 'inline';
+            setTimeout(() => s.style.display = 'none', 2000);
+        } else {
+            alert('❌ Save failed');
+        }
+    });
+});
+
+function autoFillSchemeName(select, schemeName) {
+    const input = document.getElementById('recommended_scheme_' + select.dataset.schemeId);
+    if (!input) return;
+
+    if (['Drop','Switch','Partially Redeem'].includes(select.value)) {
+        if (input.value.trim() === '') input.value = schemeName;
+    } else {
+        input.value = '';
+    }
+}
+</script>
+<!-- =========================
+     End Appropriate Scheme Selection
+     ========================= -->
+
+
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
