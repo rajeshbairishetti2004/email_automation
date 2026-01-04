@@ -1381,14 +1381,25 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 <script>
 
 function parseAmount(val) {
-    if (!val) return null;
-    return parseFloat(
-        val.replace(/,/g, '')
-           .replace(/rs\.?/gi, '')
-           .replace(/lakhs?/gi, '')
-           .replace(/₹/g, '')
-           .trim()
-    ) * (val.toLowerCase().includes('lakh') ? 100000 : 1);
+    if (!val || val === '-') return 0;
+
+    let v = val.toString().toLowerCase().trim();
+
+    // Remove currency symbols
+    v = v.replace(/₹/g, '').replace(/rs\.?/gi, '').replace(/,/g, '').trim();
+
+    // Detect units
+    if (v.includes('cr')) {
+        return parseFloat(v) * 10000000;
+    }
+    if (v.includes('lakh')) {
+        return parseFloat(v) * 100000;
+    }
+    if (v.includes('k')) {
+        return parseFloat(v) * 1000;
+    }
+
+    return parseFloat(v) || 0;
 }
 
 function parsePercent(val) {
@@ -1777,12 +1788,24 @@ setTimeout(() => btn.disabled = false, 1500);
 <script>
 function parseAmount(val) {
     if (!val || val === '-') return 0;
-    return parseFloat(
-        val.replace(/,/g,'')
-           .replace(/₹/g,'')
-           .replace(/rs\.?/gi,'')
-           .trim()
-    ) || 0;
+
+    let v = val.toString().toLowerCase().trim();
+
+    // Remove currency symbols
+    v = v.replace(/₹/g, '').replace(/rs\.?/gi, '').replace(/,/g, '').trim();
+
+    // Detect units
+    if (v.includes('cr')) {
+        return parseFloat(v) * 10000000;
+    }
+    if (v.includes('lakh')) {
+        return parseFloat(v) * 100000;
+    }
+    if (v.includes('k')) {
+        return parseFloat(v) * 1000;
+    }
+
+    return parseFloat(v) || 0;
 }
 
 document.getElementById('saveSchemesBtn')?.addEventListener('click', () => {
