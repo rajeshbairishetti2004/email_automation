@@ -9,7 +9,6 @@ require_once 'renderers.php';
 require_once 'env_loader.php';
 
 requireAuth();
-
 $currentReviewPeriod = date('F Y');
 $pdo           = getPdo();
 $currentUser   = getCurrentUser();
@@ -31,15 +30,9 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
     $where  = '1=1';
     $params = [];
     if ($context === 'mine') {
-        // Use positional placeholders to avoid duplicate named-param issues on some PDO drivers
-        $where = '(assigned_to = ? OR review_assigned_to = ?)';
-        $params = [$userId, $userId];
-        // Use positional placeholders to avoid duplicate named-param issues on some PDO drivers
         $where = '(assigned_to = ? OR review_assigned_to = ?)';
         $params = [$userId, $userId];
     } elseif (ctype_digit($context)) {
-        $where = '(assigned_to = ? OR review_assigned_to = ?)';
-        $params = [(int)$context, (int)$context];
         $where = '(assigned_to = ? OR review_assigned_to = ?)';
         $params = [(int)$context, (int)$context];
     }
@@ -282,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstClientId = 0;
         foreach ($allClientReports as $clientData) {
 
-            $email = $clientData['email'] ?? '';
+            $email = trim($clientData['email'] ?? '');
             $clientName = trim($clientData['name'] ?? '');
             if ($clientName === '') {
                 continue;
@@ -315,8 +308,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existingId = (int)($checkClient->fetchColumn() ?: 0);
 
             if ($existingId > 0) {
+                $emailSql = $email !== '' ? $email : null;
                 $updateClient->execute([
-                    ':email' => $email,
+                    ':email' => $emailSql,
                     ':as_on'              => $asOn,
                     ':total_amount'       => $totalAmount,
                     ':profit'             => $profit,

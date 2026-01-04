@@ -367,6 +367,18 @@ function parseGoalStatusPdf(string $path): array
     /* ---------- CLIENT NAME ---------- */
     $clientName = clientNameFromFilename($path) ?? '';
 
+    /* ---------- EMAIL (HEADER PARSING) ---------- */
+    $email = '';
+
+    // Look for email in header (before "Relationship Manager")
+    if (preg_match(
+        '/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i',
+        $text,
+        $mEmail
+    )) {
+        $email = strtolower(trim($mEmail[0]));
+    }
+
     /* ---------- AS ON DATE ---------- */
     $asOn = '';
     if (preg_match('/As on\s+([\d\/-]+)/i', $text, $m)) {
@@ -398,6 +410,7 @@ function parseGoalStatusPdf(string $path): array
     )) {
         return [
             'client_name' => $clientName,
+            'email'       => $email,
             'as_on'       => $asOn,
             'goals'       => [],
         ];
@@ -474,7 +487,7 @@ function parseGoalStatusPdf(string $path): array
             }
         }
 
-        // 2️⃣ Fallback → Goal Summary "Projected Value (Rs)"
+        // 2️⃣ Fallback → Goal Summary column
         if ($projected == 0 && $idxProjected !== null) {
             $projPos = $idxProjected - ($dateIndex + 2);
             if (isset($after[$projPos])) {
@@ -502,6 +515,7 @@ function parseGoalStatusPdf(string $path): array
 
     return [
         'client_name' => $clientName,
+        'email'       => $email,
         'as_on'       => $asOn,
         'goals'       => $goals,
     ];
