@@ -1,353 +1,89 @@
 <?php
 // template_actions.php
-// Handles all AJAX actions related to RMs and Templates (loading, deleting, etc.).
-
+ob_start();
+header('Content-Type: application/json');
 require_once 'db_config.php';
 
-if (!function_exists('formatAnnexureLabel')) {
-    function formatAnnexureLabel($filename, $clientName = '') {
-        $name = pathinfo($filename, PATHINFO_FILENAME);
-        if ($name === '') {
-            return $filename;
-        }
-        return $name;
-    }
-}
-
-$pdo = getPdo();
-$clientId = (int)($_GET['id'] ?? 0); // Get client ID from query string
-$ajax_action = $_POST['ajax_action'] ?? null;
-
-// Check if this is a valid AJAX POST action targeting templates/RMs
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$ajax_action) {
-    // If not a recognized POST action, return silently.
-    return;
-}
-
-// Ensure the necessary headers for JSON response
-header('Content-Type: application/json');
+$action = $_POST['ajax_action'] ?? '';
+$response = ['success' => false];
 
 try {
-    switch ($ajax_action) {
-        case 'load_template':
-            $templateId = (int)($_POST['template_id'] ?? 0);
-            
-            $content = getTemplateContent($templateId);
-
-            if (!$content) {
-                throw new Exception("Template content not found for ID: " . $templateId);
-            }
-            echo json_encode(['success' => true, 'content' => $content]);
-            break;
-
-        case 'delete_template':
-            $templateId = (int)($_POST['template_id'] ?? 0);
-            
-            if ($templateId <= 0) {
-                throw new Exception("Invalid Template ID for deletion.");
-            }
-            
-            if (deleteTemplate($templateId)) {
-                echo json_encode(['success' => true, 'message' => 'Template deleted successfully.']);
-            } else {
-                throw new Exception("Database operation failed during deletion.");
-            }
-            break;
-
-        case 'load_rm':
-            $rmId = (int)($_POST['rm_id'] ?? 0);
-            
-            $stmt = $pdo->prepare("SELECT * FROM relationship_managers WHERE id = :rm_id");
-            $stmt->execute([':rm_id' => $rmId]);
-            $rm = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if (!$rm) {
-                throw new Exception("Relationship Manager not found for ID: " . $rmId);
-            }
-
-            $newSignature = generateSignatureBlock($rm);
-            echo json_encode(['success' => true, 'signature_block' => $newSignature, 'rm_name' => $rm['name']]);
-            break;
-
-        case 'delete_rm':
-            $rmId = (int)($_POST['rm_id'] ?? 0);
-            
-            if ($rmId <= 0) {
-                throw new Exception("Invalid RM ID for deletion.");
-            }
-            
-            $rmCount = getRelationshipManagerCount();
-            if ($rmCount <= 1) {
-                throw new Exception("Cannot delete: At least one Relationship Manager must remain in the system.");
-            }
-            
-            $stmtCheck = $pdo->prepare("SELECT is_default FROM relationship_managers WHERE id = :rm_id");
-            $stmtCheck->execute([':rm_id' => $rmId]);
-            $isDefault = $stmtCheck->fetchColumn();
-
-            $stmtDelete = $pdo->prepare("DELETE FROM relationship_managers WHERE id = :rm_id");
-            $stmtDelete->execute([':rm_id' => $rmId]);
-            
-            if ($isDefault == 1) {
-                $pdo->exec("UPDATE relationship_managers SET is_default = 1 ORDER BY id ASC LIMIT 1");
-            }
-
-            echo json_encode(['success' => true, 'rm_id' => $rmId]);
-            break;
-
-        /* ------------------------------------------------------------------
-           WORKFLOW ACTIONS
-           ------------------------------------------------------------------ */
+    $pdo = getPdo();
+    
+    if ($action === 'edit_template') {
+        $stmt = $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?");
+        $stmt->execute([
+            $_POST['template_name'] ?? '',
+            $_POST['template_content'] ?? '',
+            (int)$_POST['template_id']
+        ]);
+        $response['success'] = true;
+    } 
+    elseif ($action === 'delete_template') {
+        // Delete the template
+        $stmt = $pdo->prepare("DELETE FROM report_templates WHERE id = ?");
+        $stmt->execute([(int)$_POST['template_id']]);
         
-        case 'save_draft':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("
-                UPDATE clients SET 
-                    report_state = 'draft', 
-                    draft_at = NOW(), 
-                    review_not_ok = 0, 
-                    review_comment = NULL 
-                WHERE id = :id
-            ");
-            $stmt->execute([':id' => $clientId]);
-            echo json_encode(['success' => true, 'message' => 'Draft saved successfully.', 'updated_state' => 'draft']);
-            break;
-
-        case 'ready_for_review':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("
-                UPDATE clients SET 
-                    report_state = 'ready', 
-                    ready_at = NOW(), 
-                    review_not_ok = 0, 
-                    review_comment = NULL 
-                WHERE id = :id
-            ");
-            $stmt->execute([':id' => $clientId]);
-            echo json_encode(['success' => true, 'message' => 'Report marked Ready for Review.', 'updated_state' => 'ready']);
-            break;
-
-        case 'approve_review':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("
-                UPDATE clients SET 
-                    report_state = 'reviewed', 
-                    reviewed_at = NOW(), 
-                    review_not_ok = 0, 
-                    review_comment = NULL 
-                WHERE id = :id
-            ");
-            $stmt->execute([':id' => $clientId]);
-            echo json_encode(['success' => true, 'message' => 'Report Approved (Reviewed).', 'updated_state' => 'reviewed']);
-            break;
-
-        case 'review_not_ok':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            $comment  = trim($_POST['review_comment'] ?? '');
-            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-            if (empty($comment)) throw new Exception("A comment is required for rejection.");
-
-            $stmt = $pdo->prepare("
-                UPDATE clients SET 
-                    report_state = 'draft', 
-                    review_not_ok = 1, 
-                    review_comment = :comment 
-                WHERE id = :id
-            ");
-            $stmt->execute([':id' => $clientId, ':comment' => $comment]);
-            echo json_encode(['success' => true, 'message' => 'Report rejected and moved back to Draft.', 'updated_state' => 'draft']);
-            break;
-            
-        case 'email_sent':
-             $clientId = (int)($_POST['client_id'] ?? 0);
-             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-             
-             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :id");
-             $stmt->execute([':id' => $clientId]);
-             echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
-             break;
-
-        case 'save_template':
-			$section = $_POST['section_type'] ?? '';
-			$name = trim($_POST['template_name'] ?? '');
-			$content = $_POST['template_content'] ?? '';
-
-			if (empty($section) || empty($name) || empty($content)) {
-				throw new Exception('Missing required fields (section, name, or content).');
-			}
-
-			$stmt = $pdo->prepare('INSERT INTO report_templates (name, section_type, content) VALUES (:name, :section_type, :content)');
-			if ($stmt->execute([':name' => $name, ':section_type' => $section, ':content' => $content])) {
-				echo json_encode(['success' => true]);
-			} else {
-				throw new Exception('Database insert failed.');
-			}
-			break;
-
-        /* ------------------------------------------------------------------
-           ATTACHMENT MANAGEMENT (File System Based - No DB Change)
-           ------------------------------------------------------------------ */
-        case 'upload_attachment':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            // --- SECURITY: FETCH TARGET CLIENT NAME ---
-            $stmtClient = $pdo->prepare("SELECT name FROM clients WHERE id = :id LIMIT 1");
-            $stmtClient->execute([':id' => $clientId]);
-            $targetClientName = $stmtClient->fetchColumn();
-            
-            if (!$targetClientName) {
-                throw new Exception("Client not found with ID: " . $clientId);
-            }
-
-            $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
-            if (!is_dir($baseDir)) {
-                mkdir($baseDir, 0777, true);
-            }
-
-            $savedFiles = [];
-
-            if (isset($_FILES['files']) && is_array($_FILES['files']['name'])) {
-                $count = count($_FILES['files']['name']);
-                
-                for ($i = 0; $i < $count; $i++) {
-                    if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) {
-                        $rawName = basename($_FILES['files']['name'][$i]);
-                        
-                        // --- SECURITY: STRICT NAME MATCH VALIDATION ---
-                        // Normalize both filenames and client name for comparison
-                        $normalizedFile = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $rawName));
-                        $normalizedClient = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $targetClientName));
-                        
-                        // Check if client name exists in the filename
-                        if (strpos($normalizedFile, $normalizedClient) === false) {
-                            // Try matching individual name parts (e.g., "Jatin" and "Sharma" separately)
-                            $nameParts = preg_split('/\s+/', $targetClientName);
-                            $partFound = false;
-                            
-                            if (count($nameParts) > 1) {
-                                foreach ($nameParts as $part) {
-                                    $normalizedPart = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $part));
-                                    if (!empty($normalizedPart) && strpos($normalizedFile, $normalizedPart) !== false) {
-                                        $partFound = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            // If no match found, reject the upload
-                            if (!$partFound) {
-                                throw new Exception(
-                                    "❌ Security Alert: Filename does not match the client. " .
-                                    "You are trying to upload a file for <strong>" . htmlspecialchars($targetClientName) . "</strong>, " .
-                                    "but the file is named <strong>" . htmlspecialchars($rawName) . "</strong>. " .
-                                    "Please ensure the filename contains the client's name."
-                                );
-                            }
-                        }
-                        
-                        // Always force .pdf extension
-                        $fileBase = preg_replace('/\.[^.]+$/', '', $rawName); // Remove any existing extension
-                        $fileName = preg_replace('/[^\w\s\._-]/u', '', $fileBase) . '.pdf';
-                        $targetPath = $baseDir . '/' . $fileName;
-
-                        if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $targetPath)) {
-                            $savedFiles[] = $fileName;
-                        }
-                    }
-                }
-            }
-
-            if (!empty($savedFiles)) {
-                echo json_encode(['success' => true, 'files' => $savedFiles]);
-            } else {
-                throw new Exception("Upload failed or no valid files.");
-            }
-            break;
-
-        case 'delete_attachment':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            $fileName = basename($_POST['file_name'] ?? '');
-            
-            if ($clientId <= 0 || empty($fileName)) throw new Exception("Invalid parameters.");
-
-            $filePath = __DIR__ . '/uploads/attachments/client_' . $clientId . '/' . $fileName;
-
-            if (file_exists($filePath)) {
-                unlink($filePath);
-                echo json_encode(['success' => true, 'message' => 'File deleted.']);
-            } else {
-                throw new Exception("File not found.");
-            }
-            break;
-
-        case 'rename_attachment':
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            $oldName = basename($_POST['old_name'] ?? '');
-            $newNameRaw = $_POST['new_name'] ?? '';
-
-            if ($clientId <= 0 || $oldName === '' || trim($newNameRaw) === '') {
-                throw new Exception('Invalid parameters for rename.');
-            }
-
-            // Allow letters, numbers, spaces, dots, underscores and hyphens
-            $newBase = preg_replace('/\.[^.]+$/', '', $newNameRaw); // Remove any extension
-            $newName = preg_replace('/[^\w\s\.\-_]/u', '', $newBase);
-            $newName = trim($newName) . '.pdf';
-
-            if ($newName === '.pdf') {
-                throw new Exception('Renamed file is empty after sanitization.');
-            }
-
-            $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId . '/';
-            $oldPath = $baseDir . $oldName;
-            $newPath = $baseDir . '/' . $newName;
-
-            if (!file_exists($oldPath)) {
-                throw new Exception('Original file not found.');
-            }
-
-            if ($oldPath !== $newPath) {
-                if (file_exists($newPath)) {
-                    throw new Exception('A file with the new name already exists.');
-                }
-
-                if (!rename($oldPath, $newPath)) {
-                    throw new Exception('Filesystem rename failed.');
-                }
-            }
-
-            $clientName = '';
-            $stmt = $pdo->prepare('SELECT name FROM clients WHERE id = :id');
-            if ($stmt->execute([':id' => $clientId])) {
-                $clientName = (string)($stmt->fetchColumn() ?? '');
-            }
-
-            $displayLabel = formatAnnexureLabel($newName, $clientName);
-
-            echo json_encode([
-                'success' => true,
-                'file_name' => $newName,
-                'display_label' => $displayLabel
-            ]);
-            break;
-
-        default:
-            // If the action is POST but not one of the specific AJAX actions above, 
-            // the main script (view_report.php) should handle it.
-            return;
+        // Generate updated dropdown HTML for ONLY the affected section
+        $section = $_POST['section_type'];
+        $stmtList = $pdo->prepare("SELECT id, name, content FROM report_templates WHERE section_type = ? ORDER BY name ASC");
+        $stmtList->execute([$section]);
+        $rows = $stmtList->fetchAll(PDO::FETCH_ASSOC);
+        
+        $html = '<option value="0">-- Select --</option>';
+        foreach($rows as $r) {
+            $html .= sprintf(
+                '<option value="%d" data-content="%s">%s</option>',
+                (int)$r['id'],
+                htmlspecialchars($r['content'] ?? ''),
+                htmlspecialchars($r['name'] ?? 'Untitled')
+            );
+        }
+        $response['html_update'] = $html;
+        $response['success'] = true;
     }
-} catch (Throwable $e) {
-    // Catch-all for AJAX errors
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-}
+    elseif ($action === 'save_template') {
+        $section = $_POST['section_type'] ?? '';
+        $name = trim($_POST['template_name'] ?? '');
+        $content = $_POST['template_content'] ?? '';
+        
+        if ($name === '' || $content === '') {
+            throw new Exception('Template name and content are required');
+        }
+        
+        $stmt = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (?, ?, ?)");
+        $stmt->execute([$name, $section, $content]);
+        $newId = $pdo->lastInsertId();
 
-// Exit immediately after processing an AJAX request
+        // Generate updated dropdown HTML for ONLY the affected section
+        $stmtList = $pdo->prepare("SELECT id, name, content FROM report_templates WHERE section_type = ? ORDER BY name ASC");
+        $stmtList->execute([$section]);
+        $rows = $stmtList->fetchAll(PDO::FETCH_ASSOC);
+        
+        $html = '<option value="0">-- Select --</option>';
+        foreach($rows as $r) {
+            $html .= sprintf(
+                '<option value="%d" data-content="%s">%s</option>',
+                (int)$r['id'],
+                htmlspecialchars($r['content'] ?? ''),
+                htmlspecialchars($r['name'] ?? 'Untitled')
+            );
+        }
+        $response['html_update'] = $html;
+        $response['success'] = true;
+        $response['new_id'] = $newId;
+    } else {
+        throw new Exception('Invalid action');
+    }
+
+    ob_clean();
+    echo json_encode($response);
+    
+} catch (Exception $e) {
+    ob_clean();
+    echo json_encode([
+        'success' => false, 
+        'error' => $e->getMessage()
+    ]);
+}
 exit;
-?>
