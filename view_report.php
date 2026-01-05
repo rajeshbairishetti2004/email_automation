@@ -1571,7 +1571,7 @@ setTimeout(() => btn.disabled = false, 1500);
                 </tr>
             </table>
             
-<div style="margin: 10px 0; text-align: right;">
+<!-- <div style="margin: 10px 0; text-align: right;">
     <button type="button"
             id="saveGoalsBtn"
             class="wf-btn btn-ready"
@@ -1584,7 +1584,7 @@ setTimeout(() => btn.disabled = false, 1500);
           style="margin-left: 10px; font-size: 13px; color: #28a745; display: none;">
         ✓ Saved
     </span>
-</div>
+</div> -->
 
 <script>
 /* ---------- Parse Indian currency safely ---------- */
