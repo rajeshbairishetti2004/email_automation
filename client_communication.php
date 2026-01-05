@@ -100,12 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 .editor-card {
     background: linear-gradient(120deg,#f8fbff,#e9f0fa);
     border-radius: 18px;
-    border: 1px solid #e3eafc;
+    border: 1px solid #ffffffff;
     box-shadow: 0 10px 40px rgba(0,60,180,.12);
     margin-bottom: 32px;
 }
 .editor-header {
-    background: linear-gradient(135deg,#007bff,#0056b3);
+    background:  #0ba1e1bb;
     padding: 22px 32px;
     border-radius: 18px 18px 0 0;
 }
@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     padding: 10px 14px;
     border-radius: 10px;
     border: 1.5px solid #c9d6f0;
-    background: #fafdff;
+    background: #e4e7eaff;
     font-size: 14px;
     cursor: pointer;
 }
@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     border: 1px solid #dbe3f3;
     font-size: 15px;
     line-height: 1.7;
-    background: #ffffff;
+    background: #ffffffff;
     min-height: 64px;
     box-shadow:
         0 1px 2px rgba(0,0,0,0.04),
@@ -344,6 +344,128 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 .modal-actions .save-btn:hover {
     background: linear-gradient(135deg,#0069d9,#004085);
 }
+
+/* SEARCHABLE SELECT */
+.searchable-select {
+    position: relative;
+    width: 100%;
+    margin-bottom: 8px; /* Add space below search box */
+    min-width: 180px;
+    max-width: 320px;
+}
+
+.searchable-input {
+    width: 100%;
+    padding: 10px 38px 10px 36px;
+    border-radius: 10px;
+    border: 1.5px solid #c9d6f0;
+    font-size: 14px;
+    cursor: pointer;
+    background: #fafdff;
+    box-sizing: border-box;
+}
+
+.searchable-input:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.searchable-options {
+    display: none;
+    position: absolute;
+    z-index: 999;
+    width: 100%;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #dbe3f3;
+    margin-top: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+.searchable-options li {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.searchable-options li:hover {
+    background: #f3f6fc;
+}
+
+.hidden-select {
+    display: none;
+}
+
+/* Make comm-row layout more responsive and prevent overlap */
+.comm-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin: 26px 32px;
+    align-items: flex-start;
+}
+
+.comm-row > .searchable-select {
+    flex: 0 0 220px;
+    min-width: 180px;
+    max-width: 320px;
+}
+
+.comm-row > div:not(.searchable-select):not(.comm-dots-menu-wrapper) {
+    flex: 1 1 320px;
+    min-width: 220px;
+    max-width: 600px;
+}
+
+.comm-row > .comm-dots-menu-wrapper {
+    flex: 0 0 44px;
+    min-width: 44px;
+    max-width: 44px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+}
+
+/* Ensure textarea fills available width and doesn't overlap */
+.comm-textarea {
+    width: 100%;
+    min-width: 180px;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 700px) {
+    .comm-row {
+        flex-direction: column;
+        gap: 10px;
+        margin: 18px 8px;
+    }
+    .comm-row > .searchable-select,
+    .comm-row > div:not(.searchable-select):not(.comm-dots-menu-wrapper),
+    .comm-row > .comm-dots-menu-wrapper {
+        min-width: 0;
+        max-width: 100%;
+        flex: 1 1 100%;
+    }
+    .comm-dots-menu-wrapper {
+        justify-content: flex-start;
+    }
+}
 </style>
 
 <div class="editor-card">
@@ -357,39 +479,42 @@ $sections = [
     'intro'    => $introTextStored ?? '',
     'closing'  => $closingTextStored ?? ''
 ];
-
 foreach ($sections as $sec => $val):
 ?>
 <div class="comm-row" id="<?= $sec ?>_row">
-    <select id="<?= $sec ?>_template_selector" class="comm-dropdown" onchange="handleTemplateChange('<?= $sec ?>')">
-        <option value="0">-- Select --</option>
-        <?php foreach ($templates[$sec] as $t): ?>
-            <option value="<?= (int)$t['id'] ?>"
-                data-content="<?= htmlspecialchars($t['content'] ?? '') ?>">
-                <?= htmlspecialchars($t['name'] ?? $t['template_name'] ?? 'Untitled') ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-
+    <div class="searchable-select" data-section="<?= $sec ?>">
+        <span class="search-icon">🔍</span>
+        <input type="text"
+               class="searchable-input"
+               placeholder="Select template..."
+               readonly>
+        <select id="<?= $sec ?>_template_selector"
+                class="comm-dropdown hidden-select"
+                onchange="handleTemplateChange('<?= $sec ?>')">
+            <option value="0">-- Select --</option>
+            <?php foreach ($templates[$sec] as $t): ?>
+                <option value="<?= (int)$t['id'] ?>"
+                        data-content="<?= htmlspecialchars($t['content'] ?? '') ?>">
+                    <?= htmlspecialchars($t['name'] ?? 'Untitled') ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <ul class="searchable-options"></ul>
+    </div>
     <div>
         <textarea id="<?= $sec ?>_input"
             class="comm-textarea"
             readonly
             oninput="forceFullHeight(this)"><?= htmlspecialchars($val) ?></textarea>
-
         <div class="inline-edit-actions" id="<?= $sec ?>_edit_actions">
             <button class="save-btn" onclick="saveInlineEdit('<?= $sec ?>')">Save</button>
             <button class="cancel-btn" onclick="cancelInlineEdit('<?= $sec ?>')">Cancel</button>
         </div>
-        
-        <!-- Status message will appear here -->
         <div class="comm-status-msg" id="<?= $sec ?>_status_msg"></div>
     </div>
-
     <div class="comm-dots-menu-wrapper">
         <button class="comm-dots-btn"
                 onclick="toggleDots('<?= $sec ?>', event)">⋮</button>
-
         <ul class="comm-dots-dropdown" id="<?= $sec ?>_dots_dropdown">
             <li onclick="openSaveModal('<?= $sec ?>')">Save as New</li>
             <li onclick="editTemplate('<?= $sec ?>')">Edit</li>
@@ -399,7 +524,6 @@ foreach ($sections as $sec => $val):
 </div>
 <?php endforeach; ?>
 </div>
-
 <!-- SAVE MODAL -->
 <div id="saveTemplateModal">
     <div class="modal-content">
@@ -665,4 +789,58 @@ function submitNewTemplate() {
         template_content: document.getElementById(sec + '_input').value
     }, "✓ Template saved successfully");
 }
+
+// Searchable select logic
+document.querySelectorAll('.searchable-select').forEach(wrapper => {
+    const input = wrapper.querySelector('.searchable-input');
+    const select = wrapper.querySelector('select');
+    const list = wrapper.querySelector('.searchable-options');
+
+    function buildList(filter = '') {
+        list.innerHTML = '';
+        [...select.options].forEach(opt => {
+            if (opt.value === '0') return;
+            if (!opt.text.toLowerCase().includes(filter.toLowerCase())) return;
+
+            const li = document.createElement('li');
+            li.textContent = opt.text;
+            li.dataset.value = opt.value;
+            li.onclick = () => {
+                select.value = opt.value;
+                input.value = opt.text;
+                list.style.display = 'none';
+                select.dispatchEvent(new Event('change'));
+            };
+            list.appendChild(li);
+        });
+    }
+
+    input.addEventListener('click', () => {
+        input.removeAttribute('readonly');
+        input.value = '';
+        buildList();
+        list.style.display = 'block';
+    });
+
+    input.addEventListener('input', () => {
+        buildList(input.value);
+        list.style.display = 'block';
+    });
+
+    document.addEventListener('click', e => {
+        if (!wrapper.contains(e.target)) {
+            list.style.display = 'none';
+            input.setAttribute('readonly', true);
+
+            const selected = select.options[select.selectedIndex];
+            input.value = selected ? selected.text : '';
+        }
+    });
+
+    // Initial value sync
+    const selected = select.options[select.selectedIndex];
+    if (selected && selected.value !== '0') {
+        input.value = selected.text;
+    }
+});
 </script>
