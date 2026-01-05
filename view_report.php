@@ -1544,22 +1544,26 @@ setTimeout(() => btn.disabled = false, 1500);
                     <td></td>
                    <td style="padding:0;">
     <input type="text"
-           class="goal-input total-input"
-           data-goal-id="<?php echo (int)$clientId; ?>"
-           data-field="total_goal_current"
-           value="<?php echo htmlspecialchars(formatAmount((float)$calculatedGoalCurrent)); ?>"
-           <?php echo $isLocked ? 'readonly' : ''; ?>
-           style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+       id="totalGoalCurrent"
+       class="goal-input total-input"
+       data-goal-id="<?php echo (int)$clientId; ?>"
+       data-field="total_goal_current"
+       value="<?php echo htmlspecialchars(formatAmount((float)$calculatedGoalCurrent)); ?>"
+       readonly
+       style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+
 </td>
 
 <td style="padding:0;">
-    <input type="text"
-           class="goal-input total-input"
-           data-goal-id="<?php echo (int)$clientId; ?>"
-           data-field="total_sip"
-           value="<?php echo htmlspecialchars(formatAmount((float)$calculatedSip)); ?>"
-           <?php echo $isLocked ? 'readonly' : ''; ?>
-           style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+   <input type="text"
+       id="totalSip"
+       class="goal-input total-input"
+       data-goal-id="<?php echo (int)$clientId; ?>"
+       data-field="total_sip"
+       value="<?php echo htmlspecialchars(formatAmount((float)$calculatedSip)); ?>"
+       readonly
+       style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
+
 </td>
 
                     <td></td> <!-- Target total intentionally blank -->
@@ -1581,6 +1585,71 @@ setTimeout(() => btn.disabled = false, 1500);
         ✓ Saved
     </span>
 </div>
+
+<script>
+/* ---------- Parse Indian currency safely ---------- */
+function parseIndianMoney(val) {
+    if (!val) return 0;
+
+    val = val.toString().toLowerCase().replace(/rs\.?/g, '').trim();
+
+    let multiplier = 1;
+    if (val.includes('cr')) {
+        multiplier = 10000000;
+        val = val.replace('cr', '');
+    } else if (val.includes('lakh')) {
+        multiplier = 100000;
+        val = val.replace('lakh', '');
+    } else if (val.includes('k')) {
+        multiplier = 1000;
+        val = val.replace('k', '');
+    }
+
+    val = val.replace(/,/g, '').trim();
+    const num = parseFloat(val);
+    return isNaN(num) ? 0 : num * multiplier;
+}
+
+/* ---------- Format nicely ---------- */
+function formatIndianMoney(num) {
+    if (num >= 10000000) return 'Rs.' + (num / 10000000).toFixed(2) + ' Cr';
+    if (num >= 100000)   return 'Rs.' + (num / 100000).toFixed(2) + ' lakhs';
+    if (num >= 1000)     return 'Rs.' + (num / 1000).toFixed(0) + 'k Attachments';
+    return 'Rs.' + num.toLocaleString('en-IN');
+}
+
+/* ---------- Recalculate Totals ---------- */
+function recalcTotals() {
+    let totalSip = 0;
+    let totalCurrent = 0;
+
+    // SIP total
+    document.querySelectorAll('input[data-field="sip_swp"]').forEach(el => {
+        totalSip += parseIndianMoney(el.value);
+    });
+
+    // Current amount total (optional but good)
+    document.querySelectorAll('input[data-field="current_amount"]').forEach(el => {
+        totalCurrent += parseIndianMoney(el.value);
+    });
+
+    if (document.getElementById('totalSip')) {
+        document.getElementById('totalSip').value = formatIndianMoney(totalSip);
+    }
+
+    if (document.getElementById('totalGoalCurrent')) {
+        document.getElementById('totalGoalCurrent').value = formatIndianMoney(totalCurrent);
+    }
+}
+
+/* ---------- Attach live listeners ---------- */
+document.querySelectorAll(
+    'input[data-field="sip_swp"], input[data-field="current_amount"]'
+).forEach(input => {
+    input.addEventListener('input', recalcTotals);
+});
+</script>
+
 
 
             <h3>3. Appropriate Asset Allocation</h3>

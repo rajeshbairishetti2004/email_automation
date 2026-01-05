@@ -468,13 +468,36 @@ function parseGoalStatusPdf(string $path): array
         $currentValue = parseIndianNumber($after[2]);
 
         /* ---------- SIP ---------- */
-        $runningSip = 0;
-        if ($idxSIP !== null) {
-            $sipPos = $idxSIP - ($dateIndex + 2);
-            if (isset($after[$sipPos])) {
-                $runningSip = parseIndianNumber($after[$sipPos]);
-            }
-        }
+$runningSip = 0;
+
+/*
+ PDF layout order is:
+ Target → Completion% → Current Value → Running SIP → Projected Value
+
+ We already know:
+   $currentValue
+   $projected
+ So SIP is the number BETWEEN them
+*/
+
+$numbers = [];
+foreach ($after as $p) {
+    if (preg_match('/[\d,]+/', $p)) {
+        $numbers[] = parseIndianNumber($p);
+    }
+}
+
+/*
+ Example $numbers becomes:
+ [25000000, 38, 9292590, 45000, 26393899]
+*/
+
+if (count($numbers) >= 5) {
+    // SIP is always the 4th numeric column
+    $runningSip = $numbers[3];
+}
+
+error_log("GOAL: $goalName | SIP = $runningSip");
 
         /* ---------- PROJECTED VALUE (STRICT FALLBACK LOGIC) ---------- */
         $projected = 0;
