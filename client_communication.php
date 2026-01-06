@@ -1,10 +1,12 @@
 ﻿<?php
 // client_communication.php
-// Refactored to match Rationale module styling and functionality
+// Complete standalone template management for greeting, intro, and closing sections
 
+// Handle AJAX requests for template management
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     ob_start();
     header('Content-Type: application/json');
+    
     $action = $_POST['ajax_action'] ?? '';
     $response = ['success' => false];
     
@@ -12,29 +14,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         require_once 'db_config.php';
         $pdo = getPdo();
         
-        if ($action === 'save_user_template') {
-            $section = $_POST['section_type'] ?? '';
-            $name = trim($_POST['template_name'] ?? '');
-            $content = $_POST['template_content'] ?? '';
-            $idToUpdate = $_POST['template_id_to_update'] ?? null;
-
-            if ($idToUpdate) {
-                $stmt = $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?");
-                $stmt->execute([$name, $content, (int)$idToUpdate]);
-                $response['template_id'] = $idToUpdate;
-            } else {
-                $stmt = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (?, ?, ?)");
-                $stmt->execute([$name, $section, $content]);
-                $response['template_id'] = $pdo->lastInsertId();
-            }
+        if ($action === 'edit_template') {
+            $stmt = $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?");
+            $stmt->execute([
+                $_POST['template_name'] ?? '',
+                $_POST['template_content'] ?? '',
+                (int)$_POST['template_id']
+            ]);
             $response['success'] = true;
         } 
-        elseif ($action === 'delete_user_template') {
+        elseif ($action === 'delete_template') {
             $stmt = $pdo->prepare("DELETE FROM report_templates WHERE id = ?");
             $stmt->execute([(int)$_POST['template_id']]);
             $response['success'] = true;
+            $response['deleted_id'] = (int)$_POST['template_id'];
         }
-
+        elseif ($action === 'save_template') {
+            $section = $_POST['section_type'] ?? '';
+            $name = trim($_POST['template_name'] ?? '');
+            $content = $_POST['template_content'] ?? '';
+            
+            if ($name === '' || $content === '') {
+                throw new Exception('Template name and content are required');
+            }
+            
+            $stmt = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (?, ?, ?)");
+            $stmt->execute([$name, $section, $content]);
+            $newId = $pdo->lastInsertId();
+            
+            $response['success'] = true;
+            $response['new_id'] = $newId;
+            $response['template_name'] = $name;
+            $response['template_content'] = $content;
+        } else {
+            throw new Exception('Invalid action');
+        }
+        
         ob_end_clean();
         echo json_encode($response);
         exit;
@@ -47,22 +62,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 ?>
 
 <style>
-/* Synchronized Rationale Styles */
-.comm-module-container { font-family: Inter, Arial, sans-serif; }
-
-.rat-box {
+/* Client Communication module styles - matching rationale.php blue theme */
+.comm-section {
     margin-top: 18px;
+    margin-bottom: 18px;
     padding: 14px;
     border: 1px solid #e6f2fb;
     border-radius: 8px;
     background: linear-gradient(180deg, #fbfdff 0%, #f6fbff 100%);
     box-shadow: 0 1px 0 rgba(2,136,209,0.03);
-    margin-bottom: 20px;
+    font-family: Inter, Arial, sans-serif;
 }
 
-.rat-label { font-weight: 700; display: block; margin-bottom: 8px; color: #083744; }
+.comm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e6f2fb;
+}
 
-.rat-controls {
+.comm-title {
+    font-weight: 700;
+    color: #083744;
+    font-size: 16px;
+    margin: 0;
+}
+
+.comm-controls {
     display: flex;
     gap: 10px;
     align-items: center;
@@ -70,43 +98,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     flex-wrap: wrap;
 }
 
-.rat-select {
-    flex: 1;
-    min-width: 250px;
+.comm-select {
+    min-width: 300px;
     padding: 8px 10px;
     border: 1px solid #dbeefb;
     border-radius: 6px;
     background: #fff;
     color: #083744;
     font-size: 14px;
+    box-shadow: inset 0 1px 0 rgba(2,136,209,0.02);
 }
 
-.rat-btn {
+.comm-btn {
     padding: 8px 12px;
     border-radius: 6px;
     border: none;
     cursor: pointer;
     font-weight: 600;
     font-size: 13px;
-    transition: all 0.12s ease;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    transition: background-color 0.12s ease, transform 0.06s ease;
 }
 
-.rat-btn.save { background: #0288D1; color: #fff; }
-.rat-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
+/* Blue-themed buttons to match page */
+.comm-btn.save {
+    background: #0288D1; /* primary */
+    color: #fff;
+}
+.comm-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
 
-.rat-btn.edit { background: #039be5; color: #fff; }
-.rat-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
+.comm-btn.edit {
+    background: #039be5; /* lighter blue */
+    color: #fff;
+}
+.comm-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
 
-.rat-btn.del { background: #0277bd; color: #fff; }
-.rat-btn.del:hover { background: #dc3545 !important; transform: translateY(-1px); }
+/* Delete: base blue, hover becomes red */
+.comm-btn.del {
+    background: #0277bd; /* darker blue */
+    color: #fff;
+}
+.comm-btn.del:hover { background: #dc3545 !important; transform: translateY(-1px); }
 
-.rat-btn.add {
-    display: flex; align-items: center; justify-content: center; 
-    width: 36px; height: 36px; padding: 0; border-radius: 50%; 
-    background: #eaf7ff; border: 1px solid #cfeefc; color: #0288d1;
+/* Add button (plus) specific styling */
+.comm-btn.add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background: #eaf7ff;
+    border: 1px solid #cfeefc;
+    color: #0288d1;
 }
 
-.rat-textarea {
+/* Disabled button state */
+.comm-btn[disabled] {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Focus / keyboard accessibility */
+.comm-btn:focus,
+.comm-select:focus,
+.comm-textarea:focus {
+    outline: 3px solid rgba(2,136,209,0.12);
+    outline-offset: 2px;
+}
+
+/* Textarea */
+.comm-textarea {
     width: 100%;
     padding: 12px;
     font-size: 14px;
@@ -119,172 +183,380 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     resize: vertical;
 }
 
-.rat-flash { margin-top: 8px; min-height: 20px; font-size: 13px; }
+/* Flash messages area */
+.comm-flash { 
+    margin-top: 8px; 
+    min-height: 26px; 
+    font-size: 13px;
+}
 
+.flash-success {
+    color: #2eb85c;
+    background: #edf9f0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #2eb85c;
+}
+
+.flash-error {
+    color: #dc3545;
+    background: #fef2f2;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left: 3px solid #dc3545;
+}
+
+/* Make buttons consistent on small screens */
 @media (max-width: 640px) {
-    .rat-controls { flex-direction: column; align-items: stretch; }
-    .rat-btn { width: 100%; }
+    .comm-controls { 
+        flex-direction: column; 
+        align-items: stretch; 
+    }
+    .comm-select { 
+        width: 100%; 
+    }
+    .comm-btn:not(.add) { 
+        width: 100%; 
+        text-align: center; 
+    }
+}
+
+/* SVG plus icon */
+.comm-btn.add svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 </style>
 
-<div class="comm-module-container">
-    <?php
-    $sections = [
-        'greeting' => ['label' => 'Greeting', 'val' => $greetingStored ?? ''],
-        'intro'    => ['label' => 'Introduction', 'val' => $introTextStored ?? ''],
-        'closing'  => ['label' => 'Closing', 'val' => $closingTextStored ?? '']
-    ];
+<?php
+// Define $clientId and $isLocked if not already defined
+$clientId = $clientId ?? 0;
+$isLocked = $isLocked ?? false;
 
-    foreach ($sections as $key => $data): ?>
-    <div class="rat-box" id="section_<?= $key ?>">
-        <label class="rat-label"><?= $data['label'] ?></label>
-        <div class="rat-controls">
-            <select class="rat-select section-selector">
-                <option value="0">-- Select saved <?= strtolower($data['label']) ?> template --</option>
-                <?php if (!empty($templates[$key])): ?>
-                    <?php foreach ($templates[$key] as $t): ?>
-                        <option value="<?= (int)$t['id'] ?>" data-content="<?= htmlspecialchars($t['content'] ?? '') ?>">
-                            <?= htmlspecialchars($t['name'] ?? 'Untitled') ?>
-                        </option>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </select>
+$sections = [
+    'greeting' => [
+        'title' => 'Greeting',
+        'stored' => $greetingStored ?? '',
+        'db_field' => 'greeting_prefix'
+    ],
+    'intro' => [
+        'title' => 'Introduction',
+        'stored' => $introTextStored ?? '',
+        'db_field' => 'intro_text'
+    ],
+    'closing' => [
+        'title' => 'Closing',
+        'stored' => $closingTextStored ?? '',
+        'db_field' => 'closing_text'
+    ]
+];
 
-            <button class="rat-btn add section-add-btn" type="button" title="Add new template">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </button>
-
-            <button class="rat-btn save section-save-btn" type="button">Save</button>
-            <button class="rat-btn edit section-edit-btn" type="button">Edit</button>
-            <button class="rat-btn del section-del-btn" type="button">Delete</button>
-        </div>
-
-        <textarea class="rat-textarea section-textarea"><?= htmlspecialchars($data['val']) ?></textarea>
-        <div class="rat-flash section-flash"></div>
+foreach ($sections as $sec => $data):
+    $templates_for_section = $templates[$sec] ?? [];
+?>
+<div class="comm-section" id="<?= $sec ?>_section">
+    <div class="comm-header">
+        <div class="comm-title"><?= htmlspecialchars($data['title']) ?></div>
     </div>
-    <?php endforeach; ?>
+    <div class="comm-controls">
+        <select id="<?= $sec ?>_template_selector" class="comm-select" <?= $isLocked ? 'disabled' : '' ?>>
+            <option value="0">-- Select saved <?= strtolower($data['title']) ?> template --</option>
+            <?php if (!empty($templates_for_section)): ?>
+                <?php foreach ($templates_for_section as $t): 
+                    $tid = (int)($t['id'] ?? 0);
+                    $tname = htmlspecialchars($t['name'] ?? '');
+                    $tcontent = htmlspecialchars($t['content'] ?? '');
+                ?>
+                    <option value="<?= $tid ?>" data-content="<?= $tcontent ?>">
+                        <?= $tname ?>
+                    </option>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </select>
+        <button id="<?= $sec ?>_add_btn" class="comm-btn add" type="button" title="Add new template" aria-label="Add new template" <?= $isLocked ? 'disabled' : '' ?>>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14" stroke="currentColor"/>
+            </svg>
+        </button>
+        <button id="<?= $sec ?>_save_btn" class="comm-btn save" type="button" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+        <button id="<?= $sec ?>_edit_btn" class="comm-btn edit" type="button" <?= $isLocked ? 'disabled' : '' ?>>Edit</button>
+        <button id="<?= $sec ?>_delete_btn" class="comm-btn del" type="button" <?= $isLocked ? 'disabled' : '' ?>>Delete</button>
+    </div>
+    <!-- CRITICAL: Add name attribute to match view_report.php POST fields and data attributes for auto-save -->
+    <textarea id="<?= $sec ?>_textarea"
+        name="<?= $sec ?>"
+        data-client-id="<?= (int)$clientId ?>"
+        data-field="<?= $data['db_field'] ?>"
+        class="comm-textarea large-textarea"
+        <?= $isLocked ? 'readonly' : '' ?>><?= htmlspecialchars($data['stored']) ?></textarea>
+    <div id="<?= $sec ?>_flash_container" class="comm-flash"></div>
 </div>
-
 <script>
-(function() {
-    function initSection(sectionKey) {
-        const container = document.getElementById('section_' + sectionKey);
-        const selector = container.querySelector('.section-selector');
-        const textarea = container.querySelector('.section-textarea');
-        const saveBtn = container.querySelector('.section-save-btn');
-        const editBtn = container.querySelector('.section-edit-btn');
-        const delBtn = container.querySelector('.section-del-btn');
-        const addBtn = container.querySelector('.section-add-btn');
-        const flash = container.querySelector('.section-flash');
+(function(){
+    const section = '<?= $sec ?>';
+    const selector = document.getElementById(section + '_template_selector');
+    const textarea = document.getElementById(section + '_textarea');
+    const saveBtn = document.getElementById(section + '_save_btn');
+    const editBtn = document.getElementById(section + '_edit_btn');
+    const delBtn = document.getElementById(section + '_delete_btn');
+    const addBtn = document.getElementById(section + '_add_btn');
+    const flash = document.getElementById(section + '_flash_container');
+    const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
 
-        function showFlash(type, msg) {
-            flash.innerHTML = `<span style="color:${type === 'success' ? '#2eb85c' : '#dc3545'}">${type === 'success' ? '✅' : '❌'} ${msg}</span>`;
-            setTimeout(() => { flash.innerHTML = ''; }, 3000);
+    function findOptionByValue(val) {
+        if (!selector) return null;
+        const target = String(val);
+        for (const option of selector.options) {
+            if (option.value === target) return option;
         }
-
-        function setDisabled(state) {
-            [selector, textarea, saveBtn, editBtn, delBtn, addBtn].forEach(el => el.disabled = state);
-        }
-
-        selector.addEventListener('change', function() {
-            const opt = selector.options[selector.selectedIndex];
-            if (selector.value !== '0') {
-                textarea.value = opt.getAttribute('data-content') || '';
-                showFlash('success', 'Template loaded.');
-            }
-        });
-
-        editBtn.addEventListener('click', () => {
-            if (selector.value === '0') return showFlash('error', 'Select a template first.');
-            textarea.focus();
-        });
-
-        addBtn.addEventListener('click', () => {
-            const content = textarea.value.trim();
-            if (!content) return showFlash('error', 'Content is empty.');
-            const name = prompt('Enter a name for this new template:');
-            if (!name) return;
-
-            saveAjax(name, content, null);
-        });
-
-        saveBtn.addEventListener('click', () => {
-            const id = selector.value;
-            const content = textarea.value.trim();
-            if (!content) return showFlash('error', 'Content is empty.');
-
-            if (id !== '0') {
-                const name = selector.options[selector.selectedIndex].text;
-                saveAjax(name, content, id);
-            } else {
-                const name = prompt('Enter name for new template:');
-                if (name) saveAjax(name, content, null);
-            }
-        });
-
-        delBtn.addEventListener('click', () => {
-            const id = selector.value;
-            if (id === '0') return showFlash('error', 'Select a template to delete.');
-            if (!confirm('Delete this template?')) return;
-
-            setDisabled(true);
-            const body = new URLSearchParams({ ajax_action: 'delete_user_template', template_id: id });
-
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: body
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    selector.remove(selector.selectedIndex);
-                    selector.value = '0';
-                    textarea.value = '';
-                    showFlash('success', 'Deleted.');
-                }
-            })
-            .finally(() => setDisabled(false));
-        });
-
-        function saveAjax(name, content, idToUpdate) {
-            setDisabled(true);
-            const body = new URLSearchParams({
-                ajax_action: 'save_user_template',
-                section_type: sectionKey,
-                template_name: name,
-                template_content: content
-            });
-            if (idToUpdate) body.append('template_id_to_update', idToUpdate);
-
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: body
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    if (!idToUpdate) {
-                        const opt = document.createElement('option');
-                        opt.value = data.template_id;
-                        opt.text = name;
-                        opt.setAttribute('data-content', content);
-                        selector.add(opt);
-                        selector.value = data.template_id;
-                    } else {
-                        selector.options[selector.selectedIndex].setAttribute('data-content', content);
-                    }
-                    showFlash('success', 'Saved.');
-                }
-            })
-            .finally(() => setDisabled(false));
-        }
+        return null;
     }
 
-    // Initialize all sections
-    ['greeting', 'intro', 'closing'].forEach(initSection);
+    function upsertTemplateOption(id, name, content) {
+        if (!selector) return null;
+        const value = String(id);
+        let opt = findOptionByValue(value);
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.value = value;
+            selector.appendChild(opt);
+        }
+        opt.textContent = name;
+        opt.setAttribute('data-content', content);
+        return opt;
+    }
+
+    function removeTemplateOption(id) {
+        const opt = findOptionByValue(id);
+        if (opt) opt.remove();
+    }
+
+    function showFlash(type, msg) {
+        flash.innerHTML = '<div class="flash-message ' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
+                         (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
+        setTimeout(() => { flash.innerHTML = ''; }, 3500);
+    }
+
+    function setButtonsDisabled(state) {
+        [addBtn, saveBtn, editBtn, delBtn].forEach(btn => {
+            if (!btn) return;
+            btn.disabled = !!state;
+        });
+    }
+
+    // Auto-save on blur (just like rationale)
+    textarea.addEventListener('blur', function() {
+        if (isLocked) return;
+        
+        const clientId = textarea.getAttribute('data-client-id');
+        const field = textarea.getAttribute('data-field');
+        const value = textarea.value.trim();
+
+        if (clientId && field) {
+            fetch('view_report.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                },
+                body: new URLSearchParams({
+                    ajax: '1',
+                    client_id: clientId,
+                    field: field,
+                    value: value
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show flash message
+                    showFlash('success', data.message || 'Saved');
+                } else {
+                    showFlash('error', 'Save failed: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Save error:', err);
+                showFlash('error', 'Network error while saving');
+            });
+        }
+    });
+
+    // Auto-load when selection changes
+    if (selector) {
+        selector.addEventListener('change', function() {
+            const id = selector.value;
+            if (id && id !== '0') {
+                const opt = selector.options[selector.selectedIndex];
+                textarea.value = opt.getAttribute('data-content') || '';
+                showFlash('success', 'Template loaded into editor.');
+                
+                // Auto-save the loaded template content
+                if (!isLocked) {
+                    textarea.dispatchEvent(new Event('blur'));
+                }
+            }
+        });
+    }
+
+    // Add: create new template from current textarea content
+    if (addBtn) {
+        addBtn.addEventListener('click', function() {
+            if (isLocked) return;
+            
+            const content = (textarea.value || '').trim();
+            if (!content) {
+                showFlash('error', '<?= ucfirst($data['title']) ?> content cannot be empty.');
+                return;
+            }
+            const name = prompt('Enter a name for this new <?= strtolower($data['title']) ?> template:');
+            if (!name || !name.trim()) return;
+
+            setButtonsDisabled(true);
+            const body = new URLSearchParams();
+            body.append('ajax_action', 'save_template');
+            body.append('template_name', name.trim());
+            body.append('template_content', content);
+            body.append('section_type', section);
+
+            fetch('client_communication.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    if (data.new_id) {
+                        const opt = upsertTemplateOption(data.new_id, name.trim(), content);
+                        if (opt) selector.value = String(data.new_id);
+                    }
+                    showFlash('success', 'Template added successfully.');
+                } else {
+                    throw new Error(data && data.error ? data.error : 'Save failed');
+                }
+            })
+            .catch((err) => showFlash('error', err.message))
+            .finally(() => setButtonsDisabled(false));
+        });
+    }
+
+    // Edit: load selected template into editor
+    if (editBtn) {
+        editBtn.addEventListener('click', function() {
+            if (isLocked) return;
+            
+            const id = selector.value;
+            if (!id || id === '0') {
+                showFlash('error', 'Please select a template to edit.');
+                return;
+            }
+            const opt = selector.options[selector.selectedIndex];
+            textarea.value = opt.getAttribute('data-content') || '';
+            textarea.focus();
+        });
+    }
+
+    // Save: update selected template or create new if none selected
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            if (isLocked) return;
+            
+            const id = selector.value;
+            const content = (textarea.value || '').trim();
+            if (!content) {
+                showFlash('error', '<?= ucfirst($data['title']) ?> content cannot be empty.');
+                return;
+            }
+
+            let name;
+            if (id && id !== '0') {
+                // update existing: use current option text as name
+                name = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
+            } else {
+                name = prompt('Enter a name for this new <?= strtolower($data['title']) ?> template:');
+                if (!name || !name.trim()) {
+                    showFlash('error', 'Template name is required.');
+                    return;
+                }
+            }
+
+            setButtonsDisabled(true);
+            const body = new URLSearchParams();
+            body.append('ajax_action', id && id !== '0' ? 'edit_template' : 'save_template');
+            body.append('template_name', name.trim());
+            body.append('template_content', content);
+            body.append('section_type', section);
+
+            if (id && id !== '0') {
+                body.append('template_id', id);
+            }
+
+            fetch('client_communication.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    const templateId = data.new_id || id;
+                    if (templateId) {
+                        const opt = upsertTemplateOption(templateId, name.trim(), content);
+                        if (opt) selector.value = String(templateId);
+                    }
+                    showFlash('success', 'Template saved successfully.');
+                } else {
+                    showFlash('error', 'Save failed: ' + (data.error || 'Unknown'));
+                }
+            })
+            .catch(() => showFlash('error', 'Network error while saving template.'))
+            .finally(() => setButtonsDisabled(false));
+        });
+    }
+
+    // Delete: delete selected template from report_templates
+    if (delBtn) {
+        delBtn.addEventListener('click', function() {
+            if (isLocked) return;
+            
+            const id = selector.value;
+            if (!id || id === '0') {
+                showFlash('error', 'Please select a template to delete.');
+                return;
+            }
+
+            const templateName = selector.options[selector.selectedIndex].text;
+            if (!confirm('Delete "' + templateName + '"? This cannot be undone.')) return;
+
+            setButtonsDisabled(true);
+            const body = new URLSearchParams();
+            body.append('ajax_action', 'delete_template');
+            body.append('template_id', id);
+            body.append('section_type', section);
+
+            fetch('client_communication.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    removeTemplateOption(id);
+                    selector.value = '0';
+                    showFlash('success', 'Template deleted successfully.');
+                } else {
+                    showFlash('error', 'Delete failed: ' + (data.error || 'Unknown'));
+                }
+            })
+            .catch(() => showFlash('error', 'Network error while deleting template.'))
+            .finally(() => setButtonsDisabled(false));
+        });
+    }
 })();
 </script>
+<?php endforeach; ?>
