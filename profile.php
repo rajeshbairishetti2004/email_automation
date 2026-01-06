@@ -41,14 +41,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $email = trim($_POST['email']);
     $mobile = trim($_POST['mobile']);
     $designation = trim($_POST['designation']);
+    $company_name = trim($_POST['company_name']);
+    $website_url = trim($_POST['website_url']);
 
     $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
     $stmtCheck->execute([$username, $userId]);
     if ($stmtCheck->fetch()) {
         $error = "Username already exists.";
     } else {
-        $stmt = $pdo->prepare("UPDATE users SET username = ?, name = ?, email = ?, mobile = ?, designation = ? WHERE id = ?");
-        $stmt->execute([$username, $name, $email, $mobile, $designation, $userId]);
+        $stmt = $pdo->prepare("
+            UPDATE users SET
+                username = ?,
+                name = ?,
+                email = ?,
+                mobile = ?,
+                designation = ?,
+                company_name = ?,
+                website_url = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $username,
+            $name,
+            $email,
+            $mobile,
+            $designation,
+            $company_name,
+            $website_url,
+            $userId
+        ]);
         $message = "Profile updated successfully!";
         $_SESSION['username'] = $username;
     }
@@ -128,6 +149,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                     <option value="Associate Relationship Manager" <?= $currentUser['designation']=='Associate Relationship Manager'?'selected':'' ?>>ARM</option>
                 </select>
             </div>
+            <!-- Add Company Name and Website URL fields -->
+            <div class="form-group">
+                <label>Company Name</label>
+                <input type="text" name="company_name"
+                       value="<?= htmlspecialchars($currentUser['company_name'] ?? '') ?>"
+                       class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Website URL</label>
+                <input type="text" name="website_url"
+                       value="<?= htmlspecialchars($currentUser['website_url'] ?? '') ?>"
+                       class="form-control">
+            </div>
             <div class="form-group" style="border-top:1px solid #eee; padding-top:15px;">
             </div>
             <button type="submit" name="update_profile" class="nav-button">Update Details</button>
@@ -157,6 +191,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
             <button type="submit" name="change_password" class="nav-button" id="pwdSubmitBtn" disabled>Update Password</button>
         </form>
+
+        <hr class="divider">
+
+        <!-- Signature Edit Section -->
+        <div style="margin-top:32px;">
+            <h3 style="font-size:1.2rem; color:#2563eb; margin-bottom:12px;">Edit Signature Block</h3>
+            <form method="post" action="save_signature.php">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" value="<?= htmlspecialchars($currentUser['name'] ?? '') ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Designation</label>
+                    <input type="text" name="designation" value="<?= htmlspecialchars($currentUser['designation'] ?? '') ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Company Name</label>
+                    <input type="text" name="company_name" value="<?= htmlspecialchars($currentUser['company_name'] ?? '') ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Mobile</label>
+                    <input type="text" name="mobile" value="<?= htmlspecialchars($currentUser['mobile'] ?? '') ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" value="<?= htmlspecialchars($currentUser['email'] ?? '') ?>" required>
+                </div>
+                <button type="submit" class="nav-button">Save Signature</button>
+            </form>
+        </div>
     </div>
 
     <script>
