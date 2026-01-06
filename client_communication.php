@@ -169,18 +169,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     outline-offset: 2px;
 }
 
-/* Textarea */
+/* Only ONE .comm-textarea block should exist: */
 .comm-textarea {
     width: 100%;
     padding: 12px;
     font-size: 14px;
     min-height: 100px;
+    height: auto;
+    line-height: 1.5;
     box-sizing: border-box;
     border: 1px solid #dbeefb;
     border-radius: 6px;
     background: #fff;
     color: #052b36;
-    resize: vertical;
+    resize: none;
+    overflow: hidden;
 }
 
 /* Flash messages area */
@@ -307,6 +310,21 @@ foreach ($sections as $sec => $data):
     const flash = document.getElementById(section + '_flash_container');
     const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
 
+    // --- Auto-grow logic (must be inside IIFE) ---
+    function autoGrow(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
+    // Initial resize
+    autoGrow(textarea);
+    // Resize on typing
+    textarea.addEventListener('input', () => autoGrow(textarea));
+    // Resize on paste
+    textarea.addEventListener('paste', () => {
+        setTimeout(() => autoGrow(textarea), 0);
+    });
+
     function findOptionByValue(val) {
         if (!selector) return null;
         const target = String(val);
@@ -392,6 +410,7 @@ foreach ($sections as $sec => $data):
             if (id && id !== '0') {
                 const opt = selector.options[selector.selectedIndex];
                 textarea.value = opt.getAttribute('data-content') || '';
+                autoGrow(textarea);
                 showFlash('success', 'Template loaded into editor.');
                 
                 // Auto-save the loaded template content
@@ -456,6 +475,7 @@ foreach ($sections as $sec => $data):
             }
             const opt = selector.options[selector.selectedIndex];
             textarea.value = opt.getAttribute('data-content') || '';
+            autoGrow(textarea);
             textarea.focus();
         });
     }
@@ -514,46 +534,6 @@ foreach ($sections as $sec => $data):
                 }
             })
             .catch(() => showFlash('error', 'Network error while saving template.'))
-            .finally(() => setButtonsDisabled(false));
-        });
-    }
-
-    // Delete: delete selected template from report_templates
-    if (delBtn) {
-        delBtn.addEventListener('click', function() {
-            if (isLocked) return;
-            
-            const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to delete.');
-                return;
-            }
-
-            const templateName = selector.options[selector.selectedIndex].text;
-            if (!confirm('Delete "' + templateName + '"? This cannot be undone.')) return;
-
-            setButtonsDisabled(true);
-            const body = new URLSearchParams();
-            body.append('ajax_action', 'delete_template');
-            body.append('template_id', id);
-            body.append('section_type', section);
-
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: body
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data && data.success) {
-                    removeTemplateOption(id);
-                    selector.value = '0';
-                    showFlash('success', 'Template deleted successfully.');
-                } else {
-                    showFlash('error', 'Delete failed: ' + (data.error || 'Unknown'));
-                }
-            })
-            .catch(() => showFlash('error', 'Network error while deleting template.'))
             .finally(() => setButtonsDisabled(false));
         });
     }
