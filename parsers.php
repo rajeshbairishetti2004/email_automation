@@ -463,58 +463,50 @@ function parseGoalStatusPdf(string $path): array
         $after = array_slice($parts, $dateIndex + 2); // skip date + years left
         if (count($after) < 3) continue;
 
-        $targetAmount = parseIndianNumber($after[0]);
-        $completion   = (float)str_replace('%', '', $after[1]);
-        $currentValue = parseIndianNumber($after[2]);
-
-        /* ---------- SIP ---------- */
-$runningSip = 0;
-
-/*
- PDF layout order is:
- Target → Completion% → Current Value → Running SIP → Projected Value
-
- We already know:
-   $currentValue
-   $projected
- So SIP is the number BETWEEN them
-*/
-
-$numbers = [];
-foreach ($after as $p) {
-    if (preg_match('/[\d,]+/', $p)) {
-        $numbers[] = parseIndianNumber($p);
-    }
-}
-
-/*
- Example $numbers becomes:
- [25000000, 38, 9292590, 45000, 26393899]
-*/
-
-if (count($numbers) >= 5) {
-    // SIP is always the 4th numeric column
-    $runningSip = $numbers[3];
-}
-
-error_log("GOAL: $goalName | SIP = $runningSip");
-
-        /* ---------- PROJECTED VALUE (STRICT FALLBACK LOGIC) ---------- */
-        $projected = 0;
-
-        // 1️⃣ Primary → Goal detail page
-        foreach ($goalDetailProjected as $title => $val) {
-            if (stripos($title, $goalName) !== false) {
-                $projected = $val;
-                break;
+        // Collect numeric values AFTER goal date (ignore %)
+        $nums = [];
+        foreach ($after as $p) {
+            if (strpos($p, '%') !== false) continue;
+            if (preg_match('/^[\d,]+$/', $p)) {
+                $nums[] = parseIndianNumber($p);
             }
         }
 
-        // 2️⃣ Fallback → Goal Summary column
-        if ($projected == 0 && $idxProjected !== null) {
-            $projPos = $idxProjected - ($dateIndex + 2);
-            if (isset($after[$projPos])) {
-                $projected = parseIndianNumber($after[$projPos]);
+        /*
+        nums order is ALWAYS:
+        [ target, current, sip, projected, shortfall ]
+        */
+
+        $targetAmount = $nums[0] ?? 0;
+        $currentValue = $nums[1] ?? 0;
+        $runningSip   = $nums[2] ?? 0;
+        $projected    = $nums[3] ?? 0;
+        $shortfall    = $nums[4] ?? 0;
+
+        // Completion derived safely
+        $completion = ($targetAmount > 0)
+            ? round(($currentValue / $targetAmount) * 100, 2)
+            : 0;
+
+        // Safety clamp
+        if ($runningSip < 0 || $runningSip > 5000000) {
+            $runningSip = 0;
+        }
+
+        if ($projected == 0) {
+            // 1️⃣ Primary → Goal detail page
+            foreach ($goalDetailProjected as $title => $val) {
+                if (stripos($title, $goalName) !== false) {
+                    $projected = $val;
+                    break;
+                }
+            }
+            // 2️⃣ Fallback → Goal Summary column
+            if ($projected == 0 && $idxProjected !== null) {
+                $projPos = $idxProjected - ($dateIndex + 2);
+                if (isset($after[$projPos])) {
+                    $projected = parseIndianNumber($after[$projPos]);
+                }
             }
         }
 
