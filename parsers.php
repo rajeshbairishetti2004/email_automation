@@ -369,13 +369,7 @@ function parseGoalStatusPdf(string $path): array
 
     /* ---------- EMAIL (HEADER PARSING) ---------- */
     $email = '';
-
-    // Look for email in header (before "Relationship Manager")
-    if (preg_match(
-        '/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i',
-        $text,
-        $mEmail
-    )) {
+    if (preg_match('/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i', $text, $mEmail)) {
         $email = strtolower(trim($mEmail[0]));
     }
 
@@ -385,29 +379,27 @@ function parseGoalStatusPdf(string $path): array
         $asOn = trim($m[1]);
     }
 
-    /* ---------- MAP GOAL DETAIL PAGES ---------- */
+    /* ---------- MAP GOAL DETAIL PAGES (Projected & Shortfall) ---------- */
+    // Updated Regex to explicitly capture Goal Title, Projected, and Shortfall from detail sections
     preg_match_all(
-        '/\n([A-Za-z0-9\/,&\-\+\s]+)\nGoal Date.*?(Projected Completion\s*:\s*₹?\s*[\d,]+).*?(Shortfall\s*:\s*₹?\s*-?[\d,]+)/is',
+        '/\n([A-Za-z0-9\/,&\-\+\s]+)\nGoal Date.*?(Projected Completion\s*:\s*₹?\s*([\d,]+)).*?(Shortfall\s*:\s*₹?\s*(-?[\d,]+))/is',
         $text,
         $detailMatches,
         PREG_SET_ORDER
     );
 
     $goalDetailProjected = [];
+    $goalDetailShortfall = []; // Initialized correctly now
     foreach ($detailMatches as $m) {
         $goalTitle = trim($m[1]);
-
-        if (preg_match('/Projected Completion\s*:\s*₹?\s*([\d,]+)/i', $m[0], $p)) {
-            $goalDetailProjected[$goalTitle] = parseIndianNumber($p[1]);
-        }
+        // Map Projected Completion (Match index 3 from the inner parenthesis)
+        $goalDetailProjected[$goalTitle] = parseIndianNumber($m[3]);
+        // Map Shortfall (Match index 5 from the inner parenthesis)
+        $goalDetailShortfall[$goalTitle] = parseIndianNumber($m[5]);
     }
 
     /* ---------- EXTRACT GOAL SUMMARY BLOCK ---------- */
-    if (!preg_match(
-        '/Goal Summary.*?Options to meet shortfall(.*?)Total\s*:/is',
-        $text,
-        $mSummary
-    )) {
+    if (!preg_match('/Goal Summary.*?Options to meet shortfall(.*?)Total\s*:/is', $text, $mSummary)) {
         return [
             'client_name' => $clientName,
             'email'       => $email,
@@ -428,7 +420,6 @@ function parseGoalStatusPdf(string $path): array
     }
 
     $headerCols = preg_split('/\s+/', trim($headerLine));
-
     $idxProjected = null;
     $idxSIP       = null;
 
@@ -441,7 +432,6 @@ function parseGoalStatusPdf(string $path): array
 
     /* ---------- PROCESS GOAL ROWS ---------- */
     foreach ($lines as $line) {
-
         $line = trim(preg_replace('/\s+/', ' ', $line));
         if ($line === '' || stripos($line, 'Goal Date') !== false) continue;
 
@@ -463,57 +453,53 @@ function parseGoalStatusPdf(string $path): array
         $after = array_slice($parts, $dateIndex + 2); // skip date + years left
         if (count($after) < 3) continue;
 
-        // Collect numeric values AFTER goal date (ignore %)
-        $nums = [];
+        $targetAmount = parseIndianNumber($after[0]);
+        $completion   = (float)str_replace('%', '', $after[1]);
+        $currentValue = parseIndianNumber($after[2]);
+
+        /* ---------- EXTRACT NUMBERS FOR POSITIONAL FALLBACK ---------- */
+        $numbers = [];
         foreach ($after as $p) {
-            if (strpos($p, '%') !== false) continue;
-            if (preg_match('/^[\d,]+$/', $p)) {
-                $nums[] = parseIndianNumber($p);
+            // Updated regex to include negative signs for shortfalls in the numbers array
+            if (preg_match('/-?[\d,]+/', $p)) {
+                $numbers[] = parseIndianNumber($p);
             }
         }
 
-        /*
-        nums order is ALWAYS:
-        [ target, current, sip, projected, shortfall ]
-        */
+        /* ---------- SIP ---------- */
+        $runningSip = (count($numbers) >= 5) ? $numbers[3] : 0;
 
-        $targetAmount = $nums[0] ?? 0;
-        $currentValue = $nums[1] ?? 0;
-        $runningSip   = $nums[2] ?? 0;
-        $projected    = $nums[3] ?? 0;
-        $shortfall    = $nums[4] ?? 0;
-
-        // Completion derived safely
-        $completion = ($targetAmount > 0)
-            ? round(($currentValue / $targetAmount) * 100, 2)
-            : 0;
-
-        // Safety clamp
-        if ($runningSip < 0 || $runningSip > 5000000) {
-            $runningSip = 0;
-        }
-
-        if ($projected == 0) {
-            // 1️⃣ Primary → Goal detail page
-            foreach ($goalDetailProjected as $title => $val) {
-                if (stripos($title, $goalName) !== false) {
-                    $projected = $val;
-                    break;
-                }
+        /* ---------- PROJECTED VALUE ---------- */
+        $projected = 0;
+        foreach ($goalDetailProjected as $title => $val) {
+            if (stripos($title, $goalName) !== false) {
+                $projected = $val;
+                break;
             }
-            // 2️⃣ Fallback → Goal Summary column
-            if ($projected == 0 && $idxProjected !== null) {
-                $projPos = $idxProjected - ($dateIndex + 2);
-                if (isset($after[$projPos])) {
-                    $projected = parseIndianNumber($after[$projPos]);
-                }
+        }
+        if ($projected == 0 && $idxProjected !== null) {
+            $projPos = $idxProjected - ($dateIndex + 2);
+            if (isset($after[$projPos])) {
+                $projected = parseIndianNumber($after[$projPos]);
             }
         }
 
         /* ---------- SHORTFALL ---------- */
-        $shortfall = $targetAmount - $projected;
+        $shortfall = 0;
+        // 1. Try extracting from detail page mapping (Highest Accuracy)
+        foreach ($goalDetailShortfall as $title => $val) {
+            if (stripos($title, $goalName) !== false) {
+                $shortfall = $val;
+                break;
+            }
+        }
+        // 2. Fallback to summary table position
+        if ($shortfall == 0 && count($numbers) > 0) {
+            $shortfall = end($numbers); 
+        }
 
-        $status = ($projected >= $targetAmount) ? 'On Track' : 'Invest More';
+        // Status determination logic
+        $status = ($shortfall > 0) ? 'Invest More' : 'On Track';
 
         $goals[] = [
             'goal'          => $goalName,
@@ -535,7 +521,6 @@ function parseGoalStatusPdf(string $path): array
         'goals'       => $goals,
     ];
 }
-
 function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $pdfGoal): array {
     $clients    = [];
     $targetName = $pdfGoal['client_name'] ?? null;

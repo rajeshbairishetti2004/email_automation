@@ -1485,13 +1485,15 @@ setTimeout(() => btn.disabled = false, 1500);
                     $projected    = (float)($g['projected'] ?? 0);
                     $targetAmount = (float)($g['target_amount'] ?? 0); // Future Value Required
 
-                    if ($projected < $targetAmount) {
-                        $newStatus = 'Invest More';
-                        $statusClass = 'status-off'; // Red background
-                    } else {
-                        $newStatus = 'On Track';
-                        $statusClass = 'status-on'; // Green background
-                    }
+$shortfall = (float)($g['shortfall'] ?? 0);
+
+if ($shortfall > 0) {
+    $newStatus = 'Invest More';
+    $statusClass = 'status-off'; 
+} else {
+    $newStatus = 'On Track';
+    $statusClass = 'status-on';
+}
                 ?>
                     <tr>
                     <td style="padding: 0;">

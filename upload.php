@@ -367,7 +367,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($goals as $g) {
                 $projectedVal = (float)($g['projected'] ?? 0);
                 $targetVal    = (float)($g['target_amount'] ?? 0);
-                $statusCalc   = ($projectedVal < $targetVal) ? 'Invest More' : 'On Track';
+                $shortfallVal = (float)($g['shortfall'] ?? 0);
+                $statusCalc   = ($shortfallVal > 0) ? 'Invest More' : 'On Track';
 
                 $stmtGoal->execute([
                     ':client_id'      => $clientId,
