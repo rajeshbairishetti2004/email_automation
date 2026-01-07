@@ -277,36 +277,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_goal_update']) &
         }
     }
 
-    try {
-        // Whitelist allowed fields for security
-        $allowedFields = ['status', 'sip_swp', 'current_amount', 'target_amount'];
-        $updatedFields = [];
-        
-        foreach ($allowedFields as $field) {
-            if (isset($_POST[$field])) {
-                $val = trim($_POST[$field]);
-                $originalVal = $val;
-                
-                // Parse Indian number format for numeric fields (handles "Rs 9.41 lakhs", "3.57 Cr", etc.)
-                if ($field !== 'status') {
-                    $val = parseIndianNumber($val); 
-                }
-                
-                $stmt = $pdo->prepare("UPDATE client_goals SET $field = :val WHERE id = :id");
-                $stmt->execute([':val' => $val, ':id' => $goalId]);
-                
-                $updatedFields[$field] = ['original' => $originalVal, 'parsed' => $val, 'rows' => $stmt->rowCount()];
+try {
+    // 1. Whitelist allowed fields for security
+    $allowedFields = ['status', 'sip_swp', 'current_amount', 'target_amount', 'goal', 'goal_date'];
+    $updatedFields = [];
+    
+    // 2. Define which fields are strictly numeric
+    $numericFields = ['sip_swp', 'current_amount', 'target_amount'];
+    
+    foreach ($allowedFields as $field) {
+        if (isset($_POST[$field])) {
+            $val = trim($_POST[$field]);
+            $originalVal = $val;
+            
+            // 3. ONLY parse Indian number format for specific numeric fields
+            // This prevents the Goal Name and Goal Date from being corrupted to 0
+            if (in_array($field, $numericFields)) {
+                $val = parseIndianNumber($val); 
             }
+            
+            // 4. Update the database
+            $stmt = $pdo->prepare("UPDATE client_goals SET $field = :val WHERE id = :id");
+            $stmt->execute([':val' => $val, ':id' => $goalId]);
+            
+            $updatedFields[$field] = [
+                'original' => $originalVal, 
+                'parsed' => $val, 
+                'rows' => $stmt->rowCount()
+            ];
         }
-
-        echo json_encode(['success' => true, 'updated' => $updatedFields, 'goal_id' => $goalId]);
-        exit;
-    } catch (PDOException $e) {
-        error_log("Goal Update Error: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'DB Error: ' . $e->getMessage()]);
-        exit;
     }
+
+    echo json_encode(['success' => true, 'updated' => $updatedFields, 'goal_id' => $goalId]);
+    exit;
+} catch (PDOException $e) {
+    error_log("Goal Update Error: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'DB Error: ' . $e->getMessage()]);
+    exit;
+}
 }
 
 /* ---------- HANDLE AJAX REQUESTS (GOAL STATUS SAVE - LEGACY SUPPORT) ---------- */
@@ -1485,14 +1494,22 @@ setTimeout(() => btn.disabled = false, 1500);
                     }
                 ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($g['goal']); ?></td>
-                        <td><?php
-                            $displayDate = '';
-                            if (!empty($g['goal_date'])) {
-                                $displayDate = date('M Y', strtotime($g['goal_date']));
-                            }
-                            echo htmlspecialchars($displayDate);
-                        ?></td>
+                    <td style="padding: 0;">
+                        <input type="text" class="goal-input scheme-edit" 
+                            data-goal-id="<?php echo (int)$g['id']; ?>" 
+                            data-field="goal"
+                            value="<?php echo htmlspecialchars($g['goal']); ?>"
+                            <?php echo $isLocked ? 'readonly' : ''; ?>
+                            style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+                    </td>
+                    <td style="padding: 0;">
+                        <input type="text" class="goal-input scheme-edit" 
+                            data-goal-id="<?php echo (int)$g['id']; ?>" 
+                            data-field="goal_date"
+                            value="<?php echo htmlspecialchars($g['goal_date'] ?? ''); ?>"
+                            <?php echo $isLocked ? 'readonly' : ''; ?>
+                            style="width: 100%; border: none; text-align: center; background: transparent; padding: 12px;">
+                    </td>
                         <td style="padding: 0;">
                             <input type="text" 
                                    class="goal-input" 
