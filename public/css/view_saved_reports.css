@@ -103,8 +103,35 @@
        .navbar { position: sticky; top: 0; z-index: 10; background: #f5f8f946; backdrop-filter: blur(12px); border-bottom: 2px solid var(--border); padding: 25px 25px 25px 25px; display: flex; align-items: center; justify-content: space-between; box-shadow: #91d5da;margin-top: 0px; border-bottom: 0.5px solid  #19bdf9; }
         .nav-left { display: flex; align-items: center; gap: 24px; }
         .nav-brand { font-size: 1.1rem; font-weight: 700; color: var(--text-strong); letter-spacing: 0.01em; }
-        .nav-links a { margin-right: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
-        .nav-links a.active { color: var(--primary); border-color: var(--primary); }
+        /* Container: Center the links and create the gap */
+.nav-links {
+    display: flex;
+    justify-content: center; /* Aligns links to the center of the available space */
+    align-items: center;
+    gap: 20px;               /* Precise 20px space between all items */
+}
+
+/* Individual Links */
+.nav-links a {
+    /* Removed margin-right: 14px; */
+    font-weight: 600;
+    color: var(--muted);
+    padding: 6px 0;
+    border-bottom: 2px solid transparent;
+    text-decoration: none;   /* Optional: removes underline */
+    transition: all 0.2s ease;
+}
+
+/* Active State */
+.nav-links a.active {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+/* Hover State for better UX */
+.nav-links a:hover {
+    color: var(--primary);
+}
         .nav-user { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; color: var(--muted); position:relative; }
         .profile-dropdown { display: none; position: absolute; right: 0; top: 36px; background: #fff; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); min-width: 180px; z-index: 100; }
         .profile-dropdown div { font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px; }
@@ -206,7 +233,6 @@
     padding: 12px 28px;
     background:rgba(148, 227, 241, 0.319);
     margin-bottom: 18px;
-    margin-right: 470px;
 }
         .top-bar img {
             height: 40px;
