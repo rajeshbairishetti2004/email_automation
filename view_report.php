@@ -2773,31 +2773,46 @@ function autoFillSchemeName(select, schemeName) {
             ?>;
 
             window.updateCurrentSituation = function() {
-                try {
-                    const selected = document.querySelector('input[name="is_older_than_1_year"]:checked');
-                    if (!selected) return;
-                    const val = selected.value;
-                    if (val === '0') {
-                        // Less than 1 year: show Absolute Return and hide XIRR
-                        if (returnLabel) returnLabel.textContent = 'Absolute Return of schemes';
-                        if (returnValueCell) returnValueCell.textContent = absoluteReturnText;
-                        if (xirrRow) xirrRow.style.display = 'none';
-                    } else {
-                        // More than 1 year: show CAGR and show XIRR only if non-zero
-                        if (returnLabel) returnLabel.textContent = 'CAGR of current schemes';
-                        if (returnValueCell) returnValueCell.textContent = cagrText;
-                        if (xirrRow) {
-                            if (xirrValue && !isNaN(xirrValue) && Number(xirrValue) !== 0) {
-                                xirrRow.style.display = '';
-                            } else {
-                                xirrRow.style.display = 'none';
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('updateCurrentSituation error', e);
+    try {
+        const selected = document.querySelector('input[name="is_older_than_1_year"]:checked');
+        if (!selected) return;
+        
+        const val = selected.value;
+        const returnLabel = document.getElementById('returnLabel');
+        const returnValueCell = document.getElementById('returnValueCell');
+        const xirrRow = document.getElementById('xirrRow');
+
+        if (val === '0') {
+            // --- Less than 1 year: Show Absolute Return ---
+            if (returnLabel) returnLabel.textContent = 'Absolute Return of schemes';
+            if (returnValueCell) {
+                // Update the visible value and the metadata for AJAX saving
+                returnValueCell.value = absoluteReturnText; 
+                returnValueCell.setAttribute('data-field', 'absolute_return');
+                returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$absoluteReturn); ?>);
+            }
+            if (xirrRow) xirrRow.style.display = 'none';
+        } else {
+            // --- More than 1 year: Show CAGR ---
+            if (returnLabel) returnLabel.textContent = 'CAGR of current schemes';
+            if (returnValueCell) {
+                // Update the visible value and the metadata for AJAX saving
+                returnValueCell.value = cagrText;
+                returnValueCell.setAttribute('data-field', 'cagr');
+                returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$cagr); ?>);
+            }
+            if (xirrRow) {
+                if (xirrValue && !isNaN(xirrValue) && Number(xirrValue) !== 0) {
+                    xirrRow.style.display = '';
+                } else {
+                    xirrRow.style.display = 'none';
                 }
-            };
+            }
+        }
+    } catch (e) {
+        console.error('updateCurrentSituation error', e);
+    }
+};
 
             // Attach listeners to radio inputs and via delegated change to capture dynamic changes
             document.querySelectorAll('input[name="is_older_than_1_year"]').forEach(function(r) {

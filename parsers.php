@@ -157,13 +157,16 @@ function parsePortfolioValuation(string $path): array {
         $totalCost    = $totals['purchase'];
         $totalCurrent = $totals['current'];
 
+        // Determine Absolute Return with safety check
         $finalAbsReturn = 0;
         if ($fileGrandTotalAbs !== null) {
             $finalAbsReturn = $fileGrandTotalAbs;
         } elseif ($totalCost > 0) {
+            // Formula: ((Current Value - Cost Value) / Cost Value) * 100
             $finalAbsReturn = (($totalCurrent - $totalCost) / $totalCost) * 100;
         }
 
+        // Assign final values to the totals array
         $totals['profit']          = $totalCurrent - $totalCost;
         $totals['absolute_return'] = $finalAbsReturn;
     }
