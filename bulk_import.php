@@ -269,75 +269,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             gap: 30px;
         }
         
-        .top-bar {
-            display: flex;
-            align-items: center;
-        }
+.top-bar {
+    display: flex;
+    align-items: center;
+    padding: 12px 28px;
+    background:rgba(148, 227, 241, 0.319);
+    margin-bottom: 18px;
+
+}
+.top-bar img {
+    height: 40px;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+.brand-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    padding: 10px 24px 10px 14px;
+}
+.brand-wrapper img {
+    height: 38px;
+    width: auto;
+}
+
+.brand-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    padding: 10px 24px 10px 14px;
+}
+.brand-wrapper img {
+    height: 38px;
+    width: auto;
+}
+.nav-brand {
+    font-size: 1.18rem;
+    font-weight: 600;
+    color: #0f172a;
+    font-family: 'Poppins', sans-serif;
+    text-decoration: none;
+    white-space: nowrap;
+    margin-left: 6px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 32px;
+    margin-left: 32px;
+}
+.nav-links a {
+    text-decoration: none;
+    font-weight: 600;
+    color: #64748b;
+    padding: 10px 0;
+    border-bottom: 2.5px solid transparent;
+    font-size: 1.08rem;
+    transition: color 0.18s, border-color 0.18s;
+}
+.nav-links a.active {
+    color: #2563eb;
+    border-bottom: 2.5px solid #2563eb;
+}
+.nav-links a:hover {
+    color: #2563eb;
+    border-bottom: 2.5px solid #2563eb;
+}
         
-        .nav-brand {
-            font-size: 22px;
-            font-weight: 700;
-            color: #0288D1;
-            text-decoration: none;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 20px;
-        }
-        
-        .nav-links a {
-            text-decoration: none;
-            color: #555;
-            font-weight: 500;
-            padding: 8px 15px;
-            border-radius: 6px;
-            transition: all 0.3s;
-        }
-        
-        .nav-links a:hover, .nav-links a.active {
-            background: #e3f2fd;
-            color: #0288D1;
-        }
-        
-        .nav-user {
-            position: relative;
-            cursor: pointer;
-            padding: 8px 15px;
-            border-radius: 6px;
-            background: #f8f9fa;
-        }
-        
-        .profile-dropdown {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 40px;
-            background: white;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            min-width: 180px;
-            z-index: 100;
-        }
-        
-        .profile-dropdown a {
-            display: block;
-            padding: 10px 15px;
-            text-decoration: none;
-            color: #333;
-            transition: background 0.2s;
-        }
-        
-        .profile-dropdown a:hover {
-            background: #f8f9fa;
-        }
-        
-        .logout-link {
-            color: #dc3545 !important;
-            border-top: 1px solid #eee;
-        }
-        
+.nav-user {
+    color: #2563eb;
+    font-weight: 600;
+    padding: 8px 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    background: #e3f2fd;
+    border-radius: 50px;
+    border: 1.5px solid #b3e5fc;
+    position: relative;
+    transition: 0.2s;
+    font-size: 1.08rem;
+    box-shadow: 0 2px 8px rgba(41, 182, 246, 0.10);
+}
+.nav-user:hover {
+    background: #2563eb;
+    color: #fff;
+}
+.profile-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 36px;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    min-width: 180px;
+    z-index: 100;
+    margin-right: 20px;
+}
+.profile-dropdown div {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    padding: 8px 12px 5px;
+}
+.profile-dropdown a {
+    display: block;
+    padding: 8px 12px;
+    text-align: right;
+    color: #0288D1;
+    font-weight: 600;
+    text-decoration: none;
+}
+.profile-dropdown a.logout-link {
+    color: #e53935 !important;
+    font-weight: 700;
+    background: none;
+    transition: background 0.2s, color 0.2s;
+}
+.profile-dropdown a.logout-link:hover {
+    background: #ffebee;
+    color: #b71c1c !important;
+}
+
         .container {
             max-width: 1200px;
             margin: 30px auto;
@@ -751,13 +813,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     <nav class="navbar">
         <div class="nav-left">
             <div class="top-bar">
-                <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
+                <img src="image.png" alt="Logo">
                 <a href="upload.php" class="nav-brand">Finance Doctor</a>
             </div>
             <div class="nav-links">
-                <a href="upload.php">Dashboard</a>
-                <a href="view_saved_reports.php">All Reports</a>
-                <a href="bulk_import.php" class="active">Bulk Allocate</a>
+                <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
+                <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
+                <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>">Bulk Allocate</a>
             </div>
         </div>
         <div class="nav-user" style="position:relative;">
@@ -819,17 +881,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 <?php endif; ?>
             </div>
         <?php endif; ?>
-
-        <div class="info-box">
-            <strong>Formatting Rules:</strong>
-            <ul style="padding-left: 20px; margin: 5px 0;">
-                <li><strong>Column E (Tags):</strong> Must match the tag you entered above (e.g., 'RJ').</li>
-                <li><strong>Column H (RM Name):</strong> Case-insensitive; matches either a username or full name.</li>
-                <li><strong>Column I (Reviewer Name):</strong> Case-insensitive; matches either a username or full name.</li>
-                <li><strong>Column B:</strong> Client Name.</li>
-                <li><strong>Column A:</strong> Priority.</li>
-            </ul>
-        </div>
         
         <div id="successMessage" class="success-message"></div>
         <div id="errorMessage" class="error-message"></div>
