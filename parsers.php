@@ -294,7 +294,6 @@ function parseRunningSystematicTransactions(string $path): array {
 
     return $data;
 }
-
 function parsePortfolioSummary(string $path): array {
     $spreadsheet = IOFactory::load($path);
     $sheet       = $spreadsheet->getSheet(0);
@@ -304,20 +303,20 @@ function parsePortfolioSummary(string $path): array {
 
     $headerIndex = findHeaderRowGeneric($rows, [
         ['unrealised gain', 'unrealized gain'],
-        ['realised gain', 'realized gain'],
+        ['absolute return %', 'abs return %'], // Added keywords
         ['xirr']
     ]);
-    if ($headerIndex === null || !isset($rows[$headerIndex]) || !is_array($rows[$headerIndex])) {
-        return [];
-    }
+    if ($headerIndex === null || !isset($rows[$headerIndex])) return [];
 
     $headerRow = $rows[$headerIndex];
     $dataRows  = array_slice($rows, $headerIndex + 1);
 
-    $colTotal  = findColumnByKeywords($headerRow, ['current value', 'total current value', 'portfolio value', 'market value', 'value']);
+    $colTotal  = findColumnByKeywords($headerRow, ['current value', 'value']);
     $colUnreal = findColumnByKeywords($headerRow, ['unrealised gain', 'unrealized gain']);
     $colReal   = findColumnByKeywords($headerRow, ['realised gain', 'realized gain']);
     $colXirr   = findColumnByKeywords($headerRow, ['xirr']);
+    // New: Find the Absolute Return column
+    $colAbsPct = findColumnByKeywords($headerRow, ['absolute return %', 'abs return %', 'absolute return']);
 
     $client = clientNameFromFilename($path) ?? 'Client';
     $best   = null;
@@ -329,8 +328,12 @@ function parsePortfolioSummary(string $path): array {
         $unreal = $colUnreal !== null ? parseIndianNumber((string)($row[$colUnreal] ?? '')) : 0.0;
         $real   = $colReal   !== null ? parseIndianNumber((string)($row[$colReal]   ?? '')) : 0.0;
         $xirr   = $colXirr   !== null ? (float)str_replace(['%', ','], '', (string)($row[$colXirr] ?? '')) : 0.0;
-
-        if ($total == 0 && $unreal == 0 && $real == 0 && $xirr == 0) continue;
+        
+        // Capture absolute return pct
+        $absPct = 0.0;
+        if ($colAbsPct !== null && isset($row[$colAbsPct])) {
+            $absPct = (float)str_replace(['%', ','], '', (string)$row[$colAbsPct]);
+        }
 
         $isGrand = false;
         foreach ($row as $cellVal) {
@@ -342,17 +345,18 @@ function parsePortfolioSummary(string $path): array {
         }
 
         $record = [
-            'total_amount' => $total,
-            'profit'       => $unreal + $real,
-            'cagr'         => 0.0,
-            'xirr'         => $xirr,
+            'total_amount'    => $total,
+            'profit'          => $unreal + $real,
+            'cagr'            => 0.0,
+            'xirr'            => $xirr,
+            'absolute_return' => $absPct, // Added to record
         ];
 
         if ($isGrand) {
             $best = $record;
             break;
         }
-        if ($best === null) $best = $record;
+        if ($best === null && $total > 0) $best = $record;
     }
 
     $data = [];
@@ -361,6 +365,7 @@ function parsePortfolioSummary(string $path): array {
     }
     return $data;
 }
+
 function parseGoalStatusPdf(string $path): array
 {
     $parser = new PdfParser();
@@ -589,18 +594,17 @@ function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $
         }
     }
 
-    foreach ($ps as $client => $summary) {
+foreach ($ps as $client => $summary) {
         if (!isset($clients[$client])) {
-            $clients[$client] = [
-                'name'       => $client,
-                'current'    => [],
-                'goals'      => [],
-                'allocation' => [],
-                'schemes'    => [],
-                'as_on'      => '',
-            ];
+            $clients[$client] = [ /* ... initialization ... */ ];
         }
         $clients[$client]['current']['summary'] = $summary;
+
+        // CRITICAL FIX: If the Portfolio Summary has an absolute return, 
+        // map it into the totals section so view_report.php picks it up.
+        if (isset($summary['absolute_return']) && $summary['absolute_return'] != 0) {
+            $clients[$client]['current']['totals']['absolute_return'] = $summary['absolute_return'];
+        }
     }
 
     // Inside buildClientReports function
