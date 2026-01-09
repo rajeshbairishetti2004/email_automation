@@ -644,3 +644,67 @@ function parse_scheme_xlsx($filepath) {
     }
     return $names;
 }
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    $action = $data['action'] ?? '';
+
+    if ($action === 'delete_scheme_rows') {
+        require_once 'db_config.php';
+        $pdo = getPdo();
+        $ids = $data['scheme_ids'] ?? [];
+        if (!is_array($ids) || empty($ids)) {
+            echo json_encode(['success' => false, 'error' => 'No IDs']);
+            exit;
+        }
+        $in = str_repeat('?,', count($ids) - 1) . '?';
+        $stmt = $pdo->prepare("DELETE FROM client_schemes WHERE id IN ($in)");
+        $ok = $stmt->execute($ids);
+        echo json_encode(['success' => $ok]);
+        exit;
+    }
+
+    if ($action === 'save_scheme_table') {
+        require_once 'db_config.php';
+        $pdo = getPdo();
+        $clientId = (int)($data['client_id'] ?? 0);
+        $rows = $data['rows'] ?? [];
+        if ($clientId <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+            exit;
+        }
+        foreach ($rows as $row) {
+            $id = isset($row['id']) ? (int)$row['id'] : 0;
+            $fields = [
+                'scheme_name' => $row['scheme_name'] ?? '',
+                'sip_swp' => $row['sip_swp'] ?? '',
+                'current_value' => $row['current_value'] ?? '',
+                'action_step' => $row['action_step'] ?? '',
+                'recommended_scheme' => $row['recommended_scheme'] ?? '',
+                'recommended_amount' => $row['recommended_amount'] ?? '',
+            ];
+            if ($id > 0) {
+                $pdo->prepare("UPDATE client_schemes SET scheme_name=?, sip_swp=?, current_value=?, action_step=?, recommended_scheme=?, recommended_amount=? WHERE id=?")
+                    ->execute([
+                        $fields['scheme_name'], $fields['sip_swp'], $fields['current_value'],
+                        $fields['action_step'], $fields['recommended_scheme'], $fields['recommended_amount'], $id
+                    ]);
+            } else {
+                $pdo->prepare("INSERT INTO client_schemes (client_id, scheme_name, sip_swp, current_value, action_step, recommended_scheme, recommended_amount) VALUES (?, ?, ?, ?, ?, ?, ?)
+")
+                    ->execute([
+                        $clientId,
+                        $fields['scheme_name'],
+                        $fields['sip_swp'],
+                        $fields['current_value'],
+                        $fields['action_step'],
+                        $fields['recommended_scheme'],
+                        $fields['recommended_amount']
+                    ]);
+            }
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+}
