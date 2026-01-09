@@ -1819,7 +1819,7 @@ document.querySelectorAll(
 
         <tr>
 
-            <td class="scheme-checkbox-cell" style="display:none;text-align:center;">
+            <td class="scheme-checkbox-cell" style="display:none; text-align:center;">
 
                 <input type="checkbox" class="scheme-row-checkbox">
 
@@ -1827,19 +1827,19 @@ document.querySelectorAll(
 
             <td class="present-scheme-name">
 
-                <input type="text" class="scheme-input" data-field="scheme_name" value="<?= htmlspecialchars($s['scheme_name']) ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="scheme_name" value="<?= htmlspecialchars($s['scheme_name']) ?>">
 
             </td>
 
             <td>
 
-                <input type="text" class="scheme-input" data-field="sip_swp" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
 
             </td>
 
             <td>
 
-                <input type="text" class="scheme-input" data-field="current_value" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
 
             </td>
 
@@ -1869,7 +1869,7 @@ document.querySelectorAll(
 
             <td>
 
-                <input type="text" class="scheme-input" data-field="recommended_scheme" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
+                <input type="text" class="scheme-input"  data-field="recommended_scheme" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
 
             </td>
 
