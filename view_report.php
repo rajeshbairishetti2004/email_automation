@@ -1012,8 +1012,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 </style>
 
 </style>
-
-    </style>
 </head>
 <body>
 
@@ -1763,356 +1761,183 @@ document.querySelectorAll(
 
 <h3>4. Appropriate Scheme Selection</h3>
 
-
-
 <table class="report-table" id="schemeTable">
-
     <thead>
-
         <tr>
-
             <th style="display:none;" class="scheme-checkbox-header"></th>
-
             <th colspan="3">Present Schemes</th>
-
             <th rowspan="2">Action Step</th>
-
             <th colspan="2">Scheme Changes</th>
-
         </tr>
-
         <tr>
-
             <th style="display:none;" class="scheme-checkbox-header"></th>
-
             <th>Scheme Name</th>
-
             <th>SIP / SWP</th>
-
             <th>Value as of <?= htmlspecialchars($asOn) ?></th>
-
             <th>Scheme Name</th>
-
             <th>Amount</th>
-
         </tr>
-
     </thead>
-
     <tbody>
-
     <?php if (empty($schemes)): ?>
-
         <tr>
-
             <td colspan="7" style="text-align:center; color:#dc3545; font-weight:600; padding:14px;">
-
                 ⚠ No schemes found for this client.
-
             </td>
-
         </tr>
-
     <?php else: ?>
-
         <?php foreach ($schemes as $s): $schemeId = (int)$s['id']; ?>
-
         <tr>
-
-            <td class="scheme-checkbox-cell" style="display:none; text-align:center;">
-
+            <td class="scheme-checkbox-cell" style="display:none;text-align:center;">
                 <input type="checkbox" class="scheme-row-checkbox">
-
             </td>
-
             <td class="present-scheme-name">
-
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="scheme_name" value="<?= htmlspecialchars($s['scheme_name']) ?>">
-
+                <input type="text" class="scheme-input" data-field="scheme_name" value="<?= htmlspecialchars($s['scheme_name']) ?>">
             </td>
-
             <td>
-
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
-
+                <input type="text" class="scheme-input" data-field="sip_swp" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
             </td>
-
             <td>
-
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
-
+                <input type="text" class="scheme-input" data-field="current_value" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
             </td>
-
             <td>
-
                 <select class="action-dropdown" data-field="action_step">
-
                     <?php
-
                     $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
-
                     foreach ($steps as $step):
-
                     ?>
-
                         <option value="<?= $step ?>" <?= ($s['action_step'] ?? 'Continue') === $step ? 'selected' : '' ?>>
-
                             <?= $step ?>
-
                         </option>
-
                     <?php endforeach; ?>
-
                 </select>
-
             </td>
-
             <td>
-
-                <input type="text" class="scheme-input"  data-field="recommended_scheme" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
-
+                <input type="text" class="scheme-input" data-field="recommended_scheme" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
             </td>
-
             <td>
-
                 <input type="text" class="scheme-input" data-field="recommended_amount" value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>">
-
             </td>
-
             <input type="hidden" class="scheme-id" value="<?= $schemeId ?>">
-
         </tr>
-
         <?php endforeach; ?>
-
     <?php endif; ?>
-
     </tbody>
-
 </table>
 
-
-
 <div id="schemeTableActions" style="margin: 10px 0; display: flex; gap: 10px;">
-
     <button type="button" id="toggleSchemeDeleteMode" class="wf-btn btn-reject" style="background:#f39c12;">🗑 Delete Mode</button>
-
     <button type="button" id="addSchemeRow" class="wf-btn btn-ready" style="background:#27ae60;">+ Add Row</button>
-
     <button type="button" id="deleteSelectedSchemes" class="wf-btn btn-reject" style="display:none;">Delete Selected</button>
-
     <button type="button" id="saveAllSchemes" class="wf-btn btn-approve" style="background:#007bff;">💾 Save All Changes</button>
-
 </div>
 
 
 
 <script>
-
 // --- Scheme Table Manual Edit/Delete Mode Logic ---
-
 let schemeDeleteMode = false;
 
-
-
 // Add checkboxes to each row (hidden by default)
-
 function updateSchemeCheckboxesVisibility(show) {
-
     document.querySelectorAll('#schemeTable tbody tr').forEach(tr => {
-
         let cb = tr.querySelector('.scheme-row-checkbox');
-
         if (!cb) {
-
             const td = document.createElement('td');
-
             td.style.textAlign = 'center';
-
             td.style.width = '32px';
-
             td.className = 'scheme-checkbox-cell';
-
             cb = document.createElement('input');
-
             cb.type = 'checkbox';
-
             cb.className = 'scheme-row-checkbox';
-
             td.appendChild(cb);
-
             tr.insertBefore(td, tr.firstChild);
-
         }
-
         tr.querySelector('.scheme-checkbox-cell').style.display = show ? '' : 'none';
-
         cb.checked = false;
-
     });
-
     // Add/remove header cell
-
     document.querySelectorAll('.scheme-checkbox-header').forEach(th => {
-
         th.style.display = show ? '' : 'none';
-
     });
-
 }
 
-
-
 // Toggle Delete Mode
-
 document.getElementById('toggleSchemeDeleteMode').onclick = function() {
-
     schemeDeleteMode = !schemeDeleteMode;
-
     updateSchemeCheckboxesVisibility(schemeDeleteMode);
-
     document.getElementById('deleteSelectedSchemes').style.display = schemeDeleteMode ? '' : 'none';
-
     document.getElementById('addSchemeRow').style.display = schemeDeleteMode ? 'none' : '';
-
     this.textContent = schemeDeleteMode ? 'Cancel Delete Mode' : '🗑 Delete Mode';
-
     this.style.background = schemeDeleteMode ? '#c0392b' : '#f39c12';
-
 };
-
-
 
 // Add Row
-
 document.getElementById('addSchemeRow').onclick = function() {
-
     const tbody = document.querySelector('#schemeTable tbody');
-
     const tr = document.createElement('tr');
-
     tr.innerHTML =
-
         '<td class="scheme-checkbox-cell" style="display:none;text-align:center;"><input type="checkbox" class="scheme-row-checkbox"></td>' +
-
         '<td class="present-scheme-name"><input type="text" class="scheme-input" data-field="scheme_name" placeholder="Scheme Name"></td>' +
-
         '<td><input type="text" class="scheme-input" data-field="sip_swp" placeholder="SIP/SWP"></td>' +
-
         '<td><input type="text" class="scheme-input" data-field="current_value" placeholder="Value"></td>' +
-
         '<td><select class="action-dropdown" data-field="action_step">' +
-
             '<option value="Continue">Continue</option>' +
-
             '<option value="Drop">Drop</option>' +
-
             '<option value="Switch">Switch</option>' +
-
             '<option value="Partially Redeem">Partially Redeem</option>' +
-
             '<option value="Under Observation">Under Observation</option>' +
-
         '</select></td>' +
-
         '<td><input type="text" class="scheme-input" data-field="recommended_scheme" placeholder="Recommended Scheme"></td>' +
-
         '<td><input type="text" class="scheme-input" data-field="recommended_amount" placeholder="Amount/Note"></td>' +
-
         '<input type="hidden" class="scheme-id" value="0">';
-
     tbody.appendChild(tr);
-
 };
-
-
 
 // Delete Selected
-
 document.getElementById('deleteSelectedSchemes').onclick = function() {
-
     const checked = Array.from(document.querySelectorAll('.scheme-row-checkbox:checked'));
-
     if (checked.length === 0) return;
-
     if (!confirm('Delete selected scheme rows?')) return;
-
     // Collect IDs for DB deletion (only for rows with .scheme-id > 0)
-
     const idsToDelete = [];
-
     checked.forEach(cb => {
-
         const tr = cb.closest('tr');
-
         const id = tr.querySelector('.scheme-id')?.value;
-
         if (id && id !== "0") idsToDelete.push(id);
-
         tr.remove();
-
     });
-
     if (idsToDelete.length > 0) {
-
         fetch('parsers.php', {
-
             method: 'POST',
-
             headers: {'Content-Type':'application/json'},
-
             body: JSON.stringify({ action: 'delete_scheme_rows', scheme_ids: idsToDelete })
-
         })
-
         .then(r => r.json())
-
         .then(res => {
-
             if (!res.success) alert('Error deleting from database: ' + (res.error || ''));
-
         });
-
     }
-
 };
 
-
-
 // Save All Changes
-
 document.getElementById('saveAllSchemes').onclick = function() {
-
     // Gather all rows (both existing and new)
-
     const rows = [];
-
     document.querySelectorAll('#schemeTable tbody tr').forEach(tr => {
-
         const row = {};
-
         row.id = tr.querySelector('.scheme-id')?.value || 0;
-
         tr.querySelectorAll('.scheme-input, .action-dropdown').forEach(input => {
-
             const field = input.getAttribute('data-field');
-
             row[field] = input.value;
-
         });
-
         rows.push(row);
-
     });
-
     fetch('parsers.php', {
-
         method: 'POST',
 
         headers: {'Content-Type':'application/json'},
-
         body: JSON.stringify({ action: 'save_scheme_table', client_id: <?= (int)$clientId ?>, rows: rows })
-
     })
 
     .then(r => r.json())
@@ -2120,27 +1945,17 @@ document.getElementById('saveAllSchemes').onclick = function() {
     .then(res => {
 
         if (res.success) {
-
             alert('Schemes saved!');
-
             location.reload();
-
         } else {
-
             alert('Error saving: ' + (res.error || ''));
-
         }
 
     });
-
 };
 
-
-
 // On page load, hide checkboxes
-
 updateSchemeCheckboxesVisibility(false);
-
 </script>
 
 <!-- =========================
@@ -2182,7 +1997,7 @@ updateSchemeCheckboxesVisibility(false);
     const currentClientId = <?php echo isset($client['id']) ? (int)$client['id'] : (isset($clientId) ? (int)$clientId : 0); ?>;
 
     function addNewSchemeRow() {
-        const tbody = document.getElementById('newSchemesBody');
+        const tbody = document.querySelector('#newSchemesBody');
         const row = `
             <tr>
                 <td>
@@ -2711,8 +2526,8 @@ updateSchemeCheckboxesVisibility(false);
 
         // Update totals based on current input values
         function updateTotals() {
-            let totalCurrent = 0;
             let totalSip = 0;
+            let totalCurrent = 0;
 
             document.querySelectorAll('.goal-input').forEach(function(input) {
                 const field = input.getAttribute('data-field');
@@ -2769,7 +2584,6 @@ updateSchemeCheckboxesVisibility(false);
                             alert(data.message);
                         }
                     });
-                });
             }
         });
 
@@ -3212,7 +3026,7 @@ updateSchemeCheckboxesVisibility(false);
             body: formData
         })
         .then(response => response.json().catch(() => ({ success:false, error:'Invalid JSON from server' })))
-        .then(data => {
+        .then data => {
             document.getElementById('upload_spinner').style.display = 'none';
 
             // Remove all provisional placeholders
