@@ -1755,201 +1755,399 @@ document.querySelectorAll(
                     }
                 });
             </script>
-
 <!-- =========================
+
      4. Appropriate Scheme Selection
+
      ========================= -->
+
 <h3>4. Appropriate Scheme Selection</h3>
 
-<table class="report-table">
-    <tr>
-        <th colspan="3">Present Schemes</th>
-        <th rowspan="2">Action Step</th>
-        <th colspan="2">Scheme Changes</th>
-    </tr>
-    <tr>
-        <th>Scheme Name</th>
-        <th>SIP / SWP</th>
-        <th>Value as of <?= htmlspecialchars($asOn) ?></th>
-        <th>Scheme Name</th>
-        <th>Amount</th>
-    </tr>
 
-<?php if (empty($schemes)): ?>
-    <tr>
-        <td colspan="6" style="text-align:center; color:#dc3545; font-weight:600; padding:14px;">
-            ⚠ No schemes found for this client.
-        </td>
-    </tr>
-<?php else: ?>
 
-<?php foreach ($schemes as $s): 
-    $schemeId = (int)$s['id'];
-?>
-<tr>
-    <!-- Present Scheme -->
-    <td class="present-scheme-name">
-        <?= htmlspecialchars($s['scheme_name']) ?>
-    </td>
+<table class="report-table" id="schemeTable">
 
-    <!-- SIP / SWP -->
-    <td style="padding:0;">
-        <input type="text"
-               class="goal-input scheme-edit"
-               data-scheme-id="<?= $schemeId ?>"
-               data-field="sip_swp"
-               value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>"
-               <?= $isLocked ? 'readonly' : '' ?>
-               style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
-    </td>
+    <thead>
 
-    <!-- Current Value -->
-    <td style="padding:0;">
-        <input type="text"
-               class="goal-input scheme-edit"
-               data-scheme-id="<?= $schemeId ?>"
-               data-field="current_value"
-               value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>"
-               <?= $isLocked ? 'readonly' : '' ?>
-               style="width:100%; border:none; text-align:center; background:transparent; padding:12px;">
-    </td>
+        <tr>
 
-    <!-- Action Step -->
-    <td>
-        <select class="action-dropdown"
-                data-scheme-id="<?= $schemeId ?>"
-                onchange="autoFillSchemeName(this,'<?= htmlspecialchars(addslashes($s['scheme_name'])) ?>')"
-                <?= $isLocked ? 'disabled' : '' ?>>
-            <?php
-            $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
-            foreach ($steps as $step):
-            ?>
-                <option value="<?= $step ?>" <?= ($s['action_step'] ?? 'Continue') === $step ? 'selected' : '' ?>>
-                    <?= $step ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-    </td>
+            <th style="display:none;" class="scheme-checkbox-header"></th>
 
-    <!-- Recommended Scheme -->
-    <td>
-        <input type="text"
-               id="recommended_scheme_<?= $schemeId ?>"
-               class="scheme-input scheme-edit"
-               data-scheme-id="<?= $schemeId ?>"
-               data-field="recommended_scheme"
-               value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>"
-               placeholder="Enter scheme"
-               <?= $isLocked ? 'readonly' : '' ?>>
-    </td>
+            <th colspan="3">Present Schemes</th>
 
-    <!-- Recommended Amount -->
-    <td>
-        <input type="text"
-               class="scheme-input scheme-edit"
-               data-scheme-id="<?= $schemeId ?>"
-               data-field="recommended_amount"
-               value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>"
-               placeholder="Amount / Note"
-               <?= $isLocked ? 'readonly' : '' ?>>
-    </td>
-</tr>
-<?php endforeach; ?>
-<?php endif; ?>
+            <th rowspan="2">Action Step</th>
+
+            <th colspan="2">Scheme Changes</th>
+
+        </tr>
+
+        <tr>
+
+            <th style="display:none;" class="scheme-checkbox-header"></th>
+
+            <th>Scheme Name</th>
+
+            <th>SIP / SWP</th>
+
+            <th>Value as of <?= htmlspecialchars($asOn) ?></th>
+
+            <th>Scheme Name</th>
+
+            <th>Amount</th>
+
+        </tr>
+
+    </thead>
+
+    <tbody>
+
+    <?php if (empty($schemes)): ?>
+
+        <tr>
+
+            <td colspan="7" style="text-align:center; color:#dc3545; font-weight:600; padding:14px;">
+
+                ⚠ No schemes found for this client.
+
+            </td>
+
+        </tr>
+
+    <?php else: ?>
+
+        <?php foreach ($schemes as $s): $schemeId = (int)$s['id']; ?>
+
+        <tr>
+
+            <td class="scheme-checkbox-cell" style="display:none;text-align:center;">
+
+                <input type="checkbox" class="scheme-row-checkbox">
+
+            </td>
+
+            <td class="present-scheme-name">
+
+                <input type="text" class="scheme-input" data-field="scheme_name" value="<?= htmlspecialchars($s['scheme_name']) ?>">
+
+            </td>
+
+            <td>
+
+                <input type="text" class="scheme-input" data-field="sip_swp" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
+
+            </td>
+
+            <td>
+
+                <input type="text" class="scheme-input" data-field="current_value" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
+
+            </td>
+
+            <td>
+
+                <select class="action-dropdown" data-field="action_step">
+
+                    <?php
+
+                    $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
+
+                    foreach ($steps as $step):
+
+                    ?>
+
+                        <option value="<?= $step ?>" <?= ($s['action_step'] ?? 'Continue') === $step ? 'selected' : '' ?>>
+
+                            <?= $step ?>
+
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
+
+            </td>
+
+            <td>
+
+                <input type="text" class="scheme-input" data-field="recommended_scheme" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
+
+            </td>
+
+            <td>
+
+                <input type="text" class="scheme-input" data-field="recommended_amount" value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>">
+
+            </td>
+
+            <input type="hidden" class="scheme-id" value="<?= $schemeId ?>">
+
+        </tr>
+
+        <?php endforeach; ?>
+
+    <?php endif; ?>
+
+    </tbody>
+
 </table>
 
-<!-- SAVE BUTTON -->
-<div style="margin:10px 0; text-align:right;">
-    <button type="button"
-            id="saveSchemesBtn"
-            class="wf-btn btn-ready"
-            <?= $isLocked ? 'disabled' : '' ?>>
-        💾 Save Scheme Selection
-    </button>
 
-    <span id="saveSchemesStatus"
-          style="margin-left:10px; font-size:13px; color:#28a745; display:none;">
-        ✓ Saved
-    </span>
+
+<div id="schemeTableActions" style="margin: 10px 0; display: flex; gap: 10px;">
+
+    <button type="button" id="toggleSchemeDeleteMode" class="wf-btn btn-reject" style="background:#f39c12;">🗑 Delete Mode</button>
+
+    <button type="button" id="addSchemeRow" class="wf-btn btn-ready" style="background:#27ae60;">+ Add Row</button>
+
+    <button type="button" id="deleteSelectedSchemes" class="wf-btn btn-reject" style="display:none;">Delete Selected</button>
+
+    <button type="button" id="saveAllSchemes" class="wf-btn btn-approve" style="background:#007bff;">💾 Save All Changes</button>
+
 </div>
 
+
+
 <script>
-function parseAmount(val) {
-    if (!val || val === '-') return 0;
 
-    let v = val.toString().toLowerCase().trim();
+// --- Scheme Table Manual Edit/Delete Mode Logic ---
 
-    // Remove currency symbols
-    v = v.replace(/₹/g, '').replace(/rs\.?/gi, '').replace(/,/g, '').trim();
+let schemeDeleteMode = false;
 
-    // Detect units
-    if (v.includes('cr')) {
-        return parseFloat(v) * 10000000;
-    }
-    if (v.includes('lakh')) {
-        return parseFloat(v) * 100000;
-    }
-    if (v.includes('k')) {
-        return parseFloat(v) * 1000;
-    }
 
-    return parseFloat(v) || 0;
-}
 
-document.getElementById('saveSchemesBtn')?.addEventListener('click', () => {
-    const rows = {};
+// Add checkboxes to each row (hidden by default)
 
-    document.querySelectorAll('.scheme-edit').forEach(el => {
-        const id = el.dataset.schemeId;
-        const field = el.dataset.field;
-        if (!rows[id]) rows[id] = {};
-        rows[id][field] = ['sip_swp','current_value','recommended_amount'].includes(field)
-            ? parseAmount(el.value)
-            : el.value.trim();
-    });
+function updateSchemeCheckboxesVisibility(show) {
 
-    document.querySelectorAll('.action-dropdown').forEach(sel => {
-        const id = sel.dataset.schemeId;
-        if (!rows[id]) rows[id] = {};
-        rows[id].action_step = sel.value;
-    });
+    document.querySelectorAll('#schemeTable tbody tr').forEach(tr => {
 
-    fetch('save_scheme_selection.php', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-            client_id: <?= (int)$clientId ?>,
-            schemes: rows
-        })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) {
-            const s = document.getElementById('saveSchemesStatus');
-            s.style.display = 'inline';
-            setTimeout(() => s.style.display = 'none', 2000);
-        } else {
-            alert('❌ Save failed');
+        let cb = tr.querySelector('.scheme-row-checkbox');
+
+        if (!cb) {
+
+            const td = document.createElement('td');
+
+            td.style.textAlign = 'center';
+
+            td.style.width = '32px';
+
+            td.className = 'scheme-checkbox-cell';
+
+            cb = document.createElement('input');
+
+            cb.type = 'checkbox';
+
+            cb.className = 'scheme-row-checkbox';
+
+            td.appendChild(cb);
+
+            tr.insertBefore(td, tr.firstChild);
+
         }
+
+        tr.querySelector('.scheme-checkbox-cell').style.display = show ? '' : 'none';
+
+        cb.checked = false;
+
     });
-});
 
-function autoFillSchemeName(select, schemeName) {
-    const input = document.getElementById('recommended_scheme_' + select.dataset.schemeId);
-    if (!input) return;
+    // Add/remove header cell
 
-    if (['Drop','Switch','Partially Redeem'].includes(select.value)) {
-        if (input.value.trim() === '') input.value = schemeName;
-    } else {
-        input.value = '';
-    }
+    document.querySelectorAll('.scheme-checkbox-header').forEach(th => {
+
+        th.style.display = show ? '' : 'none';
+
+    });
+
 }
+
+
+
+// Toggle Delete Mode
+
+document.getElementById('toggleSchemeDeleteMode').onclick = function() {
+
+    schemeDeleteMode = !schemeDeleteMode;
+
+    updateSchemeCheckboxesVisibility(schemeDeleteMode);
+
+    document.getElementById('deleteSelectedSchemes').style.display = schemeDeleteMode ? '' : 'none';
+
+    document.getElementById('addSchemeRow').style.display = schemeDeleteMode ? 'none' : '';
+
+    this.textContent = schemeDeleteMode ? 'Cancel Delete Mode' : '🗑 Delete Mode';
+
+    this.style.background = schemeDeleteMode ? '#c0392b' : '#f39c12';
+
+};
+
+
+
+// Add Row
+
+document.getElementById('addSchemeRow').onclick = function() {
+
+    const tbody = document.querySelector('#schemeTable tbody');
+
+    const tr = document.createElement('tr');
+
+    tr.innerHTML =
+
+        '<td class="scheme-checkbox-cell" style="display:none;text-align:center;"><input type="checkbox" class="scheme-row-checkbox"></td>' +
+
+        '<td class="present-scheme-name"><input type="text" class="scheme-input" data-field="scheme_name" placeholder="Scheme Name"></td>' +
+
+        '<td><input type="text" class="scheme-input" data-field="sip_swp" placeholder="SIP/SWP"></td>' +
+
+        '<td><input type="text" class="scheme-input" data-field="current_value" placeholder="Value"></td>' +
+
+        '<td><select class="action-dropdown" data-field="action_step">' +
+
+            '<option value="Continue">Continue</option>' +
+
+            '<option value="Drop">Drop</option>' +
+
+            '<option value="Switch">Switch</option>' +
+
+            '<option value="Partially Redeem">Partially Redeem</option>' +
+
+            '<option value="Under Observation">Under Observation</option>' +
+
+        '</select></td>' +
+
+        '<td><input type="text" class="scheme-input" data-field="recommended_scheme" placeholder="Recommended Scheme"></td>' +
+
+        '<td><input type="text" class="scheme-input" data-field="recommended_amount" placeholder="Amount/Note"></td>' +
+
+        '<input type="hidden" class="scheme-id" value="0">';
+
+    tbody.appendChild(tr);
+
+};
+
+
+
+// Delete Selected
+
+document.getElementById('deleteSelectedSchemes').onclick = function() {
+
+    const checked = Array.from(document.querySelectorAll('.scheme-row-checkbox:checked'));
+
+    if (checked.length === 0) return;
+
+    if (!confirm('Delete selected scheme rows?')) return;
+
+    // Collect IDs for DB deletion (only for rows with .scheme-id > 0)
+
+    const idsToDelete = [];
+
+    checked.forEach(cb => {
+
+        const tr = cb.closest('tr');
+
+        const id = tr.querySelector('.scheme-id')?.value;
+
+        if (id && id !== "0") idsToDelete.push(id);
+
+        tr.remove();
+
+    });
+
+    if (idsToDelete.length > 0) {
+
+        fetch('parsers.php', {
+
+            method: 'POST',
+
+            headers: {'Content-Type':'application/json'},
+
+            body: JSON.stringify({ action: 'delete_scheme_rows', scheme_ids: idsToDelete })
+
+        })
+
+        .then(r => r.json())
+
+        .then(res => {
+
+            if (!res.success) alert('Error deleting from database: ' + (res.error || ''));
+
+        });
+
+    }
+
+};
+
+
+
+// Save All Changes
+
+document.getElementById('saveAllSchemes').onclick = function() {
+
+    // Gather all rows (both existing and new)
+
+    const rows = [];
+
+    document.querySelectorAll('#schemeTable tbody tr').forEach(tr => {
+
+        const row = {};
+
+        row.id = tr.querySelector('.scheme-id')?.value || 0;
+
+        tr.querySelectorAll('.scheme-input, .action-dropdown').forEach(input => {
+
+            const field = input.getAttribute('data-field');
+
+            row[field] = input.value;
+
+        });
+
+        rows.push(row);
+
+    });
+
+    fetch('parsers.php', {
+
+        method: 'POST',
+
+        headers: {'Content-Type':'application/json'},
+
+        body: JSON.stringify({ action: 'save_scheme_table', client_id: <?= (int)$clientId ?>, rows: rows })
+
+    })
+
+    .then(r => r.json())
+
+    .then(res => {
+
+        if (res.success) {
+
+            alert('Schemes saved!');
+
+            location.reload();
+
+        } else {
+
+            alert('Error saving: ' + (res.error || ''));
+
+        }
+
+    });
+
+};
+
+
+
+// On page load, hide checkboxes
+
+updateSchemeCheckboxesVisibility(false);
+
 </script>
+
 <!-- =========================
+
      End Appropriate Scheme Selection
+
      ========================= -->
-
-
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
