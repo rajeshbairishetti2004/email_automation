@@ -32,6 +32,9 @@ if (isset($schemes) && is_array($schemes)) {
     }
 } //
 ?>
+<script>
+window.CLIENT_ID = <?= (int)$clientId ?>;
+</script>
 
 <style>
 /* 1. Toggle Button at Bottom Right */
@@ -185,7 +188,48 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
     <?php endforeach; ?>
 </div>
 
+
 <script>
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('action-dropdown')) {
+        autoSaveSchemeRow(e.target.closest('tr'));
+    }
+});
+
+function autoSaveSchemeRow(row) {
+    if (!row || !window.CLIENT_ID) return;
+
+    const idInput = row.querySelector('.scheme-id');
+
+    const payload = {
+        action: 'save_scheme_table',
+        client_id: window.CLIENT_ID,
+        rows: [{
+            id: idInput ? idInput.value : 0,
+            scheme_name: row.querySelector('[data-field="scheme_name"]')?.value || '',
+            sip_swp: row.querySelector('[data-field="sip_swp"]')?.value || '',
+            current_value: row.querySelector('[data-field="current_value"]')?.value || '',
+            action_step: row.querySelector('.action-dropdown')?.value || '',
+            recommended_scheme: row.querySelector('[data-field="recommended_scheme"]')?.value || '',
+            recommended_amount: row.querySelector('[data-field="recommended_amount"]')?.value || ''
+        }]
+    };
+
+    fetch('parsers.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(resp => {
+        if (!resp.success) {
+            console.error('Auto-save failed', resp);
+        }
+    })
+    .catch(err => console.error('Auto-save error', err));
+}
+
 /**
  * Toggles the recommendation panel visibility
  */
@@ -208,27 +252,43 @@ function toggleRecommendations() {
  * Updates the dropdown in the main table and saves via existing AJAX
  */
 function applyStrategy(schemeId, value) {
-    const dropdown = document.querySelector(`select[data-scheme-id="${schemeId}"]`);
-    
-    if (dropdown) {
-        dropdown.value = value;
-        
-        // Trigger 'change' for existing AJAX auto-save
-        const event = new Event('change', { bubbles: true });
-        dropdown.dispatchEvent(event);
-        
-        // Visual feedback in table
-        dropdown.parentElement.style.backgroundColor = "#dcfce7";
-        setTimeout(() => { dropdown.parentElement.style.backgroundColor = "transparent"; }, 1500);
+    const row = Array.from(document.querySelectorAll('input.scheme-id'))
+        .find(el => el.value == schemeId)
+        ?.closest('tr');
 
-        // Remove card from UI
-        dismissStrategy(schemeId, null);
-        
-        if(typeof showToast === 'function') {
-            showToast(`Applied "${value}" to scheme.`);
-        }
+    if (!row) return;
+
+    const actionDropdown = row.querySelector('.action-dropdown');
+    const presentSchemeInput = row.querySelector('[data-field="scheme_name"]');
+    const recommendedSchemeInput = row.querySelector('[data-field="recommended_scheme"]');
+
+    if (!actionDropdown) return;
+
+    // 1️⃣ Set Action Step
+    actionDropdown.value = value;
+
+    // 2️⃣ Auto-fill Recommended Scheme
+    if (value !== 'Continue' && presentSchemeInput && recommendedSchemeInput) {
+        recommendedSchemeInput.value = presentSchemeInput.value;
+    }
+
+    // 3️⃣ Auto-save immediately
+    autoSaveSchemeRow(row);
+
+    // 4️⃣ Visual feedback
+    actionDropdown.style.backgroundColor = "#dcfce7";
+    setTimeout(() => {
+        actionDropdown.style.backgroundColor = "transparent";
+    }, 1200);
+
+    // 5️⃣ Remove popup
+    dismissStrategy(schemeId, null);
+
+    if (typeof showToast === 'function') {
+        showToast(`"${value}" saved successfully`);
     }
 }
+
 
 /**
  * Removes card and checks if panel should auto-close

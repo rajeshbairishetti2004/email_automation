@@ -529,6 +529,7 @@ function parseGoalStatusPdf(string $path): array
         'goals'       => $goals,
     ];
 }
+
 function buildClientReports(array $pv, array $aa, array $rst, array $ps, array $pdfGoal): array {
     $clients    = [];
     $targetName = $pdfGoal['client_name'] ?? null;
@@ -602,9 +603,18 @@ foreach ($ps as $client => $summary) {
 
         // CRITICAL FIX: If the Portfolio Summary has an absolute return, 
         // map it into the totals section so view_report.php picks it up.
-        if (isset($summary['absolute_return']) && $summary['absolute_return'] != 0) {
-            $clients[$client]['current']['totals']['absolute_return'] = $summary['absolute_return'];
-        }
+if (
+    isset($summary['absolute_return']) &&
+    $summary['absolute_return'] != 0 &&
+    (
+        !isset($clients[$client]['current']['totals']['absolute_return']) ||
+        $clients[$client]['current']['totals']['absolute_return'] == 0
+    )
+) {
+    // Only use Portfolio Summary if Valuation did NOT provide absolute return
+    $clients[$client]['current']['totals']['absolute_return'] = $summary['absolute_return'];
+}
+
     }
 
     // Inside buildClientReports function
