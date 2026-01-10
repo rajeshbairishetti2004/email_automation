@@ -1,8 +1,9 @@
 ﻿<?php
 // client_communication.php
 // Complete standalone template management for greeting, intro, and closing sections
+// Also handles workflow actions and auto-save
 
-// Handle AJAX requests for template management
+// Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     ob_start();
     header('Content-Type: application/json');
@@ -14,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         require_once 'db_config.php';
         $pdo = getPdo();
         
+        // Template management actions
         if ($action === 'edit_template') {
             $stmt = $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?");
             $stmt->execute([
@@ -46,14 +48,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $response['new_id'] = $newId;
             $response['template_name'] = $name;
             $response['template_content'] = $content;
-        } else {
-            throw new Exception('Invalid action');
+        }
+        // Workflow actions
+        elseif ($action === 'save_draft') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+
+            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', draft_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
+            $stmt->execute([':id' => $clientId]);
+            echo json_encode(['success' => true, 'message' => 'Draft saved successfully.', 'updated_state' => 'draft']);
+            exit;
+        }
+        elseif ($action === 'ready_for_review') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+
+            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'ready', ready_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
+            $stmt->execute([':id' => $clientId]);
+            echo json_encode(['success' => true, 'message' => 'Report marked Ready for Review.', 'updated_state' => 'ready']);
+            exit;
+        }
+        elseif ($action === 'approve_review') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+
+            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'reviewed', reviewed_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
+            $stmt->execute([':id' => $clientId]);
+            echo json_encode(['success' => true, 'message' => 'Report Approved (Reviewed).', 'updated_state' => 'reviewed']);
+            exit;
+        }
+        elseif ($action === 'review_not_ok') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $comment  = trim($_POST['review_comment'] ?? '');
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+            if (empty($comment)) throw new Exception("A comment is required for rejection.");
+
+            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', review_not_ok = 1, review_comment = :comment WHERE id = :id");
+            $stmt->execute([':id' => $clientId, ':comment' => $comment]);
+            echo json_encode(['success' => true, 'message' => 'Report rejected and moved back to Draft.', 'updated_state' => 'draft']);
+            exit;
+        }
+        elseif ($action === 'email_sent') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+            
+            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :id");
+            $stmt->execute([':id' => $clientId]);
+            echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
+            exit;
+        }
+        // Auto-save client field (from view_report.php blur event)
+        elseif ($action === 'save_client_field') {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $field = trim($_POST['field'] ?? '');
+            $value = trim($_POST['value'] ?? '');
+            
+            if ($clientId <= 0) throw new Exception("Invalid Client ID.");
+            if (empty($field)) throw new Exception("Field name is required.");
+            
+            // Validate field name to prevent SQL injection
+            $allowedFields = ['greeting_prefix', 'intro_text', 'closing_text'];
+            if (!in_array($field, $allowedFields)) {
+                throw new Exception("Invalid field name.");
+            }
+            
+            $stmt = $pdo->prepare("UPDATE clients SET $field = ? WHERE id = ?");
+            $stmt->execute([$value, $clientId]);
+            echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved successfully.']);
+            exit;
+        }
+        else {
+            // Unknown action
+            echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
+            exit;
         }
         
+        // Only for template actions that haven't exited yet
         ob_end_clean();
         echo json_encode($response);
         exit;
-    } catch (Exception $e) {
+        
+    } catch (Throwable $e) {
+        // Clean output buffer and return error
         ob_end_clean();
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         exit;
@@ -169,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     outline-offset: 2px;
 }
 
-/* Only ONE .comm-textarea block should exist: */
+/* Textarea with auto-grow */
 .comm-textarea {
     width: 100%;
     padding: 12px;
@@ -366,7 +442,7 @@ foreach ($sections as $sec => $data):
         });
     }
 
-    // Auto-save on blur (just like rationale)
+    // Auto-save on blur (using client_communication.php endpoint)
     textarea.addEventListener('blur', function() {
         if (isLocked) return;
         
@@ -375,13 +451,13 @@ foreach ($sections as $sec => $data):
         const value = textarea.value.trim();
 
         if (clientId && field) {
-            fetch('view_report.php', {
+            fetch('client_communication.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                 },
                 body: new URLSearchParams({
-                    ajax: '1',
+                    ajax_action: 'save_client_field',
                     client_id: clientId,
                     field: field,
                     value: value
@@ -534,6 +610,43 @@ foreach ($sections as $sec => $data):
                 }
             })
             .catch(() => showFlash('error', 'Network error while saving template.'))
+            .finally(() => setButtonsDisabled(false));
+        });
+    }
+
+    // Delete: delete selected template
+    if (delBtn) {
+        delBtn.addEventListener('click', function() {
+            if (isLocked) return;
+            
+            const id = selector.value;
+            if (!id || id === '0') {
+                showFlash('error', 'Please select a template to delete.');
+                return;
+            }
+            if (!confirm('Delete selected template? This cannot be undone.')) return;
+
+            setButtonsDisabled(true);
+            const body = new URLSearchParams();
+            body.append('ajax_action', 'delete_template');
+            body.append('template_id', id);
+
+            fetch('client_communication.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.success) {
+                    removeTemplateOption(id);
+                    selector.value = '0';
+                    showFlash('success', 'Template deleted successfully.');
+                } else {
+                    showFlash('error', 'Delete failed: ' + (data.error || 'Unknown'));
+                }
+            })
+            .catch(() => showFlash('error', 'Network error while deleting template.'))
             .finally(() => setButtonsDisabled(false));
         });
     }
