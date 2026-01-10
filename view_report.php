@@ -132,42 +132,6 @@ if (!function_exists('getNextClientId')) {
 }
 // --------------------------------------------------------------------------
 
-/* ---------- HANDLE AJAX REQUESTS (INLINE FIELD SAVE - e.g., signature block) ---------- */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax']) && $_POST['ajax'] === '1') {
-    header('Content-Type: application/json');
-    $clientId = (int)($_POST['client_id'] ?? 0);
-    $field = trim($_POST['field'] ?? '');
-    $value = $_POST['value'] ?? '';
-
-    if ($clientId <= 0 || empty($field)) {
-        echo json_encode(['success' => false, 'error' => 'Invalid parameters.']);
-        exit;
-    }
-
-    // Security: Whitelist allowed fields
-    $allowedFields = ['signature_block', 'greeting_prefix', 'intro_text', 'closing_text', 'rationale_text'];
-    
-    if (!in_array($field, $allowedFields)) {
-        echo json_encode(['success' => false, 'error' => 'Invalid field name.']);
-        exit;
-    }
-
-    try {
-        // All fields directly map to column names in the clients table
-        $stmt = $pdo->prepare("UPDATE clients SET {$field} = :value WHERE id = :id");
-        $stmt->execute([':value' => $value, ':id' => $clientId]);
-        
-        echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved.']); 
-        exit; 
-    } catch (PDOException $e) {
-        error_log("AJAX Save Error: " . $e->getMessage());
-        http_response_code(500); 
-        echo json_encode(['success' => false, 'error' => 'Database update failed.']);
-        exit; 
-    }
-}
-// ---------------------------------------------------------------
-
 
 /* ---------- HANDLE AJAX REQUESTS (USER RATIONALE TEMPLATE MANAGEMENT) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
@@ -643,8 +607,6 @@ $DEFAULT_INTRO     = 'Introduction';
 $DEFAULT_CLOSING   = 'Closing remarks';
 $DEFAULT_RATIONALE = 'Rationale for recommendations';
 
-// DYNAMIC DEFAULT SIGNATURE BLOCK (Uses logged-in user details)
-$DEFAULT_SIGNATURE = "Regards,\n\n{$rmName},\n{$rmDesignation},\nFinance Doctor Private Limited.\n\nMobile - {$rmMobile}.\nEmail - {$rmEmail}\nUrl: www.financedoctor.in";
 
 // MERGED: Combine greeting, intro, and closing into ONE message
 $clientMessageParts = [];
@@ -673,9 +635,6 @@ if ($closingTextStored !== '') {
 $clientMessage = implode("\n\n", $clientMessageParts);
 
 $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
-
-// Use stored signature if saved, otherwise use the dynamically generated default.
-$signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATURE; 
 
 
 ?>
@@ -1012,8 +971,6 @@ $signatureBlock = $signatureStored !== '' ? $signatureStored : $DEFAULT_SIGNATUR
 </style>
 
 </style>
-
-    </style>
 </head>
 <body>
 
@@ -2609,23 +2566,7 @@ updateSchemeCheckboxesVisibility(false);
                             value: value
                         })
                     })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            if (field !== 'signature_block' && field !== 'rationale' && field !== 'client_message') {
-                                showToast('Saved ' + field); 
-                            }
-                            // Special case: If signature was saved via blur, update the local variable
-                            if (field === 'signature_block' && typeof signatureOriginalContent !== 'undefined') {
-                                signatureOriginalContent = value;
-                            }
-                        } else {
-                            alert('Save failed: ' + (data.error || 'Unknown error'));
-                        }
-                    })
-                    .catch(err => {
-                        console.error('Save error:', err);
-                    });
+                    
                 }
             });
         });
@@ -2711,8 +2652,8 @@ updateSchemeCheckboxesVisibility(false);
 
         // Update totals based on current input values
         function updateTotals() {
-            let totalCurrent = 0;
             let totalSip = 0;
+            let totalCurrent = 0;
 
             document.querySelectorAll('.goal-input').forEach(function(input) {
                 const field = input.getAttribute('data-field');
@@ -2886,7 +2827,6 @@ updateSchemeCheckboxesVisibility(false);
                     statusSpan.style.display = 'inline';
                     alert('Error saving goals: ' + err.message + '\nCheck console for details.');
                 });
-            });
         }
 
         // Function to save all goal inputs synchronously
@@ -3212,7 +3152,7 @@ updateSchemeCheckboxesVisibility(false);
             body: formData
         })
         .then(response => response.json().catch(() => ({ success:false, error:'Invalid JSON from server' })))
-        .then(data => {
+        .then data => {
             document.getElementById('upload_spinner').style.display = 'none';
 
             // Remove all provisional placeholders
