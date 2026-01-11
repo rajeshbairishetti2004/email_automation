@@ -179,11 +179,11 @@
 }
 
 .status-on {
-    background-color: #43e584;
+    background-color: #0aa914;
 }
 
 .status-off {
-    background-color: #ef5f5f;
+    background-color: #f44d0b;
 }
 
 /* Remove border radius from all cells */
