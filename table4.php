@@ -146,18 +146,102 @@ try {
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     overflow: hidden;
 }
-.report-table#schemeTable th, .report-table#schemeTable td {
+.report-table#schemeTable th,
+.report-table#schemeTable td {
     border: 1px solid #e0e0e0;
     padding: 8px 10px;
     text-align: center;
     font-size: 14px;
+    min-height: 44px;
+    height: 44px;
+    line-height: 1.3;
+    vertical-align: middle;
+    /* Allow wrapping for long text */
+    white-space: normal;
+    word-break: break-word;
+    padding-top: 10px;
+    padding-bottom: 10px;
 }
-.report-table#schemeTable th {
-    background: #0288D1;
-    font-weight: 600;
+
+/* Set specific widths for columns */
+/* Present Schemes - Scheme Name (make much wider for long names) */
+.report-table#schemeTable th:nth-child(2),
+.report-table#schemeTable td:nth-child(2) {
+    width: 370px;
+    min-width: 300px;
+    max-width: 600px;
+    white-space: normal;
+    word-break: break-word;
 }
+
+/* SIP / SWP (narrower) */
+.report-table#schemeTable th:nth-child(3),
+.report-table#schemeTable td:nth-child(3) {
+    width: 90px;
+    min-width: 70px;
+    max-width: 110px;
+    white-space: nowrap;
+}
+
+/* Value as of (narrower) */
+.report-table#schemeTable th:nth-child(4),
+.report-table#schemeTable td:nth-child(4) {
+    width: 100px;
+    min-width: 80px;
+    max-width: 120px;
+    white-space: nowrap;
+}
+
+/* Action Step */
+.report-table#schemeTable th:nth-child(5),
+.report-table#schemeTable td:nth-child(5) {
+    width: 120px;
+    min-width: 100px;
+    max-width: 150px;
+    white-space: nowrap;
+}
+
+/* Scheme Changes - Scheme Name (allow wrapping and enough height for 2 lines) */
+.report-table#schemeTable th:nth-child(6),
+.report-table#schemeTable td:nth-child(6) {
+    width: 200px;
+    min-width: 120px;
+    max-width: 250px;
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: middle;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* Make input fields in Scheme Changes - Scheme Name wrap and allow 2 rows */
+.report-table#schemeTable td:nth-child(6) .scheme-input {
+    min-height: 38px;
+    height: auto;
+    line-height: 1.3;
+    display: block;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    resize: none;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* Amount (narrower) */
+.report-table#schemeTable th:nth-child(7),
+.report-table#schemeTable td:nth-child(7) {
+    width: 80px;
+    min-width: 60px;
+    max-width: 100px;
+    white-space: nowrap;
+}
+
+/* Make input fields expand to fit content and wrap text if needed */
 .scheme-input {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     padding: 6px 8px;
     font-size: 14px;
     border: none;
@@ -165,12 +249,23 @@ try {
     text-align: center;
     outline: none;
     transition: background 0.2s;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    min-height: 38px;
+    height: 38px;
+    line-height: 1.3;
+    display: block;
+    vertical-align: middle;
+    /* Remove overflow hidden to allow full text */
+    overflow: visible;
 }
-.scheme-input:focus {
-    background: #e3f2fd;
-}
+
+/* For select dropdowns, allow full width */
 .action-dropdown {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     padding: 6px 8px;
     font-size: 14px;
     border-radius: 4px;
@@ -233,17 +328,21 @@ try {
     <thead>
         <tr>
             <th style="display:none;" class="scheme-checkbox-header"></th>
-            <th colspan="3">Present Schemes</th>
-            <th rowspan="2">Action Step</th>
-            <th colspan="2">Scheme Changes</th>
+            <th colspan="3" style=" background: #0288D1; color:white;">Present Schemes</th>
+            <th rowspan="2" style=" background: #0288D1; color:white;">Action Step</th>
+            <th colspan="2" style=" background: #219150; color:white;">Scheme Changes</th>
         </tr>
         <tr>
             <th style="display:none;" class="scheme-checkbox-header"></th>
-            <th>Scheme Name</th>
-            <th>SIP / SWP</th>
-            <th>Value as of <?= htmlspecialchars($asOn) ?></th>
-            <th>Scheme Name</th>
-            <th>Amount</th>
+            <th style=" background: #0288D1; color:white;">Scheme Name</th>
+            <th style=" background: #0288D1; color:white;">SIP / SWP</th>
+            <th style=" background: #0288D1; color:white;">
+            Value as of<br>
+           <?= htmlspecialchars($asOn) ?>
+           </th>
+
+            <th style="background: #219150; color:white;">Scheme Name</th>
+            <th style="background: #219150; color:white;">Amount</th>
         </tr>
     </thead>
     <tbody>
@@ -283,7 +382,11 @@ try {
                 </select>
             </td>
             <td>
-                <input type="text" class="scheme-input"  data-field="recommended_scheme" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['recommended_scheme'] ?? '') ?>">
+                <textarea class="scheme-input scheme-textarea"
+          data-field="recommended_scheme"
+          data-scheme-id="<?= $schemeId ?>"
+          rows="2"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
+
             </td>
             <td>
                 <input type="text" class="scheme-input" data-field="recommended_amount" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>">
@@ -343,14 +446,14 @@ document.getElementById('addSchemeRow').onclick = function() {
     fetch('table4.php', {
         method: 'POST',
         body: form
-    })
+    })  
     .then(r => r.json())
     .then(res => {
         if (res.success) location.reload();
     });
 };
 
-// FIX 2: Only remove row after server confirms delete
+// FIX 1: Correct JS syntax error in delete fetch
 document.getElementById('deleteSelectedSchemes').onclick = function () {
     const checked = [...document.querySelectorAll('.scheme-row-checkbox:checked')];
     if (checked.length === 0) return;
@@ -373,7 +476,6 @@ document.getElementById('deleteSelectedSchemes').onclick = function () {
         .then(r => r.json())
         .then(res => {
             if (res.success) {
-                // ✅ NOW remove rows from UI
                 checked.forEach(cb => cb.closest('tr').remove());
             } else {
                 alert('Delete failed: ' + (res.error || 'Unknown error'));
@@ -405,12 +507,39 @@ function autoSaveSchemeField(schemeId, field, value) {
     });
 }
 
+// FIX: Autosave textarea reliably (debounced on input)
+document.querySelector('#schemeTable').addEventListener('input', function (e) {
+    if (!e.target.classList.contains('scheme-textarea')) return;
+
+    const field = e.target.getAttribute('data-field');
+    const value = e.target.value;
+    const schemeId = e.target.getAttribute('data-scheme-id') || 0;
+
+    // Debounce to avoid saving on every keystroke
+    clearTimeout(e.target._saveTimer);
+    e.target._saveTimer = setTimeout(() => {
+        autoSaveSchemeField(schemeId, field, value);
+    }, 600);
+});
+
+// FIX 2: Fallback for textarea autosave on change (for paste/autofill/focusout)
+document.querySelector('#schemeTable').addEventListener('change', function (e) {
+    if (!e.target.classList.contains('scheme-textarea')) return;
+
+    const field = e.target.getAttribute('data-field');
+    const value = e.target.value;
+    const schemeId = e.target.getAttribute('data-scheme-id') || 0;
+
+    autoSaveSchemeField(schemeId, field, value);
+});
+
 document.querySelectorAll('#schemeTable').forEach(function(table) {
     table.addEventListener('blur', function(e) {
         const input = e.target;
-        if (input.classList.contains('scheme-input')) {
+        // Only autosave on blur for non-textarea inputs
+        if (input.classList.contains('scheme-input') && !input.classList.contains('scheme-textarea')) {
             const field = input.getAttribute('data-field');
-            let value = input.value;
+            let value = input.value;    
             const schemeId = input.getAttribute('data-scheme-id') || 0;
             autoSaveSchemeField(schemeId, field, value);
         }
