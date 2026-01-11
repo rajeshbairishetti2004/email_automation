@@ -98,11 +98,78 @@ if (!isset($newSchemes)) {
 }
 ?>
 
+<style>
+/* --- Recommended Schemes Table Styles --- */
+.recommended-schemes-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    overflow: hidden;
+}
+.recommended-schemes-table th, .recommended-schemes-table td {
+    border: 1px solid #e0e0e0;
+    padding: 8px 10px;
+    text-align: center;
+    font-size: 14px;
+}
+.recommended-schemes-table th {
+    background: #0288D1;
+    font-weight: 600;
+}
+.recommended-scheme-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 14px;
+    border: none;
+    background: transparent;
+    text-align: center;
+    outline: none;
+    transition: background 0.2s;
+}
+.recommended-scheme-input:focus {
+    background: #e3f2fd;
+}
+.recommended-schemes-actions {
+    margin: 10px 0;
+    display: flex;
+    gap: 10px;
+}
+.wf-btn.btn-add {
+    background: #27ae60;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.wf-btn.btn-add:hover {
+    background: #219150;
+}
+.wf-btn.btn-delete {
+    background: #f39c12;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.wf-btn.btn-delete:hover {
+    background: #c0392b;
+}
+</style>
+
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
         Recommended Schemes
     </h3>
-    <table class="table" id="newSchemesTable" style="width: 100%; margin-bottom: 15px;">
+    <table class="table recommended-schemes-table" id="newSchemesTable" style="width: 100%; margin-bottom: 15px;">
         <thead>
             <tr style="background: #f8f9fa;">
                 <th style="padding: 10px;">Scheme Name</th>
@@ -118,7 +185,7 @@ if (!isset($newSchemes)) {
                         <input type="text" 
                                name="new_scheme_name[]" 
                                value="<?php echo htmlspecialchars($ns['scheme_name']); ?>" 
-                               class="form-control scheme-input" 
+                               class="form-control scheme-input recommended-scheme-input" 
                                placeholder="e.g. HDFC Top 100" 
                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                     </td>
@@ -126,7 +193,7 @@ if (!isset($newSchemes)) {
                         <input type="text" 
                                name="new_scheme_amount[]" 
                                value="<?php echo htmlspecialchars($ns['amount']); ?>" 
-                               class="form-control scheme-input" 
+                               class="form-control scheme-input recommended-scheme-input" 
                                placeholder="Enter amount" 
                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                     </td>
@@ -160,7 +227,7 @@ function addNewSchemeRow() {
             <td>
                 <input type="text" 
                        name="new_scheme_name[]" 
-                       class="form-control scheme-input" 
+                       class="form-control scheme-input recommended-scheme-input" 
                        placeholder="e.g. HDFC Top 100" 
                        oninput="debouncedSave()" 
                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
@@ -168,7 +235,7 @@ function addNewSchemeRow() {
             <td>
                 <input type="text" 
                        name="new_scheme_amount[]" 
-                       class="form-control scheme-input" 
+                       class="form-control scheme-input recommended-scheme-input" 
                        placeholder="Enter amount" 
                        oninput="debouncedSave()" 
                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">

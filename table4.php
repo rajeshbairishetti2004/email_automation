@@ -124,6 +124,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
      4. Appropriate Scheme Selection
      ========================= -->
 
+<style>
+/* --- Table 4: Appropriate Scheme Selection Styles --- */
+.report-table#schemeTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    overflow: hidden;
+}
+.report-table#schemeTable th, .report-table#schemeTable td {
+    border: 1px solid #e0e0e0;
+    padding: 8px 10px;
+    text-align: center;
+    font-size: 14px;
+}
+.report-table#schemeTable th {
+    background: #0288D1;
+    font-weight: 600;
+}
+.scheme-input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 14px;
+    border: none;
+    background: transparent;
+    text-align: center;
+    outline: none;
+    transition: background 0.2s;
+}
+.scheme-input:focus {
+    background: #e3f2fd;
+}
+.action-dropdown {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.action-dropdown:focus {
+    border-color: #0288D1;
+}
+#schemeTableActions {
+    margin: 10px 0;
+    display: flex;
+    gap: 10px;
+}
+.wf-btn.btn-reject {
+    background: #f39c12;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.wf-btn.btn-reject:hover {
+    background: #c0392b;
+}
+.wf-btn.btn-ready {
+    background: #27ae60;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.wf-btn.btn-ready:hover {
+    background: #219150;
+}
+.scheme-checkbox-cell {
+    width: 32px;
+    text-align: center;
+}
+.scheme-row-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.present-scheme-name input {
+    min-width: 120px;
+}
+</style>
+
 <h3>4. Appropriate Scheme Selection</h3>
 
 <table class="report-table" id="schemeTable">
