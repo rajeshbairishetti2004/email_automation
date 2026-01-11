@@ -903,6 +903,51 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
             transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         
+        /* Loading states for workflow */
+.wf-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.wf-loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    display: none;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
 <style>
 /* Save Current Situation hover */
 #saveCurrentSituation {
@@ -979,7 +1024,7 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
     $statusClass = 'status-' . $reportState;
     $statusText = ucfirst($reportState);
     $borderColor = '#999';
-    
+
     if ($reviewNotOk == 1) {
         $statusClass = 'status-rejected';
         $statusText = 'Reviewed Not OK';
@@ -993,7 +1038,7 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
         $borderColor = '#007bff';
     }
 ?>
-
+<!-- WORKFLOW BAR -->
 <div class="workflow-bar" style="border-left-color: <?= $borderColor ?>;">
     <div class="workflow-status">
         <span style="font-size: 12px; color: #666; margin-right: 10px;">Status:</span>
@@ -1001,33 +1046,9 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
             <?= $statusText ?>
         </span>
     </div>
-
-    <div class="workflow-actions">
-        <?php if ($isARM): ?>
-            <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
-                <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
-                <button type="button" class="wf-btn btn-ready" onclick="openComplianceModal()">Mark Ready for Review</button>
-            <?php endif; ?>
-            
-            <?php if ($reportState == 'reviewed' && $reviewNotOk == 0): ?>
-                <span style="font-size: 13px; color: #28a745; font-weight: 600;">Approved. You can send email below.</span>
-            <?php endif; ?>
-        <?php endif; ?>
-
-        <?php if ($isRM): ?>
-            <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
-                <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
-                <button type="button" class="wf-btn btn-ready" onclick="openComplianceModal()">Mark Ready for Review</button>
-            <?php endif; ?>
-
-            <?php if ($reportState == 'ready' && $reviewNotOk == 0): ?>
-                <button type="button" class="wf-btn btn-approve" onclick="submitWorkflow('approve_review')">Approve (Reviewed OK)</button>
-                <button type="button" class="wf-btn btn-reject" onclick="openRejectModal()">Reject (Not OK)</button>
-            <?php endif; ?>
-        <?php endif; ?>
-    </div>
+    <!-- WORKFLOW BUTTONS (OUTSIDE FORM, REMOVE THIS BLOCK IF IT EXISTS) -->
+    <!-- Remove any .workflow-actions block here -->
 </div>
-
 <?php if ($reviewNotOk == 1 && !empty($reviewComment)): ?>
     <div style="max-width: 1200px; margin: 0 auto 20px auto; padding: 0 20px;">
         <div style="background: #fff3cd; border-left: 5px solid #dc3545; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -1041,10 +1062,10 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
         </div>
     </div>
 <?php endif; ?>
-<div class="main-content">
 
- 
-    <div class="nav-bar">
+<div class="main-content">
+    <!-- ADD NAVIGATION BUTTONS HERE -->
+    <div class="nav-bar" style="margin-bottom: 20px;">
         <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
         <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
         <?php if ($prevId): ?>
@@ -1055,73 +1076,74 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
         <?php endif; ?>
         <button type="button" onclick="window.print()" class="nav-button">Print</button>
     </div>
-
-    <?php if (isset($_GET['sent']) && $_GET['sent'] == '1'): ?>
-        <div class="flash-message flash-success">Email sent successfully.</div>
-    <?php elseif (isset($_GET['sent_error']) && $_GET['sent_error'] == '1'): ?>
-        <div class="flash-message flash-error">
-            ❌ Failed to send email.<br>
-            <strong>Error Detail:</strong> <?php echo htmlspecialchars($_GET['msg'] ?? 'Unknown error'); ?>
-        </div>
-    <?php elseif (isset($_GET['saved']) && $_GET['saved'] == '1'): ?>
-        <div class="flash-message flash-success">✅ Report saved successfully!</div>
-    <?php elseif (isset($_GET['initial_save']) && $_GET['initial_save'] == '1'): ?>
-        <div class="flash-message flash-success">✅ Report for <strong><?php echo htmlspecialchars($name); ?></strong> created successfully as draft! You can now edit and save the details.</div>
-    <?php elseif (isset($_GET['save_error']) && $_GET['save_error'] == '1'): ?>
-        <div class="flash-message flash-error">❌ Failed to save report. Please try again.</div>
-    <?php endif; ?>
-
-    <?php if ($reportState == 'reviewed' && $reviewNotOk == 0): ?>
-        <div style="margin-bottom: 20px;">
-            <?php 
-            // Pass the logged-in user's email as the default sender for the email form
-            $default_sender_email = $currentUser['email'] ?? '';
-            require 'send_email.php'; 
-            ?>
-        </div>
-    <?php endif; ?>
-
-    <h1>Client Report</h1>
-    <h2><?php echo htmlspecialchars($name); ?></h2>
-
+    <!-- ...existing code... -->
     <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
-
+        <!-- Show send_email.php only if reviewed and not rejected -->
+        <?php if ($reportState === 'reviewed' && $reviewNotOk === 0): ?>
+            <div style="margin-bottom: 20px;">
+                <?php
+                $default_sender_email = $currentUser['email'] ?? '';
+                require 'send_email.php';
+                ?>
+            </div>
+        <?php endif; ?>
         <form method="POST" id="reportForm">
-                        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
             <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-            
             <input type="hidden" name="workflow_action" id="workflowActionInput" value="">
             <input type="hidden" name="review_comment" id="reviewCommentInput" value="">
 
-            <?php require_once 'client_communication.php'; ?>
-            
-<?php
-// Logic to determine if editing is allowed (Draft, Ready for Review, or Rejected)
-$canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $reviewNotOk == 1);
-?>
-                <?php include 'report_attachments.php'; ?>
-            
-            
+            <!-- WORKFLOW BUTTONS (INSIDE FORM, ONLY HERE) -->
+            <div class="workflow-actions">
+                <?php if ($isARM): ?>
+                    <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
+                        <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
+                        <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+                    <?php endif; ?>
+                    <?php if ($reportState == 'reviewed' && $reviewNotOk === 0): ?>
+                        <span style="font-size: 13px; color: #28a745; font-weight: 600;">✓ Approved. You can send email below.</span>
+                    <?php endif; ?>
+                <?php endif; ?>
 
+                <?php if ($isRM): ?>
+                    <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
+                        <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
+                        <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
+                    <?php endif; ?>
+                    <?php if ($reportState == 'ready' && $reviewNotOk === 0): ?>
+                        <button type="button" class="wf-btn btn-approve" onclick="submitWorkflow('approve_review')">Approve (Reviewed OK)</button>
+                        <button type="button" class="wf-btn btn-reject" onclick="submitWorkflow('review_not_ok')">Reject (Not OK)</button>
+                    <?php endif; ?>
+                    <?php if ($reportState == 'reviewed' && $reviewNotOk === 0): ?>
+                        <span style="font-size: 13px; color: #28a745; font-weight: 600;">✓ Approved. You can send email below.</span>
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($reportState == 'sent'): ?>
+                    <span style="font-size: 13px; color: #007bff; font-weight: 600;">✓ Email Sent</span>
+                <?php endif; ?>
+            </div>
+            <!-- END WORKFLOW BUTTONS INSIDE FORM -->
+
+            <?php require_once 'client_communication.php'; ?>
+            <?php
+            // Logic to determine if editing is allowed (Draft, Ready for Review, or Rejected)
+            $canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $reviewNotOk == 1);
+            ?>
+            <?php include 'report_attachments.php'; ?>
+
+            <!-- ADD THE MISSING TABLE INCLUDES HERE -->
             <?php require_once 'table1.php'; ?>
             <?php require_once 'table2.php'; ?>
-             <?php require_once 'table3.php'; ?>
+            <?php require_once 'table3.php'; ?>
             <?php require_once 'table4.php'; ?>
-
 
             <?php require_once 'recommended_schemes.php'; ?>
             <?php require_once 'rationale.php'; ?>
-            <?php require_once 'recommendations.php'; ?>    
+            <?php require_once 'recommendations.php'; ?>
             <?php require_once 'annexures.php'; ?>
             <?php require_once 'signature.php'; ?>
-
         </form>
-
     </div>
-
 </div>
-
-<div id="toast" class="toast"></div>
 
 <!-- Compliance Checklist Modal -->
 <div id="complianceModal" class="modal-overlay">
@@ -1705,7 +1727,6 @@ $canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $
                     .catch(err => console.error(err));
                 }
             });
-            });
         }
 
         // Immediately-responding Portfolio Tenure handler (improved: swaps label and value)
@@ -1777,175 +1798,285 @@ $canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $
             window.updateCurrentSituation();
         })();
     });
-    
-    // --- PATCH 4: NEW WORKFLOW JS FUNCTIONS ---
-    function submitWorkflow(action) {
-        if(!confirm("Are you sure you want to perform this action?")) return;
-        
-        // Save all goal inputs before submitting
-        const savePromises = [];
-        document.querySelectorAll('.goal-input').forEach(function(input) {
-            const goalId = input.getAttribute('data-goal-id');
-            const field  = input.getAttribute('data-field');
-            const value  = input.value;
+    // --- WORKFLOW JS FUNCTIONS ---
+function submitWorkflow(action) {
+    // Handle modals for compliance and rejection
+    if (action === 'ready_for_review') {
+        openComplianceModal();
+        return;
+    }
+    if (action === 'review_not_ok') {
+        openRejectModal();
+        return;
+    }
+    if (!confirm("Are you sure you want to perform this action?")) return;
 
-            const promise = fetch('view_report.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: new URLSearchParams({
-                    ajax_goal_update: '1',
-                    goal_id: goalId,
-                    [field]: value
-                })
-            });
-            
-            savePromises.push(promise);
-        });
+    // Show loading state
+    const workflowActions = document.querySelector('.workflow-actions');
+    if (workflowActions) {
+        workflowActions.innerHTML = '<div style="padding: 10px; text-align: center; color: #666;">⏳ Processing...</div>';
+    }
+    showLoading();
 
-        // Wait for all saves to complete, then submit the form
-        Promise.all(savePromises)
-            .then(() => {
-                // 1. Set the action in the hidden input inside the form
-                document.getElementById('workflowActionInput').value = action;
-                
-                // 2. Submit the form naturally. This sends ALL data + the action.
-                document.getElementById('reportForm').submit();
-            })
-            .catch(err => {
-                console.error('Error saving goal values:', err);
-                // Submit anyway
-                document.getElementById('workflowActionInput').value = action;
-                document.getElementById('reportForm').submit();
-            });
+    // Set the workflow action
+    document.getElementById('workflowActionInput').value = action;
+
+    // Add save_report flag to ensure content is saved
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
     }
 
-    // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
-    function openComplianceModal() {
-        // Reset all checkboxes
-        document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
-        document.getElementById('confirmComplianceBtn').disabled = true;
-        document.getElementById('complianceModal').style.display = 'flex';
+    // Submit the form
+    document.getElementById('reportForm').submit();
+}
+
+// --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
+function openComplianceModal() {
+    document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('confirmComplianceBtn').disabled = true;
+    document.getElementById('complianceModal').style.display = 'flex';
+}
+function closeComplianceModal() {
+    document.getElementById('complianceModal').style.display = 'none';
+}
+function confirmCompliance() {
+    if (!confirm("Are you sure you want to mark this report as ready for review?")) return;
+    closeComplianceModal();
+    showLoading();
+    document.getElementById('workflowActionInput').value = 'ready_for_review';
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
     }
-    
-    function closeComplianceModal() {
-        document.getElementById('complianceModal').style.display = 'none';
+    document.getElementById('reportForm').submit();
+}
+
+// --- REJECTION MODAL FUNCTIONS ---
+function openRejectModal() {
+    document.getElementById('rejectComment').value = '';
+    document.getElementById('rejectModal').style.display = 'flex';
+}
+function closeRejectModal() {
+    document.getElementById('rejectModal').style.display = 'none';
+}
+function submitRejection() {
+    const comment = document.getElementById('rejectComment').value.trim();
+    if (!comment) {
+        alert("Comment is required for rejection.");
+        return;
     }
-    
-    function confirmCompliance() {
-        // Close modal and submit workflow
-        closeComplianceModal();
-        submitWorkflow('ready_for_review');
+    if (!confirm("Are you sure you want to reject this report?")) return;
+    closeRejectModal();
+    showLoading();
+    document.getElementById('workflowActionInput').value = 'review_not_ok';
+    document.getElementById('reviewCommentInput').value = comment;
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
     }
-    
-    // Enable/Disable confirm button based on checklist completion
-    document.addEventListener('DOMContentLoaded', function() {
-        const checkboxes = document.querySelectorAll('.compliance-checkbox');
-        const confirmBtn = document.getElementById('confirmComplianceBtn');
-        
+    document.getElementById('reportForm').submit();
+}
+
+// --- LOADING OVERLAY FUNCTIONS ---
+function showLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+    }
+}
+function hideLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
+}
+
+// --- INITIALIZE COMPLIANCE CHECKLIST ---
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.compliance-checkbox');
+    const confirmBtn = document.getElementById('confirmComplianceBtn');
+    if (checkboxes.length > 0 && confirmBtn) {
         checkboxes.forEach(checkbox => {
             checkbox.addEventListener('change', function() {
                 const allChecked = Array.from(checkboxes).every(cb => cb.checked);
                 confirmBtn.disabled = !allChecked;
             });
         });
-    });
-    
-    // --- REJECTION MODAL FUNCTIONS ---
-    function openRejectModal() {
-        document.getElementById('rejectModal').style.display = 'flex';
     }
-    function closeRejectModal() {
-        document.getElementById('rejectModal').style.display = 'none';
-    }
-    
-    function submitRejection() {
-        const comment = document.getElementById('rejectComment').value.trim();
-        if(!comment) {
-            alert("Comment is required for rejection.");
-            return;
-        }
-        
-        // Save all goal inputs before submitting
-        const savePromises = [];
-        document.querySelectorAll('.goal-input').forEach(function(input) {
-            const goalId = input.getAttribute('data-goal-id');
-            const field  = input.getAttribute('data-field');
-            const value  = input.value;
+    hideLoading();
+});
 
-            const promise = fetch('view_report.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: new URLSearchParams({
-                    ajax_goal_update: '1',
-                    goal_id: goalId,
-                    [field]: value
-                })
-            });
-            
-            savePromises.push(promise);
+// Handle form submission
+document.getElementById('reportForm').addEventListener('submit', function(e) {
+    const workflowAction = document.getElementById('workflowActionInput').value;
+    if (workflowAction) {
+        showLoading();
+        document.querySelectorAll('.wf-btn').forEach(btn => {
+            btn.disabled = true;
         });
-
-        // Wait for all saves to complete, then submit the form
-        Promise.all(savePromises)
-            .then(() => {
-                // Set Action and Comment in hidden inputs
-                document.getElementById('workflowActionInput').value = 'review_not_ok';
-                document.getElementById('reviewCommentInput').value = comment;
-                
-                // Submit Form
-                document.getElementById('reportForm').submit();
-            })
-            .catch(err => {
-                console.error('Error saving goal values:', err);
-                // Submit anyway
-                document.getElementById('workflowActionInput').value = 'review_not_ok';
-                document.getElementById('reviewCommentInput').value = comment;
-                document.getElementById('reportForm').submit();
-            });
-    }
-
-    // --- ATTACHMENT JS LOGIC ---
-
- document.addEventListener('change', function(e) {
-    // Check if the changed element is an action-dropdown
-    if (e.target && e.target.classList.contains('action-dropdown')) {
-        const select = e.target;
-        const selectedValue = select.value;
-        const row = select.closest('tr');
-        const recommendedInput = row.querySelector('input[data-field="recommended_scheme"]');
-        
-        // 1. AUTO-FILL: If Switch, Partially Redeem, Drop, or Redeem is selected
-        const triggerStatuses = ['Switch', 'Partially Redeem', 'Drop', 'Redeem'];
-        
-        if (triggerStatuses.includes(selectedValue)) {
-            const presentSchemeName = row.querySelector('.present-scheme-name').textContent.trim();
-            
-            // Fill if currently empty
-            if (recommendedInput && recommendedInput.value.trim() === "") {
-                recommendedInput.value = presentSchemeName;
-                // Trigger existing AJAX save
-                recommendedInput.dispatchEvent(new Event('blur'));
-                
-                // Visual feedback
-                recommendedInput.style.backgroundColor = "#fff3cd"; 
-                setTimeout(() => { recommendedInput.style.backgroundColor = ""; }, 800);
-            }
-        } 
-        // 2. AUTO-CLEAR: If Continue is selected, clear the input
-        else if (selectedValue === 'Continue') {
-            if (recommendedInput && recommendedInput.value.trim() !== "") {
-                recommendedInput.value = "";
-                // Trigger existing AJAX save to clear DB
-                recommendedInput.dispatchEvent(new Event('blur'));
-                
-                // Visual feedback (Red flash to show deletion)
-                recommendedInput.style.backgroundColor = "#ffe6e6"; 
-                setTimeout(() => { recommendedInput.style.backgroundColor = ""; }, 800);
-            }
-        }
     }
 });
-    // ...existing code...
-    </script>
-</body>
-</html>
+
+</script>
+
+    <!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div style="margin-top: 20px; color: #3498db; font-weight: 600;">Processing workflow action...</div>
+</div>
+
+<script>
+// ...existing code...
+
+// --- WORKFLOW JS FUNCTIONS ---
+function submitWorkflow(action) {
+    // Handle modals for compliance and rejection
+    if (action === 'ready_for_review') {
+        openComplianceModal();
+        return;
+    }
+    if (action === 'review_not_ok') {
+        openRejectModal();
+        return;
+    }
+    if (!confirm("Are you sure you want to perform this action?")) return;
+
+    // Show loading state
+    const workflowActions = document.querySelector('.workflow-actions');
+    if (workflowActions) {
+        workflowActions.innerHTML = '<div style="padding: 10px; text-align: center; color: #666;">⏳ Processing...</div>';
+    }
+    showLoading();
+
+    // Set the workflow action
+    document.getElementById('workflowActionInput').value = action;
+
+    // Add save_report flag to ensure content is saved
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
+    }
+
+    // Submit the form
+    document.getElementById('reportForm').submit();
+}
+
+// --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
+function openComplianceModal() {
+    document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('confirmComplianceBtn').disabled = true;
+    document.getElementById('complianceModal').style.display = 'flex';
+}
+function closeComplianceModal() {
+    document.getElementById('complianceModal').style.display = 'none';
+}
+function confirmCompliance() {
+    if (!confirm("Are you sure you want to mark this report as ready for review?")) return;
+    closeComplianceModal();
+    showLoading();
+    document.getElementById('workflowActionInput').value = 'ready_for_review';
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
+    }
+    document.getElementById('reportForm').submit();
+}
+
+// --- REJECTION MODAL FUNCTIONS ---
+function openRejectModal() {
+    document.getElementById('rejectComment').value = '';
+    document.getElementById('rejectModal').style.display = 'flex';
+}
+function closeRejectModal() {
+    document.getElementById('rejectModal').style.display = 'none';
+}
+function submitRejection() {
+    const comment = document.getElementById('rejectComment').value.trim();
+    if (!comment) {
+        alert("Comment is required for rejection.");
+        return;
+    }
+    if (!confirm("Are you sure you want to reject this report?")) return;
+    closeRejectModal();
+    showLoading();
+    document.getElementById('workflowActionInput').value = 'review_not_ok';
+    document.getElementById('reviewCommentInput').value = comment;
+    let saveReportInput = document.getElementById('saveReportInput');
+    if (!saveReportInput) {
+        saveReportInput = document.createElement('input');
+        saveReportInput.type = 'hidden';
+        saveReportInput.name = 'save_report';
+        saveReportInput.value = '1';
+        saveReportInput.id = 'saveReportInput';
+        document.getElementById('reportForm').appendChild(saveReportInput);
+    }
+    document.getElementById('reportForm').submit();
+}
+
+// --- LOADING OVERLAY FUNCTIONS ---
+function showLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+    }
+}
+function hideLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
+}
+
+// --- INITIALIZE COMPLIANCE CHECKLIST ---
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.compliance-checkbox');
+    const confirmBtn = document.getElementById('confirmComplianceBtn');
+    if (checkboxes.length > 0 && confirmBtn) {
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                confirmBtn.disabled = !allChecked;
+            });
+        });
+    }
+    hideLoading();
+});
+
+// Handle form submission
+document.getElementById('reportForm').addEventListener('submit', function(e) {
+    const workflowAction = document.getElementById('workflowActionInput').value;
+    if (workflowAction) {
+        showLoading();
+        document.querySelectorAll('.wf-btn').forEach(btn => {
+            btn.disabled = true;
+        });
+    }
+});
+
+</script>
