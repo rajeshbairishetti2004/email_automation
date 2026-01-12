@@ -1,7 +1,7 @@
 <?php
 // signature.php
 // Advanced Signature / Closing Note module with user dropdown and rationale-style UI
-// Includes comprehensive user management
+// Includes comprehensive user management and automatic signature saving
 
 require_once 'db_config.php';
 $pdo = getPdo();
@@ -16,21 +16,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     
     try {
         switch ($ajax_type) {
-            // Auto-save signature block
-            case '1':
+            // Auto-save signature block when dropdown changes
+            case 'save_signature':
                 $clientId = (int)($_POST['client_id'] ?? 0);
-                $field = trim($_POST['field'] ?? '');
-                $value = $_POST['value'] ?? '';
+                $userId = (int)($_POST['user_id'] ?? 0);
+                $signatureText = $_POST['signature_text'] ?? '';
                 
-                if ($clientId <= 0 || $field !== 'signature_block') {
-                    echo json_encode(['success' => false, 'error' => 'Invalid parameters']);
+                if ($clientId <= 0) {
+                    echo json_encode(['success' => false, 'error' => 'Invalid client ID']);
                     exit;
                 }
                 
+                // Save signature to clients table
                 $stmt = $pdo->prepare("UPDATE clients SET signature_block = :value WHERE id = :id");
-                $stmt->execute([':value' => $value, ':id' => $clientId]);
+                $stmt->execute([':value' => $signatureText, ':id' => $clientId]);
                 
-                echo json_encode(['success' => true, 'message' => 'Signature saved']);
+                // Also update assigned_to if user is selected
+                if ($userId > 0) {
+                    $stmt2 = $pdo->prepare("UPDATE clients SET assigned_to = :user_id WHERE id = :id");
+                    $stmt2->execute([':user_id' => $userId, ':id' => $clientId]);
+                }
+                
+                echo json_encode(['success' => true, 'message' => 'Signature saved and user assigned']);
                 exit;
                 
             // Update user details
@@ -72,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     }
                 }
                 
-                // Default password (you might want to change this)
+                // Default password
                 $defaultPassword = password_hash('Welcome@123', PASSWORD_DEFAULT);
                 
                 $stmt = $pdo->prepare("
@@ -104,18 +111,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     exit;
                 }
                 
-                // Check if this is the last admin/manager (optional safety check)
-                $checkStmt = $pdo->prepare("
-                    SELECT COUNT(*) as count 
-                    FROM users 
-                    WHERE designation IN ('Relationship Manager', 'Associate Relationship Manager') 
-                    AND status = 'active'
-                ");
-                $checkStmt->execute();
+                // Check if this user is assigned to any client
+                $checkStmt = $pdo->prepare("SELECT COUNT(*) as count FROM clients WHERE assigned_to = :id");
+                $checkStmt->execute([':id' => $userId]);
                 $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
                 
-                if ($result['count'] <= 1) {
-                    echo json_encode(['success' => false, 'error' => 'Cannot delete the last active manager']);
+                if ($result['count'] > 0) {
+                    echo json_encode(['success' => false, 'error' => 'Cannot delete user assigned to clients. Reassign clients first.']);
                     exit;
                 }
                 
@@ -143,6 +145,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                 echo json_encode(['success' => true, 'users' => $users]);
                 exit;
                 
+            // Get client signature info
+            case 'get_client_signature':
+                $clientId = (int)($_POST['client_id'] ?? 0);
+                if ($clientId <= 0) {
+                    echo json_encode(['success' => false, 'error' => 'Invalid client ID']);
+                    exit;
+                }
+                
+                $stmt = $pdo->prepare("SELECT signature_block, assigned_to FROM clients WHERE id = :id");
+                $stmt->execute([':id' => $clientId]);
+                $client = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                echo json_encode([
+                    'success' => true, 
+                    'signature_block' => $client['signature_block'] ?? '',
+                    'assigned_to' => $client['assigned_to'] ?? 0
+                ]);
+                exit;
+                
             default:
                 echo json_encode(['success' => false, 'error' => 'Invalid AJAX request']);
                 exit;
@@ -162,12 +183,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
 $clientId        = (int)($clientId ?? 0);
 $signatureStored = $signatureStored ?? '';
 
-// FIXED LINE 198: Using correct column name 'status' instead of 'active'
+// Get client's current assigned user
+$assignedUserId = 0;
+if ($clientId > 0) {
+    $stmt = $pdo->prepare("SELECT signature_block, assigned_to FROM clients WHERE id = :id");
+    $stmt->execute([':id' => $clientId]);
+    $clientData = $stmt->fetch(PDO::FETCH_ASSOC);
+    $signatureStored = $clientData['signature_block'] ?? '';
+    $assignedUserId = $clientData['assigned_to'] ?? 0;
+}
+
+// Get all active users for dropdown
 $userStmt = $pdo->query("
     SELECT id, name, username, designation, mobile, email, status
     FROM users
     WHERE designation IN ('Relationship Manager', 'Associate Relationship Manager')
-    AND status = 'active'  -- CORRECTED: Using 'status' column
+    AND status = 'active'
     ORDER BY 
         CASE 
             WHEN designation = 'Relationship Manager' THEN 1
@@ -193,7 +224,7 @@ $allUsersStmt = $pdo->query("
 ");
 $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Determine default user (logged-in user or first user)
+// Determine default user (assigned user or logged-in user)
 $defaultUser = [
     'name'        => $rmName ?? '',
     'designation' => $rmDesignation ?? '',
@@ -212,11 +243,61 @@ function build_signature($user) {
         "Url: www.financedoctor.in";
 }
 
-// Use stored signature if available, otherwise default
-$DEFAULT_SIGNATURE = build_signature($defaultUser);
-$signatureBlock = isset($signatureBlock) 
-    ? $signatureBlock 
-    : (trim($signatureStored) !== '' ? $signatureStored : $DEFAULT_SIGNATURE);
+// Find which user is currently assigned and get their signature
+$selectedUserId = $assignedUserId;
+$signaturesMap = [];
+
+// Build signatures for all users
+foreach ($users as $u) {
+    $signaturesMap[$u['id']] = build_signature($u);
+    
+    // If no assigned user but we have stored signature, try to match
+    if ($selectedUserId == 0 && !empty($signatureStored)) {
+        $userSignature = build_signature($u);
+        if (trim($userSignature) === trim($signatureStored)) {
+            $selectedUserId = $u['id'];
+        }
+    }
+}
+
+// If we have an assigned user but they're not in active users list,
+// try to get their details anyway
+if ($selectedUserId > 0) {
+    $foundInList = false;
+    foreach ($users as $u) {
+        if ($u['id'] == $selectedUserId) {
+            $foundInList = true;
+            break;
+        }
+    }
+    
+    if (!$foundInList) {
+        // Get the assigned user even if inactive
+        $stmt = $pdo->prepare("SELECT id, name, designation, mobile, email, status FROM users WHERE id = :id");
+        $stmt->execute([':id' => $selectedUserId]);
+        $assignedUser = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($assignedUser) {
+            // Add to users array for dropdown
+            $users[] = $assignedUser;
+            $signaturesMap[$assignedUser['id']] = build_signature($assignedUser);
+        }
+    }
+}
+
+// Use stored signature if available, otherwise build from selected user
+if (!empty($signatureStored)) {
+    $signatureBlock = $signatureStored;
+} elseif ($selectedUserId > 0 && isset($signaturesMap[$selectedUserId])) {
+    $signatureBlock = $signaturesMap[$selectedUserId];
+} else {
+    $signatureBlock = build_signature($defaultUser);
+}
+
+// Debug info (remove in production)
+error_log("Client ID: $clientId");
+error_log("Assigned User ID: $selectedUserId");
+error_log("Stored signature length: " . strlen($signatureStored ?? ''));
 ?>
 
 <style>
@@ -451,6 +532,21 @@ $signatureBlock = isset($signatureBlock)
     outline: 0;
     box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
 }
+/* Flash messages */
+.flash-success {
+    background: #d4edda;
+    color: #155724;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #c3e6cb;
+}
+.flash-error {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #f5c6cb;
+}
 @media (max-width: 700px) {
     .sig-box { max-width: 100%; }
     .sig-controls, .sig-fields { flex-direction: column; align-items: stretch; }
@@ -466,8 +562,10 @@ $signatureBlock = isset($signatureBlock)
         <select id="signature_user_selector" class="sig-select">
             <option value="0">-- Select team member signature --</option>
             <?php foreach ($users as $u): ?>
-                <option value="<?= (int)$u['id'] ?>">
+                <option value="<?= (int)$u['id'] ?>" 
+                    <?= ($selectedUserId == $u['id']) ? 'selected' : '' ?>>
                     <?= htmlspecialchars($u['name']) ?> (<?= htmlspecialchars($u['designation']) ?>)
+                    <?= ($u['status'] == 'inactive') ? ' [Inactive]' : '' ?>
                 </option>
             <?php endforeach; ?>
         </select>
@@ -476,7 +574,6 @@ $signatureBlock = isset($signatureBlock)
                 <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </button>
-
     </div>
     <div class="sig-fields" id="sig_fields" style="display:none;">
         <div class="sig-field">
@@ -511,7 +608,6 @@ $signatureBlock = isset($signatureBlock)
         name="signature_block"
         class="sig-textarea"
         data-client-id="<?= (int)$clientId ?>"
-        data-field="signature_block"
         placeholder="Enter signature here..."
     ><?= htmlspecialchars(trim($signatureBlock)) ?></textarea>
     <div id="signature_flash_container" class="sig-flash"></div>
@@ -623,9 +719,6 @@ $signatureBlock = isset($signatureBlock)
     const saveDetailsBtn = document.getElementById('sig_save_btn');
     const cancelDetailsBtn = document.getElementById('sig_cancel_btn');
     const addBtn = document.getElementById('signature_add_btn');
-    const saveBtn = document.getElementById('signature_save_btn');
-    const editBtn = document.getElementById('signature_edit_btn');
-    const manageBtn = document.getElementById('signature_manage_btn');
     
     // User Management Modal elements
     const userModal = document.getElementById('userManagementModal');
@@ -635,13 +728,7 @@ $signatureBlock = isset($signatureBlock)
     const addUserMessage = document.getElementById('addUserMessage');
 
     // User signatures and details from PHP
-    const userSignatures = <?php
-        $signatures = [];
-        foreach ($users as $u) {
-            $signatures[$u['id']] = build_signature($u);
-        }
-        echo json_encode($signatures);
-    ?>;
+    const userSignatures = <?php echo json_encode($signaturesMap); ?>;
     
     const userDetails = <?php
         $details = [];
@@ -658,6 +745,8 @@ $signatureBlock = isset($signatureBlock)
     ?>;
 
     let originalDetails = {};
+    let autoSaving = false;
+    const clientId = <?= $clientId ?>;
 
     function showFlash(type, msg) {
         flash.innerHTML =
@@ -687,9 +776,44 @@ $signatureBlock = isset($signatureBlock)
             "Url: www.financedoctor.in";
     }
 
+    // Save signature to database
+    function saveSignatureToDatabase(userId, signatureText) {
+        if (autoSaving || clientId <= 0) return;
+        
+        autoSaving = true;
+        
+        fetch('signature.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: new URLSearchParams({
+                ajax: 'save_signature',
+                client_id: clientId,
+                user_id: userId,
+                signature_text: signatureText
+            })
+        })
+        .then(r => r.json())
+        .then(res => {
+            autoSaving = false;
+            if (res.success) {
+                showFlash('success', 'Signature saved');
+                console.log('Signature saved to database for client:', clientId);
+            } else {
+                showFlash('error', res.error || 'Save failed');
+            }
+        })
+        .catch(() => {
+            autoSaving = false;
+            showFlash('error', 'Network error while saving');
+        });
+    }
+
     // Load selected user's signature and details
     selector.addEventListener('change', function () {
         const uid = this.value;
+        
         if (uid === '0' || !userSignatures[uid]) {
             fieldsDiv.style.display = 'none';
             inputName.readOnly = true;
@@ -702,14 +826,15 @@ $signatureBlock = isset($signatureBlock)
             cancelDetailsBtn.style.display = 'none';
             return;
         }
-        // Fill fields
-        inputName.value = userDetails[uid].name;
-        inputDesg.value = userDetails[uid].designation;
-        inputMobile.value = userDetails[uid].mobile;
-        inputEmail.value = userDetails[uid].email;
-        inputStatus.value = userDetails[uid].status;
+        
+        // Fill fields with user details
+        inputName.value = userDetails[uid].name || '';
+        inputDesg.value = userDetails[uid].designation || '';
+        inputMobile.value = userDetails[uid].mobile || '';
+        inputEmail.value = userDetails[uid].email || '';
+        inputStatus.value = userDetails[uid].status || 'active';
+        
         fieldsDiv.style.display = '';
-        // Enable edit button, disable save/cancel
         inputName.readOnly = true;
         inputDesg.readOnly = true;
         inputMobile.readOnly = true;
@@ -718,11 +843,33 @@ $signatureBlock = isset($signatureBlock)
         editDetailsBtn.style.display = '';
         saveDetailsBtn.style.display = 'none';
         cancelDetailsBtn.style.display = 'none';
-        // Fill signature
-        textarea.value = userSignatures[uid];
+        
+        // Fill signature textarea with user's signature
+        const userSignature = userSignatures[uid];
+        textarea.value = userSignature;
         autoGrow(textarea);
-        showFlash('success', 'Signature loaded.');
-        textarea.dispatchEvent(new Event('blur'));
+        
+        showFlash('success', 'Signature loaded from ' + userDetails[uid].name);
+        
+        // Immediately save to database
+        saveSignatureToDatabase(uid, userSignature);
+    });
+
+    // Handle manual edits to signature textarea
+    textarea.addEventListener('blur', function () {
+        const signatureText = textarea.value.trim();
+        const userId = selector.value;
+        
+        if (signatureText && clientId > 0) {
+            saveSignatureToDatabase(userId, signatureText);
+        }
+    });
+
+    // Also save on Enter key (while not in textarea)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && document.activeElement !== textarea) {
+            textarea.dispatchEvent(new Event('blur'));
+        }
     });
 
     // Edit details: make fields editable, show save/cancel
@@ -735,6 +882,7 @@ $signatureBlock = isset($signatureBlock)
         saveDetailsBtn.style.display = '';
         cancelDetailsBtn.style.display = '';
         editDetailsBtn.style.display = 'none';
+        
         // Save original values for cancel
         const uid = selector.value;
         originalDetails = {
@@ -802,14 +950,23 @@ $signatureBlock = isset($signatureBlock)
         .then(res => {
             saveDetailsBtn.disabled = false;
             if (res.success) {
+                // Update local user details
                 userDetails[uid] = {...newDetails};
-                userSignatures[uid] = buildSignatureFromFields(
+                
+                // Rebuild and update signature
+                const newSignature = buildSignatureFromFields(
                     newDetails.name, newDetails.designation, newDetails.mobile, newDetails.email
                 );
-                textarea.value = userSignatures[uid];
+                userSignatures[uid] = newSignature;
+                textarea.value = newSignature;
                 autoGrow(textarea);
+                
                 showFlash('success', 'User details updated.');
-                textarea.dispatchEvent(new Event('blur'));
+                
+                // Save updated signature to database
+                saveSignatureToDatabase(uid, newSignature);
+                
+                // Disable editing mode
                 inputName.readOnly = true;
                 inputDesg.readOnly = true;
                 inputMobile.readOnly = true;
@@ -818,6 +975,15 @@ $signatureBlock = isset($signatureBlock)
                 saveDetailsBtn.style.display = 'none';
                 cancelDetailsBtn.style.display = 'none';
                 editDetailsBtn.style.display = '';
+                
+                // Update selector text
+                const option = selector.querySelector(`option[value="${uid}"]`);
+                if (option) {
+                    option.textContent = `${newDetails.name} (${newDetails.designation})`;
+                    if (newDetails.status === 'inactive') {
+                        option.textContent += ' [Inactive]';
+                    }
+                }
                 
                 // Refresh user management table
                 loadAllUsers();
@@ -831,45 +997,10 @@ $signatureBlock = isset($signatureBlock)
         });
     });
 
-    // Auto-save on blur for signature textarea
-    textarea.addEventListener('blur', function () {
-        const clientId = textarea.dataset.clientId;
-        const field    = textarea.dataset.field;
-        const value    = textarea.value;
-
-        fetch('signature.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-            },
-            body: new URLSearchParams({
-                ajax: '1',
-                client_id: clientId,
-                field: field,
-                value: value
-            })
-        })
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) {
-                showFlash('success', 'Signature saved');
-            } else {
-                showFlash('error', res.error || 'Save failed');
-            }
-        })
-        .catch(() => showFlash('error', 'Network error while saving'));
-    });
-
     // Add new user button
     addBtn.addEventListener('click', function() {
         userModal.style.display = 'flex';
         document.getElementById('new_name').focus();
-    });
-
-    // Manage users button
-    manageBtn.addEventListener('click', function() {
-        userModal.style.display = 'flex';
-        loadAllUsers();
     });
 
     // Close modal
@@ -1004,6 +1135,18 @@ $signatureBlock = isset($signatureBlock)
                     option.value = res.id;
                     option.textContent = `${newUser.name} (${newUser.designation})`;
                     selector.appendChild(option);
+                    
+                    // Add to local arrays
+                    userDetails[res.id] = {
+                        name: newUser.name,
+                        designation: newUser.designation,
+                        mobile: newUser.mobile,
+                        email: newUser.email,
+                        status: newUser.status
+                    };
+                    userSignatures[res.id] = buildSignatureFromFields(
+                        newUser.name, newUser.designation, newUser.mobile, newUser.email
+                    );
                 }
             } else {
                 showAddMessage('error', res.error || 'Failed to add user');
@@ -1016,8 +1159,8 @@ $signatureBlock = isset($signatureBlock)
     });
 
     function showAddMessage(type, msg) {
-        addUserMessage.innerHTML = `<div class="${type === 'success' ? 'text-success' : 'text-danger'}" style="padding: 8px; background: ${type === 'success' ? '#d4edda' : '#f8d7da'}; border-radius: 4px;">
-            ${type === 'success' ? '✓' : '✗'} ${msg}
+        addUserMessage.innerHTML = `<div class="${type === 'success' ? 'flash-success' : 'flash-error'}" style="margin-top: 10px;">
+            ${msg}
         </div>`;
         setTimeout(() => addUserMessage.innerHTML = '', 3000);
     }
@@ -1060,7 +1203,7 @@ $signatureBlock = isset($signatureBlock)
         if (userDetails[userId]) {
             selector.dispatchEvent(new Event('change'));
             // Switch to edit mode
-            editDetailsBtn.click();
+            setTimeout(() => editDetailsBtn.click(), 100);
         } else {
             alert('This user is not available in the signature selector. You can still edit in the database.');
         }
@@ -1094,6 +1237,10 @@ $signatureBlock = isset($signatureBlock)
                 const option = selector.querySelector(`option[value="${userId}"]`);
                 if (option) option.remove();
                 
+                // Remove from local arrays
+                delete userDetails[userId];
+                delete userSignatures[userId];
+                
                 showAddMessage('success', 'User deleted successfully');
             } else {
                 showAddMessage('error', res.error || 'Failed to delete user');
@@ -1113,5 +1260,17 @@ $signatureBlock = isset($signatureBlock)
 
     // Initial attachment of event listeners
     attachTableEventListeners();
+    
+    // Trigger change event on page load to populate fields
+    setTimeout(() => {
+        if (selector.value !== '0') {
+            selector.dispatchEvent(new Event('change'));
+        }
+    }, 100);
+    
+    // Log initial state for debugging
+    console.log('Client ID:', clientId);
+    console.log('Selected User ID:', selector.value);
+    console.log('Signature in textarea:', textarea.value.substring(0, 100));
 })();
 </script>
