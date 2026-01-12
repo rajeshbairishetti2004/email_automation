@@ -15,7 +15,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
     if ($action === 'delete_scheme_rows') {
         $ids = json_decode($_POST['scheme_ids'] ?? '[]', true);
         if (!is_array($ids)) $ids = [];
-        // FIX 3: Ensure IDs are integers and not empty
         $ids = array_map('intval', $ids);
         $ids = array_filter($ids);
         $deleted = 0;
@@ -40,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
             exit;
         }
         // Parse SIP/SWP and current_value as numbers with Indian units (allow negative values)
-        if ($field === 'current_value' || $field === 'sip_swp') {
+        if ($field === 'current_value' || $field === 'sip_swp' || $field === 'recommended_amount') {
             $v = strtolower(str_replace(',', '', $value));
             $multiplier = 1;
             if (strpos($v, 'cr') !== false) {
@@ -129,6 +128,9 @@ try {
 } catch (Exception $e) {
     // Ignore if already set
 }
+
+// Helper for Indian amount formatting (with negatives)
+
 ?>
 
 <!-- =========================
@@ -364,10 +366,10 @@ try {
                 <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="scheme_name" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['scheme_name']) ?>">
             </td>
             <td>
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" data-scheme-id="<?= $schemeId ?>" value="<?= ((float)$s['sip_swp'] > 0) ? htmlspecialchars(formatAmount($s['sip_swp'])) : '-' ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['sip_swp'] !== null && $s['sip_swp'] !== '') ? htmlspecialchars(formatAmount($s['sip_swp'])) : '' ?>">
             </td>
             <td>
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars(formatAmount((float)$s['current_value'])) ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['current_value'] !== null && $s['current_value'] !== '') ? htmlspecialchars(formatAmount($s['current_value'])) : '' ?>">
             </td>
             <td>
                 <select class="action-dropdown" data-field="action_step" data-scheme-id="<?= $schemeId ?>">
@@ -383,13 +385,12 @@ try {
             </td>
             <td>
                 <textarea class="scheme-input scheme-textarea"
-          data-field="recommended_scheme"
-          data-scheme-id="<?= $schemeId ?>"
-          rows="2"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
-
+                    data-field="recommended_scheme"
+                    data-scheme-id="<?= $schemeId ?>"
+                    rows="2"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
             </td>
             <td>
-                <input type="text" class="scheme-input" data-field="recommended_amount" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['recommended_amount'] ?? '') ?>">
+                <input type="text" class="scheme-input" data-field="recommended_amount" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['recommended_amount'] !== null && $s['recommended_amount'] !== '') ? htmlspecialchars(formatAmount($s['recommended_amount'])) : '' ?>">
             </td>
         </tr>
         <?php endforeach; ?>
@@ -401,7 +402,6 @@ try {
     <button type="button" id="toggleSchemeDeleteMode" class="wf-btn btn-reject" style="background:#f39c12;">🗑 Delete Mode</button>
     <button type="button" id="addSchemeRow" class="wf-btn btn-ready" style="background:#27ae60;">+ Add Row</button>
     <button type="button" id="deleteSelectedSchemes" class="wf-btn btn-reject" style="display:none;">Delete Selected</button>
-    <!-- Removed Save All Changes button -->
 </div>
 
 <script>
@@ -453,7 +453,6 @@ document.getElementById('addSchemeRow').onclick = function() {
     });
 };
 
-// FIX 1: Correct JS syntax error in delete fetch
 document.getElementById('deleteSelectedSchemes').onclick = function () {
     const checked = [...document.querySelectorAll('.scheme-row-checkbox:checked')];
     if (checked.length === 0) return;
@@ -507,39 +506,34 @@ function autoSaveSchemeField(schemeId, field, value) {
     });
 }
 
-// FIX: Autosave textarea reliably (debounced on input)
+// Debounced autosave for textarea
 document.querySelector('#schemeTable').addEventListener('input', function (e) {
     if (!e.target.classList.contains('scheme-textarea')) return;
-
     const field = e.target.getAttribute('data-field');
     const value = e.target.value;
     const schemeId = e.target.getAttribute('data-scheme-id') || 0;
-
-    // Debounce to avoid saving on every keystroke
     clearTimeout(e.target._saveTimer);
     e.target._saveTimer = setTimeout(() => {
         autoSaveSchemeField(schemeId, field, value);
     }, 600);
 });
 
-// FIX 2: Fallback for textarea autosave on change (for paste/autofill/focusout)
+// Fallback for textarea autosave on change (for paste/autofill/focusout)
 document.querySelector('#schemeTable').addEventListener('change', function (e) {
     if (!e.target.classList.contains('scheme-textarea')) return;
-
     const field = e.target.getAttribute('data-field');
     const value = e.target.value;
     const schemeId = e.target.getAttribute('data-scheme-id') || 0;
-
     autoSaveSchemeField(schemeId, field, value);
 });
 
+// Autosave on blur for all other inputs, and on change for select
 document.querySelectorAll('#schemeTable').forEach(function(table) {
     table.addEventListener('blur', function(e) {
         const input = e.target;
-        // Only autosave on blur for non-textarea inputs
         if (input.classList.contains('scheme-input') && !input.classList.contains('scheme-textarea')) {
             const field = input.getAttribute('data-field');
-            let value = input.value;    
+            let value = input.value;
             const schemeId = input.getAttribute('data-scheme-id') || 0;
             autoSaveSchemeField(schemeId, field, value);
         }

@@ -317,24 +317,19 @@ function formatPercent(float $v): string {
 
 /* Universal Indian Format Function */
 function formatAmount($value) {
-    $num = floatval($value);
-
-    // 1 Crore = 1,00,00,000 (Indian system: 100 Lakhs)
-    if ($num >= 10000000) {
-        return "Rs." . round($num / 10000000, 2) . " Cr";
+    if ($value === null || $value === '') return '';
+    $neg = $value < 0;
+    $v = abs((float)$value);
+    if ($v >= 10000000) {
+        $res = round($v / 10000000, 2) . ' Cr';
+    } elseif ($v >= 100000) {
+        $res = round($v / 100000, 2) . ' lakh';
+    } elseif ($v >= 1000) {
+        $res = round($v / 1000, 2) . 'k';
+    } else {
+        $res = round($v, 2);
     }
-
-    // Lakhs = 1,00,000 to < 1,00,00,000
-    if ($num >= 100000) {
-        return "Rs." . round($num / 100000, 2) . " lakhs";
-    }
-
-    // Thousands = 1,000 to < 1,00,00,000
-    if ($num >= 1000) {
-        return "Rs." . round($num / 1000, 1) . "k";
-    }
-
-    return "Rs." . number_format($num, 2);
+    return $neg ? '-' . $res : $res;
 }
 
 function clientNameFromFilename(string $path): ?string {
