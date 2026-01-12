@@ -3,19 +3,6 @@
 // Complete standalone template management for rationale section
 // Also handles workflow actions and auto-save
 
-// Expects: $clientId, $rationaleStored, $templates, $isLocked
-
-if (!isset($isLocked)) {
-    require_once __DIR__ . '/db_config.php';
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
-    $stmt->execute([$clientId]);
-    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
-    $reportState = $clientLock['report_state'] ?? 'draft';
-    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
-    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
-}
-
 // Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     ob_start();
@@ -97,11 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $stmt->execute([$templateId]);
             $response['success'] = true;
         }
-        // Workflow actions
+        // Workflow actions - UPDATED TO USE SAME PATTERN AS client_communication.php
         elseif ($action === 'save_draft') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
+            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', draft_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Draft saved successfully.', 'updated_state' => 'draft']);
@@ -111,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
+            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'ready', ready_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked Ready for Review.', 'updated_state' => 'ready']);
@@ -120,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
+            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'reviewed', reviewed_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report Approved (Reviewed).', 'updated_state' => 'reviewed']);
@@ -131,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             if (empty($comment)) throw new Exception("A comment is required for rejection.");
 
+            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', review_not_ok = 1, review_comment = :comment WHERE id = :id");
             $stmt->execute([':id' => $clientId, ':comment' => $comment]);
             echo json_encode(['success' => true, 'message' => 'Report rejected and moved back to Draft.', 'updated_state' => 'draft']);
@@ -140,12 +131,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             
+            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
             exit;
         }
-        // Auto-save rationale text (from blur event)
+        // Auto-save rationale text (from blur event) - This is what preserves the text
         elseif ($action === 'save_rationale') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             $value = trim($_POST['value'] ?? '');
@@ -195,12 +187,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 // This file is typically included by view_report.php
 // Expects: $templates (array), $clientId, $rationaleText, $isLocked to be present
 // ------------------------------------------------------------------
+
+// --- Ensure $rationaleText is always up-to-date from DB before rendering textarea ---
+if (!isset($rationaleText) || $rationaleText === '') {
+    require_once 'db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT rationale_text FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $rationaleText = $stmt->fetchColumn() ?? '';
+}
 ?>
 
 <style>
 /* Rationale module styles - updated to match site blue theme */
 .rat-box {
     margin-top: 18px;
+    margin-bottom: 18px;
     padding: 14px;
     border: 1px solid #e6f2fb;
     border-radius: 8px;
@@ -321,6 +323,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     overflow: hidden;
 }
 
+/* Textarea with auto-resize height */
+.rat-textarea.auto-resize {
+    resize: none;
+    overflow-y: hidden;
+}
+
 /* Flash messages area */
 .rat-flash { 
     margin-top: 8px; 
@@ -378,12 +386,12 @@ $isLocked = $isLocked ?? false;
 $templates = $templates ?? [];
 ?>
 
-<div class="rat-box" id="rationale_module">
-    <div class="rat-header">
-        <div class="rat-title">
+<div class="comm-section" id="rationale_module">
+    <div class="comm-header">
+        <div class="comm-title">
             Rationale
-            <?php if (isset($isLocked) && $isLocked): ?>
-                <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+            <?php if (!empty($isLocked)): ?>
+                <span title="Locked" style="margin-left:8px;color:#888;">🔒</span>
             <?php endif; ?>
         </div>
     </div>
@@ -414,14 +422,16 @@ $templates = $templates ?? [];
         <button id="rationale_delete_btn" class="rat-btn del" type="button" <?= $isLocked ? 'disabled' : '' ?>>Delete</button>
     </div>
     
-    <textarea id="rationale_textarea" 
-              name="rationale_text" 
-              data-client-id="<?= (int)$clientId ?>" 
-              data-field="rationale_text"
-              class="rat-textarea"
-              <?= $isLocked ? 'readonly' : '' ?>><?= htmlspecialchars($rationaleText) ?></textarea>
+    <textarea
+        id="rationale_textarea"
+        name="rationale_text"
+        class="comm-textarea large-textarea rat-main-textarea"
+        data-client-id="<?= (int)$clientId ?>"
+        data-field="rationale_text"
+        <?= $isLocked ? 'readonly' : '' ?>
+    ><?= htmlspecialchars($rationaleText) ?></textarea>
     
-    <div id="rationale_flash_container" class="rat-flash"></div>
+    <div id="rationale_flash_container" class="comm-flash"></div>
 </div>
 
 <script>
@@ -436,19 +446,171 @@ $templates = $templates ?? [];
     const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
     const clientId = <?= json_encode((int)$clientId); ?>;
 
-    // Auto-grow textarea
-    function autoGrow(el) {
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
+    // Auto-save variables
+    let autoSaveTimeout = null;
+    let lastSavedValue = textarea.value;
+    const AUTO_SAVE_DELAY = 1000; // 1 second delay for auto-save
+    let isSaving = false;
+
+    // --- Auto-height resize logic ---
+    function autoResizeHeight() {
+        if (!textarea) return;
+        
+        // Store current cursor position
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        
+        // Reset height to auto to calculate scrollHeight
+        textarea.style.height = 'auto';
+        
+        // Calculate content height (add 2px buffer)
+        const scrollHeight = textarea.scrollHeight;
+        textarea.style.height = (scrollHeight + 2) + 'px';
+        
+        // Restore cursor position
+        textarea.setSelectionRange(start, end);
     }
+
+    // Initialize auto-resize
+    autoResizeHeight();
     
-    // Initial resize
-    autoGrow(textarea);
+    // Resize on input, paste, and cut
+    textarea.addEventListener('input', () => {
+        autoResizeHeight();
+        triggerAutoSave(); // Also trigger auto-save on input
+    });
     
-    // Resize on input and paste
-    textarea.addEventListener('input', () => autoGrow(textarea));
-    textarea.addEventListener('paste', () => setTimeout(() => autoGrow(textarea), 0));
+    textarea.addEventListener('paste', () => {
+        setTimeout(() => {
+            autoResizeHeight();
+            triggerAutoSave();
+        }, 0);
+    });
+    
+    textarea.addEventListener('cut', () => {
+        setTimeout(() => {
+            autoResizeHeight();
+            triggerAutoSave();
+        }, 0);
+    });
+
+    // --- Auto-save logic with debouncing ---
+    function triggerAutoSave() {
+        if (isLocked || isSaving) return;
+        
+        const currentValue = textarea.value.trim();
+        
+        // Only save if value has changed
+        if (currentValue === lastSavedValue) return;
+        
+        // Clear any existing timeout
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
+        }
+        
+        // Set new timeout for auto-save
+        autoSaveTimeout = setTimeout(() => {
+            performAutoSave(currentValue);
+        }, AUTO_SAVE_DELAY);
+    }
+
+    function performAutoSave(value) {
+        if (isLocked || isSaving) return;
+        
+        const clientId = textarea.getAttribute('data-client-id');
+        const field = textarea.getAttribute('data-field');
+        
+        if (!clientId || !field) return;
+        
+        isSaving = true;
+        
+        fetch('rationale.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: new URLSearchParams({
+                ajax_action: 'save_rationale',
+                client_id: clientId,
+                value: value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                lastSavedValue = value;
+                showFlash('success', data.message || 'Auto-saved successfully');
+            } else {
+                showFlash('error', 'Auto-save failed: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            console.error('Auto-save error:', err);
+            showFlash('error', 'Network error while auto-saving');
+        })
+        .finally(() => {
+            isSaving = false;
+        });
+    }
+
+    // Also save on blur as a fallback
+    textarea.addEventListener('blur', () => {
+        if (isLocked) return;
+        
+        const currentValue = textarea.value.trim();
+        if (currentValue !== lastSavedValue) {
+            performAutoSave(currentValue);
+        }
+        
+        // Clear any pending timeout
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = null;
+        }
+    });
+
+    // Clean up timeout when page unloads
+    window.addEventListener('beforeunload', () => {
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
+        }
+    });
+
+    // CRITICAL: Intercept workflow buttons from view_report.php
+    function interceptWorkflowButtons() {
+        // Find workflow buttons in the main form
+        const workflowButtons = document.querySelectorAll('.workflow-actions .wf-btn');
+        
+        workflowButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                if (isLocked) return;
+                
+                // Get the action from onclick attribute
+                const onclickAttr = this.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes('submitWorkflow')) {
+                    // Extract the action from the onclick
+                    const match = onclickAttr.match(/submitWorkflow\('([^']+)'\)/);
+                    if (match) {
+                        const action = match[1];
+                        
+                        // Save rationale before workflow action
+                        const rationaleValue = textarea.value.trim();
+                        
+                        // Only proceed if we're not already saving
+                        if (!isSaving) {
+                            performAutoSave(rationaleValue).then(() => {
+                                // After auto-save completes, continue with workflow
+                                // The original onclick will be triggered by the form submission
+                            });
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // Call this function when the page loads
+    setTimeout(interceptWorkflowButtons, 500);
 
     function findOptionByValue(val) {
         if (!selector) return null;
@@ -491,51 +653,20 @@ $templates = $templates ?? [];
         });
     }
 
-    // Auto-save on blur (using rationale.php endpoint)
-    textarea.addEventListener('blur', function() {
-        if (isLocked) return;
-        
-        const value = textarea.value.trim();
-
-        if (clientId) {
-            fetch('rationale.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: new URLSearchParams({
-                    ajax_action: 'save_rationale',
-                    client_id: clientId,
-                    value: value
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showFlash('success', data.message || 'Rationale saved');
-                } else {
-                    showFlash('error', 'Save failed: ' + (data.error || 'Unknown error'));
-                }
-            })
-            .catch(err => {
-                console.error('Save error:', err);
-                showFlash('error', 'Network error while saving');
-            });
-        }
-    });
-
     // Auto-load when selection changes
     if (selector) {
         selector.addEventListener('change', function() {
             const id = selector.value;
             if (id && id !== '0') {
                 const opt = selector.options[selector.selectedIndex];
-                textarea.value = opt.getAttribute('data-content') || '';
-                autoGrow(textarea);
+                const newContent = opt.getAttribute('data-content') || '';
+                textarea.value = newContent;
+                autoResizeHeight();
                 showFlash('success', 'Template loaded into editor.');
                 
-                // Auto-save the loaded template content
-                if (!isLocked) {
-                    textarea.dispatchEvent(new Event('blur'));
-                }
+                // Update last saved value and trigger auto-save
+                lastSavedValue = newContent;
+                triggerAutoSave();
             }
         });
     }
@@ -593,9 +724,13 @@ $templates = $templates ?? [];
                 return;
             }
             const opt = selector.options[selector.selectedIndex];
-            textarea.value = opt.getAttribute('data-content') || '';
-            autoGrow(textarea);
+            const newContent = opt.getAttribute('data-content') || '';
+            textarea.value = newContent;
+            autoResizeHeight();
             textarea.focus();
+            
+            // Update last saved value
+            lastSavedValue = newContent;
         });
     }
 
@@ -735,8 +870,6 @@ $templates = $templates ?? [];
         // Auto-save when leaving the page
         window.addEventListener('beforeunload', function() {
             if (textarea.value !== lastContent) {
-                // Try to save synchronously (not recommended for production)
-                // For production, use sendBeacon instead
                 navigator.sendBeacon('rationale.php', 
                     new URLSearchParams({
                         ajax_action: 'autosave_rationale',

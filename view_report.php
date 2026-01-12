@@ -436,12 +436,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $greeting = trim($_POST['greeting'] ?? '');
                 $intro = trim($_POST['intro'] ?? '');
                 $closing = trim($_POST['closing'] ?? '');
-                $rationale = trim($_POST['rationale_text'] ?? '');
                 $signatureBlock = trim($_POST['signature_block'] ?? '');
                 $isOlderThan1Year = (int)($_POST['is_older_than_1_year'] ?? 1);
 
-                $stmt = $pdo->prepare("UPDATE clients SET greeting_prefix=:g, intro_text=:i, closing_text=:c, rationale_text=:r, signature_block=:s, is_older_than_1_year=:iot WHERE id=:id");
-                $stmt->execute([':g'=>$greeting, ':i'=>$intro, ':c'=>$closing, ':r'=>$rationale, ':s'=>$signatureBlock, ':iot'=>$isOlderThan1Year, ':id'=>$clientId]);
+                $stmt = $pdo->prepare("
+  UPDATE clients
+  SET greeting_prefix=:g,
+      intro_text=:i,
+      closing_text=:c,
+      signature_block=:s,
+      is_older_than_1_year=:iot
+  WHERE id=:id
+");
+
+               $stmt->execute([
+  ':g'   => $greeting,
+  ':i'   => $intro,
+  ':c'   => $closing,
+  ':s'   => $signatureBlock,
+  ':iot' => $isOlderThan1Year,
+  ':id'  => $clientId
+]);
+
 
                 if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
                     foreach ($_POST['recommended_scheme'] as $sId => $sName) {
@@ -1937,8 +1953,10 @@ function submitWorkflow(action) {
         document.getElementById('reportForm').appendChild(saveReportInput);
     }
 
-    // Submit the form
-    document.getElementById('reportForm').submit();
+    // Force save rationale before submitting the form
+    forceSaveRationaleBeforeSubmit().finally(() => {
+        document.getElementById('reportForm').submit();
+    });
 }
 
 // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
@@ -1976,8 +1994,6 @@ function closeRejectModal() {
     document.getElementById('rejectModal').style.display = 'none';
 }
 function submitRejection() {
-    const comment = document.getElementById('rejectComment').value.trim();
-    if (!comment) {
         alert("Comment is required for rejection.");
         return;
     }
