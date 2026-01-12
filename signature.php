@@ -1,17 +1,10 @@
 <?php
 // signature.php
-// Expects: $clientId, $signatureStored, $isLocked
+// Advanced Signature / Closing Note module with user dropdown and rationale-style UI
+// Includes comprehensive user management
 
-if (!isset($isLocked)) {
-    require_once __DIR__ . '/db_config.php';
-    $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
-    $stmt->execute([$clientId]);
-    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
-    $reportState = $clientLock['report_state'] ?? 'draft';
-    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
-    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
-}
+require_once 'db_config.php';
+$pdo = getPdo();
 
 /* =========================================================
    1. HANDLE AJAX REQUESTS (Multiple operations)
@@ -468,8 +461,7 @@ $signatureBlock = isset($signatureBlock)
 </style>
 
 <div class="sig-box" id="signature_module">
-    <label style="font-weight:700; display:block; margin-bottom:10px; font-size:17px;">Signature / Closing Note
-    </label>
+    <label style="font-weight:700; display:block; margin-bottom:10px; font-size:17px;">Signature / Closing Note</label>
     <div class="sig-controls">
         <select id="signature_user_selector" class="sig-select">
             <option value="0">-- Select team member signature --</option>
@@ -988,7 +980,7 @@ $signatureBlock = isset($signatureBlock)
             headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
             body: data
         })
-        .then r => r.json())
+        .then(r => r.json())
         .then(res => {
             addUserBtn.disabled = false;
             if (res.success) {
