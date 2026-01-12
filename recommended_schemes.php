@@ -96,6 +96,17 @@ if (!isset($newSchemes)) {
     $stmt->execute([$clientId]);
     $newSchemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+if (!isset($isLocked)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
 ?>
 
 <style>
@@ -168,6 +179,9 @@ if (!isset($newSchemes)) {
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
     <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
         Recommended Schemes
+        <?php if ($isLocked): ?>
+            <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+        <?php endif; ?>
     </h3>
     <table class="table recommended-schemes-table" id="newSchemesTable" style="width: 100%; margin-bottom: 15px;">
         <thead>
@@ -187,7 +201,8 @@ if (!isset($newSchemes)) {
                                value="<?php echo htmlspecialchars($ns['scheme_name']); ?>" 
                                class="form-control scheme-input recommended-scheme-input" 
                                placeholder="e.g. HDFC Top 100" 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                               <?php echo $isLocked ? 'readonly' : ''; ?>>
                     </td>
                     <td>
                         <input type="text" 
@@ -195,12 +210,14 @@ if (!isset($newSchemes)) {
                                value="<?php echo htmlspecialchars($ns['amount']); ?>" 
                                class="form-control scheme-input recommended-scheme-input" 
                                placeholder="Enter amount" 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                               <?php echo $isLocked ? 'readonly' : ''; ?>>
                     </td>
                     <td>
                         <button type="button" 
                                 onclick="removeRowAndSave(this)" 
-                                style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+                                style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;"
+                                <?php echo $isLocked ? 'disabled' : ''; ?>>
                             &times;
                         </button>
                     </td>
@@ -211,7 +228,8 @@ if (!isset($newSchemes)) {
     </table>
     <button type="button" 
             onclick="addNewSchemeRow()" 
-            style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: 500;">
+            style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: 500;"
+            <?php echo $isLocked ? 'disabled' : ''; ?>>
         + Add Scheme
     </button>
 </div>
@@ -219,8 +237,11 @@ if (!isset($newSchemes)) {
 <script>
 // Recommended Schemes JavaScript Functions
 const currentClientId = <?php echo isset($client['id']) ? (int)$client['id'] : (isset($clientId) ? (int)$clientId : 0); ?>;
+const recommendedSchemesLocked = <?php echo $isLocked ? 'true' : 'false'; ?>;
 
 function addNewSchemeRow() {
+    if (recommendedSchemesLocked) return;
+    
     const tbody = document.getElementById('newSchemesBody');
     const row = `
         <tr>
@@ -253,6 +274,7 @@ function addNewSchemeRow() {
 }
 
 function removeRowAndSave(btn) {
+    if (recommendedSchemesLocked) return;
     btn.closest('tr').remove();
     saveSchemesNow(); // Save immediately on delete
 }
@@ -260,6 +282,8 @@ function removeRowAndSave(btn) {
 // Debounce: Wait 1 second after typing stops before saving
 let saveTimer;
 function debouncedSave() {
+    if (recommendedSchemesLocked) return;
+    
     // Show "Saving..." indicator
     const title = document.querySelector('.section-card h3');
     if(title && !title.innerHTML.includes('Saving')) {
@@ -271,6 +295,8 @@ function debouncedSave() {
 }
 
 function saveSchemesNow() {
+    if (recommendedSchemesLocked) return;
+
     if (currentClientId <= 0) {
         console.error("Cannot save: Invalid Client ID");
         return;
@@ -313,8 +339,10 @@ function saveSchemesNow() {
 
 // Attach listener to existing inputs on load
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.scheme-input').forEach(input => {
-        input.addEventListener('input', debouncedSave);
-    });
+    if (!recommendedSchemesLocked) {
+        document.querySelectorAll('.scheme-input').forEach(input => {
+            input.addEventListener('input', debouncedSave);
+        });
+    }
 });
 </script>

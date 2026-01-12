@@ -166,10 +166,30 @@ if (!isset($pdo)) {
 $stmt = $pdo->prepare("SELECT file_name FROM report_attachments WHERE client_id = :client_id ORDER BY uploaded_at DESC, id DESC");
 $stmt->execute([':client_id' => $clientId]);
 $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+// Lock logic (do not show error, just set $canEditAttachments)
+if (!isset($isLocked)) {
+    require_once 'db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
+if ($isLocked) {
+    $canEditAttachments = false;
+}
 ?>
 <div class="card" style="margin-top: 20px; border-left: 4px solid #17a2b8; position:relative;">
     <label class="card-title" style="display:flex; align-items:center; justify-content:space-between;">
-      <span>📂 Report Attachments</span>
+      <span>
+        📂 Report Attachments
+        <?php if (isset($isLocked) && $isLocked): ?>
+            <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+        <?php endif; ?>
+      </span>
       <button type="button" id="refreshAttachments" class="refresh-icon-btn" title="Clear attachments" style="margin-left:auto; background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center;">
         <span class="refresh-svg-icon" id="refreshAttachmentsIcon">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -216,13 +236,6 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
     </ul>
     <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
 
-    <style>
-    .refresh-icon-btn .refresh-svg-icon { display:inline-block; vertical-align:middle; }
-    .refresh-icon-btn .refresh-svg-icon.rotating { animation: refresh-rotate 0.6s linear; }
-    @keyframes refresh-rotate { 100% { transform: rotate(360deg); } }
-    .refresh-icon-btn { background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center; box-shadow:none; border-radius:50%; transition:background 0.15s; }
-    .refresh-icon-btn:hover { background:rgba(2,136,209,0.08); }
-    </style>
     <!-- Edit Modal HTML -->
     <div id="editAttachmentModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:9999; justify-content:center; align-items:center;">
       <div style="background:#fff; padding:30px 25px; border-radius:8px; min-width:320px; max-width:90vw; box-shadow:0 4px 16px rgba(0,0,0,0.15);">
@@ -264,7 +277,7 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
             body: formData
         })
         .then(response => response.json())
-        .then(data => {
+        .then data => {
             spinner.style.display = 'none';
             if (data.success) {
                 // Clear file input

@@ -1,8 +1,27 @@
 <?php
 // Section 2: Objectives Progress for guiding on appropriate schemes
 // Expects: $goals, $clientId, $isLocked, formatAmount()
+
+// Section 2: Goals
+// Expects: $clientId, $goals, $isLocked
+
+if (!isset($isLocked)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
 ?>
-<h3>2. Objectives Progress for guiding on appropriate schemes</h3>
+<h3>
+    2. Objectives Progress for guiding on appropriate schemes
+    <?php if ($isLocked): ?>
+        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</h3>
 <table class="report-table report-table-section" id="goalsTable">
     <tr class="report-table-header">
         <th style="width: 260px;">Goal/s</th>

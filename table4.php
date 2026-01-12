@@ -1,7 +1,7 @@
 <?php
 // table4.php
 // Section 4: Appropriate Scheme Selection
-// Expects: $schemes, $asOn, $clientId
+// Expects: $schemes, $asOn, $clientId, $isLocked
 
 // --- Handle AJAX for save/delete scheme rows directly here ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
@@ -114,6 +114,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
 
     echo json_encode(['success' => false, 'error' => 'Unknown action']);
     exit;
+}
+
+if (!isset($isLocked)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
 }
 
 // --- IMPORTANT: Fix for ID always being 0 ---
@@ -324,8 +335,12 @@ try {
 }
 </style>
 
-<h3>4. Appropriate Scheme Selection</h3>
-
+<h3>
+    4. Appropriate Scheme Selection
+    <?php if ($isLocked): ?>
+        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</h3>
 <table class="report-table" id="schemeTable">
     <thead>
         <tr>
@@ -357,22 +372,21 @@ try {
     <?php else: ?>
         <?php foreach ($schemes as $s): $schemeId = (int)$s['id']; ?>
         <tr>
-            <!-- FIX 1: Put hidden scheme-id inside the checkbox cell -->
             <td class="scheme-checkbox-cell" style="display:none; text-align:center;">
                 <input type="checkbox" class="scheme-row-checkbox">
                 <input type="hidden" class="scheme-id" value="<?= $schemeId ?>">
             </td>
             <td class="present-scheme-name">
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="scheme_name" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['scheme_name']) ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="scheme_name" data-scheme-id="<?= $schemeId ?>" value="<?= htmlspecialchars($s['scheme_name']) ?>" <?= $isLocked ? 'readonly' : '' ?>>
             </td>
             <td>
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['sip_swp'] !== null && $s['sip_swp'] !== '') ? htmlspecialchars(formatAmount($s['sip_swp'])) : '' ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;"  data-field="sip_swp" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['sip_swp'] !== null && $s['sip_swp'] !== '') ? htmlspecialchars(formatAmount($s['sip_swp'])) : '' ?>" <?= $isLocked ? 'readonly' : '' ?>>
             </td>
             <td>
-                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['current_value'] !== null && $s['current_value'] !== '') ? htmlspecialchars(formatAmount($s['current_value'])) : '' ?>">
+                <input type="text" class="scheme-input" style="border:none; text-align:center;background:transparent;" data-field="current_value" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['current_value'] !== null && $s['current_value'] !== '') ? htmlspecialchars(formatAmount($s['current_value'])) : '' ?>" <?= $isLocked ? 'readonly' : '' ?>>
             </td>
             <td>
-                <select class="action-dropdown" data-field="action_step" data-scheme-id="<?= $schemeId ?>">
+                <select class="action-dropdown" data-field="action_step" data-scheme-id="<?= $schemeId ?>" <?= $isLocked ? 'disabled' : '' ?>>
                     <?php
                     $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
                     foreach ($steps as $step):
@@ -387,10 +401,12 @@ try {
                 <textarea class="scheme-input scheme-textarea"
                     data-field="recommended_scheme"
                     data-scheme-id="<?= $schemeId ?>"
-                    rows="2"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
+                    rows="2"
+                    <?= $isLocked ? 'readonly' : '' ?>
+                ><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
             </td>
             <td>
-                <input type="text" class="scheme-input" data-field="recommended_amount" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['recommended_amount'] !== null && $s['recommended_amount'] !== '') ? htmlspecialchars(formatAmount($s['recommended_amount'])) : '' ?>">
+                <input type="text" class="scheme-input" data-field="recommended_amount" data-scheme-id="<?= $schemeId ?>" value="<?= ($s['recommended_amount'] !== null && $s['recommended_amount'] !== '') ? htmlspecialchars(formatAmount($s['recommended_amount'])) : '' ?>" <?= $isLocked ? 'readonly' : '' ?>>
             </td>
         </tr>
         <?php endforeach; ?>
@@ -472,7 +488,7 @@ document.getElementById('deleteSelectedSchemes').onclick = function () {
     form.append('scheme_ids', JSON.stringify(idsToDelete));
 
     fetch('table4.php', { method: 'POST', body: form })
-        .then(r => r.json())
+        .then r => r.json())
         .then(res => {
             if (res.success) {
                 checked.forEach(cb => cb.closest('tr').remove());

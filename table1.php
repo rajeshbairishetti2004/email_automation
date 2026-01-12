@@ -3,9 +3,18 @@
 // Section 1: Current Situation
 // Expects: $clientId, $asOn, $isLocked, $totalAmount, $profit, $cagr, $xirr, $isOlderThan1Year
 
-// Get client data to ensure we have all required values
 require_once __DIR__ . '/db_config.php';
 $pdo = getPdo();
+
+// If $isLocked is not passed, check from database
+if (!isset($isLocked)) {
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
 
 $stmt = $pdo->prepare("SELECT 
     total_amount, profit, cagr, xirr, absolute_return,
@@ -133,7 +142,12 @@ if ($asOnDate instanceof DateTime) {
     </div>
 </div>
 
-<h3>1. Current Situation</h3>
+<h3>
+    1. Current Situation
+    <?php if (isset($isLocked) && $isLocked): ?>
+        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</h3>
 <table class="report-table" id="currentSituationTable">
     <tr>
         <th colspan="2">Current Situation as of <?= htmlspecialchars($asOnFormatted) ?></th>
@@ -164,7 +178,6 @@ if ($asOnDate instanceof DateTime) {
                     if ($isOlderThan1Year == 0) {
                         echo ($absoluteReturn !== null) ? htmlspecialchars(formatPercent((float)$absoluteReturn)) : '';
                     } else {
-                        // Always show the original CAGR, not the NULL from database
                         echo htmlspecialchars(formatPercent((float)$cagr));
                     }
                 ?>"
@@ -237,9 +250,12 @@ if ($asOnDate instanceof DateTime) {
     let currentAbsoluteReturn = originalAbsoluteReturn;
     let currentXirr = originalXirr;
     
+    // LOCK CHECK: Pass lock status from PHP to JS
+    const reportLocked = <?= $isLocked ? 'true' : 'false' ?>;
+    
     // Auto-save function
     function autoSaveCurrentSituation() {
-        if (<?= $isLocked ? 'true' : 'false' ?>) return;
+        if (reportLocked) return;
         
         const table = document.getElementById('currentSituationTable');
         table.classList.add('saving-row');
@@ -409,13 +425,14 @@ if ($asOnDate instanceof DateTime) {
     // Event listeners
     document.querySelectorAll('.cs-autosave-field').forEach(input => {
         input.addEventListener('blur', function() {
+            if (reportLocked) return; // Don't save if locked
             storeEditedValues();
             autoSaveCurrentSituation();
         });
     });
-    
     document.querySelectorAll('.cs-autosave-radio').forEach(radio => {
         radio.addEventListener('change', function() {
+            if (reportLocked) return;
             updateCurrentSituationUI();
             autoSaveCurrentSituation();
         });

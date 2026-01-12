@@ -175,7 +175,12 @@ function renameAttachment(oldName, newName, cb) {
 }
 </script>
 
-<h3>Annexures</h3>
+<h3>
+    Annexures
+    <?php if (isset($isLocked) && $isLocked): ?>
+        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</h3>
 <ul id="annexures_list">
     <?php
     if (is_dir($attDir)) {

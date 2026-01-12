@@ -1737,6 +1737,9 @@ if (isset($rmDesignation)) {
                         results.forEach((result, index) => {
                             const inputs = document.querySelectorAll('.goal-input');
                             if (inputs[index]) {
+
+
+
                                 if (result && result.success) {
                                     inputs[index].style.backgroundColor = "#e8f5e9";
                                     setTimeout(() => inputs[index].style.backgroundColor = "transparent", 1000);
@@ -2044,9 +2047,7 @@ document.getElementById('reportForm').addEventListener('submit', function(e) {
 </div>
 
 <script>
-// ...existing code...
 
-// --- WORKFLOW JS FUNCTIONS ---
 function submitWorkflow(action) {
     // Handle modals for compliance and rejection
     if (action === 'ready_for_review') {
@@ -2182,3 +2183,11 @@ document.getElementById('reportForm').addEventListener('submit', function(e) {
 });
 
 </script>
+
+<!-- Portfolio Tenure radio section (find the label or heading for Portfolio Tenure) -->
+<label for="portfolioTenure" style="font-weight:600;">
+    Portfolio Tenure:
+    <?php if (isset($isLocked) && $isLocked): ?>
+        <span title="Locked" style="margin-left:6px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</label>

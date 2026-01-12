@@ -1,8 +1,18 @@
 <?php
 // Section 3: Appropriate Asset Allocation
-// Expects: $allocations, $clientId
+// Expects: $allocations, $clientId, $isLocked
 
 require_once __DIR__ . '/db_config.php';
+
+if (!isset($isLocked)) {
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
 
 // --- Handle AJAX save for recommended allocations (CRUD) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_id']) && isset($_POST['recommended_share_pct'])) {
@@ -58,7 +68,12 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $recommendedMap[ucfirst(strtolower($row['asset']))] = $row['recommended_share_pct'] !== null ? (float)$row['recommended_share_pct'] : '';
 }
 ?>
-<h3>3. Appropriate Asset Allocation</h3>
+<h3>
+    3. Appropriate Asset Allocation
+    <?php if (isset($isLocked) && $isLocked): ?>
+        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+    <?php endif; ?>
+</h3>
 <div class="asset-allocation-main-container">
     <div class="piechart-container">
         <div style="font-weight:600; font-size:16px; margin-bottom:20px; text-align:center;">Current Asset Allocation</div>

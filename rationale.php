@@ -3,6 +3,19 @@
 // Complete standalone template management for rationale section
 // Also handles workflow actions and auto-save
 
+// Expects: $clientId, $rationaleStored, $templates, $isLocked
+
+if (!isset($isLocked)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
+
 // Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     ob_start();
@@ -367,7 +380,12 @@ $templates = $templates ?? [];
 
 <div class="rat-box" id="rationale_module">
     <div class="rat-header">
-        <div class="rat-title">Rationale</div>
+        <div class="rat-title">
+            Rationale
+            <?php if (isset($isLocked) && $isLocked): ?>
+                <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+            <?php endif; ?>
+        </div>
     </div>
     <div class="rat-controls">
         <select id="rationale_template_selector" class="rat-select" <?= $isLocked ? 'disabled' : '' ?>>

@@ -339,7 +339,11 @@ foreach ($sections as $sec => $data):
 ?>
 <div class="comm-section" id="<?= $sec ?>_section">
     <div class="comm-header">
-        <div class="comm-title"><?= htmlspecialchars($data['title']) ?></div>
+        <div class="comm-title"><?= htmlspecialchars($data['title']) ?>
+            <?php if (isset($isLocked) && $isLocked): ?>
+                <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+            <?php endif; ?>
+        </div>
     </div>
     <div class="comm-controls">
         <select id="<?= $sec ?>_template_selector" class="comm-select" <?= $isLocked ? 'disabled' : '' ?>>
@@ -637,7 +641,7 @@ foreach ($sections as $sec => $data):
                 body: body
             })
             .then(r => r.json())
-            .then(data => {
+            .then data => {
                 if (data && data.success) {
                     removeTemplateOption(id);
                     selector.value = '0';
