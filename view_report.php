@@ -1122,6 +1122,108 @@ $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE
                 <?php endif; ?>
             </div>
             <!-- END WORKFLOW BUTTONS INSIDE FORM -->
+<?php
+// Get relationship manager data for this client
+$rmName = 'Not Assigned'; // Default value
+
+try {
+    // First, get the assigned relationship manager ID for this client
+    $stmt = $pdo->prepare("SELECT assigned_to FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $assignedTo = $stmt->fetchColumn();
+    
+    if ($assignedTo) {
+        // Get the relationship manager's details
+        $stmt = $pdo->prepare("SELECT name, designation FROM relationship_managers WHERE id = ?");
+        $stmt->execute([$assignedTo]);
+        $rmData = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($rmData) {
+            $rmName = htmlspecialchars($rmData['name']);
+            $rmDesignation = htmlspecialchars($rmData['designation'] ?? 'Relationship Manager');
+        } else {
+            // Fallback: get the default relationship manager
+            $stmt = $pdo->prepare("SELECT name, designation FROM relationship_managers WHERE is_default = 1 LIMIT 1");
+            $stmt->execute();
+            $defaultRm = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($defaultRm) {
+                $rmName = htmlspecialchars($defaultRm['name']);
+                $rmDesignation = htmlspecialchars($defaultRm['designation'] ?? 'Relationship Manager');
+            }
+        }
+    } else {
+        // If no RM assigned, get the default one
+        $stmt = $pdo->prepare("SELECT name, designation FROM relationship_managers WHERE is_default = 1 LIMIT 1");
+        $stmt->execute();
+        $defaultRm = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($defaultRm) {
+            $rmName = htmlspecialchars($defaultRm['name']);
+            $rmDesignation = htmlspecialchars($defaultRm['designation'] ?? 'Relationship Manager');
+        }
+    }
+} catch (Exception $e) {
+    // Error handling - fallback to default text
+    error_log("Error fetching relationship manager: " . $e->getMessage());
+    $rmName = 'RM / ARM';
+    $rmDesignation = 'Relationship Manager';
+}
+
+// Determine icon based on designation
+$rmIcon = '👤'; // Default icon
+if (isset($rmDesignation)) {
+    if (stripos($rmDesignation, 'assistant') !== false || stripos($rmDesignation, 'ARM') !== false) {
+        $rmIcon = '👨‍💼'; // Assistant icon
+    } elseif (stripos($rmDesignation, 'manager') !== false || stripos($rmDesignation, 'RM') !== false) {
+        $rmIcon = '👔'; // Manager icon
+    }
+}
+?>
+
+<!-- Show client name above greeting section -->
+<div style="
+    background: #ffffff;
+    color: #333;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-left: 5px solid #0288D1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top:30px;
+">
+    <div>
+        <div style="font-size: 14px; color: #666; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">
+            Client Portfolio
+        </div>
+        <div style="font-size: 22px; font-weight: 600; color: #0288D1;">
+            <?php echo htmlspecialchars($name); ?>
+        </div>
+    </div>
+    <div style="
+        background: #f0f7ff;
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-size: 14px;
+        color: #0288D1;
+        font-weight: 500;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid #d1e7ff;
+        min-width: 180px;
+    ">
+        <span style="font-size: 12px; color: #666; opacity: 0.8;">
+            <?php echo isset($rmDesignation) ? htmlspecialchars($rmDesignation) : 'Relationship Manager'; ?>
+        </span>
+        <span style="font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;"><?php echo $rmIcon; ?></span>
+            <?php echo $rmName; ?>
+        </span>
+    </div>
+</div>
 
             <?php require_once 'client_communication.php'; ?>
             <?php
