@@ -76,6 +76,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             </div>
         </div>
     </div>
+<!--     
     <div class="piechart-container">
         <div style="font-weight:600; font-size:16px; margin-bottom:20px; text-align:center;">Recommended Asset Allocation</div>
         <form id="recommendedAllocationForm" style="margin-bottom: 8px;">
@@ -110,7 +111,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             </div>
         </form>
         <span id="recommendedAllocStatus" style="margin-left:10px; font-size:13px; display:none;"></span>
-    </div>
+    </div> -->
 </div>
 <style>
 /* --- Table 3: Asset Allocation Chart Styles --- */

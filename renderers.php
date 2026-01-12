@@ -215,4 +215,12 @@ function renderClientReport(
     </div>
     <?php
 }
+
+// Only declare formatPercent if it does not already exist
+if (!function_exists('formatPercent')) {
+    function formatPercent($value) {
+        if ($value === null || $value === '' || !is_numeric($value)) return '';
+        return number_format((float)$value, 2) . '%';
+    }
+}
 ?>
