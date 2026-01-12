@@ -3,6 +3,7 @@
 // Complete standalone template management for greeting, intro, and closing sections
 // Also handles workflow actions and auto-save
 
+
 // Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     ob_start();
@@ -314,7 +315,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 <?php
 // Define $clientId and $isLocked if not already defined
 $clientId = $clientId ?? 0;
-$isLocked = $isLocked ?? false;
+
+// --- ADD THIS LOGIC to ensure $isLocked is set based on DB state if not passed ---
+if (!isset($isLocked)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+    $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state'] ?? 'draft';
+    $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
+    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+}
 
 $sections = [
     'greeting' => [
@@ -641,7 +653,7 @@ foreach ($sections as $sec => $data):
                 body: body
             })
             .then(r => r.json())
-            .then data => {
+            .then(data => {
                 if (data && data.success) {
                     removeTemplateOption(id);
                     selector.value = '0';
