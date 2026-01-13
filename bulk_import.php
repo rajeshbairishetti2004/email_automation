@@ -4,6 +4,7 @@
 // - Filters by "Tag/Quarter"
 // - Case-Sensitive RM Assignment
 // - Added delete functionality with search and selection
+// - NEW: Includes allocation_id support for tracking imports
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -17,10 +18,46 @@ $currentUser = getCurrentUser();
 $userDesignation = $currentUser['designation'] ?? '';
 $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 
+$currentPage = basename($_SERVER['PHP_SELF']);
+
 // Add this for role check
 function isRelationshipManager($designation) {
     return (stripos($designation, 'relationship manager') !== false) &&
            (stripos($designation, 'associate') === false);
+}
+
+function getCurrentMonthYear() {
+    return date('M Y'); // e.g., "Jan 2026"
+}
+
+// Modified logAllocation function to return allocation_id
+function logAllocation($pdo, $userId, $monthYear, $targetTag, $summary, $fileName = null) {
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO allocation_log 
+            (user_id, month_year, target_tag, file_name, clients_count, 
+             assigned_count, inserted_count, updated_count) 
+            VALUES (:user_id, :month_year, :target_tag, :file_name, :clients_count,
+                    :assigned_count, :inserted_count, :updated_count)
+        ");
+        
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':month_year' => $monthYear,
+            ':target_tag' => $targetTag,
+            ':file_name' => $fileName,
+            ':clients_count' => $summary['processed'],
+            ':assigned_count' => $summary['assigned'],
+            ':inserted_count' => $summary['inserted'],
+            ':updated_count' => $summary['updated']
+        ]);
+        
+        // Return the allocation ID
+        return $pdo->lastInsertId();
+    } catch (Exception $e) {
+        error_log("Failed to log allocation: " . $e->getMessage());
+        return 0;
+    }
 }
 
 $pdo = getPdo();
@@ -36,6 +73,9 @@ $summary = [
     'skipped'     => 0,
     'errors'      => [],
 ];
+
+// NEW: Store allocation_id for this import
+$allocationId = 0;
 
 // Handle AJAX requests for client list and delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
@@ -74,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         exit;
     }
 
-    // New: Get all client IDs (for select all)
+    // Get all client IDs (for select all)
     if ($_POST['ajax_action'] === 'get_all_client_ids') {
         $search = $_POST['search'] ?? '';
         try {
@@ -142,18 +182,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
 // Handle file upload and import
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) {
-    
+
     $targetTag = trim($_POST['target_tag'] ?? '');
-    
+
     if (empty($targetTag)) {
         $summary['errors'][] = "Please specify a Target Quarter/Tag (e.g., RJ) to import.";
     } else {
         $file = $_FILES['allocation_file']['tmp_name'];
-        
+        $monthYear = getCurrentMonthYear();
+        $fileName = $_FILES['allocation_file']['name'];
+
         try {
+            // NEW: Create allocation log entry BEFORE processing
+            $allocationId = logAllocation(
+                $pdo,
+                $currentUserId,
+                $monthYear,
+                $targetTag,
+                ['processed' => 0, 'assigned' => 0, 'inserted' => 0, 'updated' => 0],
+                $fileName
+            );
+
+            if (!$allocationId) {
+                throw new Exception("Failed to create allocation log entry");
+            }
+
             $spreadsheet = IOFactory::load($file);
             $sheet = $spreadsheet->getActiveSheet();
             $rows = $sheet->toArray(null, true, true, true);
+
+            // NEW: Prepare statements with allocation_id
+            $checkStmt = $pdo->prepare("
+                SELECT id FROM clients 
+                WHERE name = :name AND month_year = :month_year LIMIT 1
+            ");
+            
+            $checkPrevStmt = $pdo->prepare("
+                SELECT id, email, assigned_to, review_cycle 
+                FROM clients 
+                WHERE name = :name 
+                ORDER BY created_at DESC LIMIT 1
+            ");
+            
+            $insertStmt = $pdo->prepare("
+                INSERT INTO clients 
+                (name, email, assigned_to, review_assigned_to, total_amount, aum, priority, 
+                 review_cycle, report_state, created_at, created_by, month_year, 
+                 original_client_id, allocation_id) 
+                VALUES (:name, :email, :assign, :reviewer, :aum, :aum_val, :prio, 
+                        :cycle, 'pending', NOW(), :creator, :month_year, 
+                        :original_id, :allocation_id)
+            ");
+            
+            $updateStmt = $pdo->prepare("
+                UPDATE clients 
+                SET assigned_to = :assign, 
+                    review_assigned_to = :reviewer, 
+                    total_amount = :aum, 
+                    aum = :aum_val, 
+                    priority = :prio, 
+                    review_cycle = :cycle, 
+                    updated_at = NOW(),
+                    allocation_id = :allocation_id
+                WHERE id = :id
+            ");
 
             foreach ($rows as $rowIndex => $row) {
                 if ($rowIndex < 2) continue; // Skip Header
@@ -170,7 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // FILTER BY TAG/QUARTER
                 if (stripos($rawTag, $targetTag) === false) {
                     $summary['skipped']++;
-                    continue; 
+                    continue;
                 }
 
                 $summary['processed']++;
@@ -179,10 +271,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 $allUsers = [];
                 $uStmt = $pdo->query("SELECT id, username, name FROM users");
                 while ($uRow = $uStmt->fetch(PDO::FETCH_ASSOC)) {
-                    // Map BOTH "username" and "name" to the User ID (Lowercase for flexibility)
                     $usernameKey = strtolower(trim($uRow['username']));
                     $fullnameKey = strtolower(trim($uRow['name']));
-                    
                     $allUsers[$usernameKey] = $uRow['id'];
                     if (!empty($fullnameKey)) {
                         $allUsers[$fullnameKey] = $uRow['id'];
@@ -196,11 +286,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 $revKey       = strtolower($rawReviewer);
 
                 if (!empty($rmKey) && isset($allUsers[$rmKey])) {
-                    $assignedToId = $allUsers[$rmKey];
+                    $assignedToId = $allUsers[$rmKey];  
                     $summary['assigned']++;
                 } else {
                     $summary['unassigned']++;
                 }
+                
                 if (!empty($revKey) && isset($allUsers[$revKey])) {
                     $reviewerId = $allUsers[$revKey];
                 }
@@ -212,23 +303,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
                 $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
 
-                // DB UPSERT
-                $chk = $pdo->prepare("SELECT id FROM clients WHERE name = :name LIMIT 1");
-                $chk->execute([':name' => $rawName]);
-                $exists = $chk->fetchColumn();
+                // --- MONTHLY CLIENT LOGIC START ---
+                // Check if client exists in current month
+                $checkStmt->execute([':name' => $rawName, ':month_year' => $monthYear]);
+                $existsCurrentMonth = $checkStmt->fetchColumn();
 
-                if ($exists) {
-                    $upd = $pdo->prepare("UPDATE clients SET assigned_to=:assign, review_assigned_to=:reviewer, total_amount=:aum, aum=:aum_val, priority=:prio, review_cycle=:cycle, updated_at=NOW() WHERE id=:id");
-                    $upd->execute([':assign'=>$assignedToId, ':reviewer'=>$reviewerId, ':aum'=>$aumInCrores, ':aum_val'=>$aumInCrores, ':prio'=>$rawPriority, ':cycle'=>$reviewCycleValue, ':id'=>(int)$exists]);
+                // Check if client exists in any previous month (for reference)
+                $checkPrevStmt->execute([':name' => $rawName]);
+                $previousClient = $checkPrevStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($existsCurrentMonth) {
+                    // Update existing client for current month
+                    $updateStmt->execute([
+                        ':assign' => $assignedToId,
+                        ':reviewer' => $reviewerId,
+                        ':aum' => $aumInCrores,
+                        ':aum_val' => $aumInCrores,
+                        ':prio' => $rawPriority,
+                        ':cycle' => $reviewCycleValue,
+                        ':allocation_id' => $allocationId, // NEW: Include allocation_id
+                        ':id' => (int)$existsCurrentMonth
+                    ]);
                     $summary['updated']++;
                 } else {
-                    $ins = $pdo->prepare("INSERT INTO clients (name, assigned_to, review_assigned_to, total_amount, aum, priority, review_cycle, report_state, created_at, created_by) VALUES (:name, :assign, :reviewer, :aum, :aum_val, :prio, :cycle, 'pending', NOW(), :creator)");
-                    $ins->execute([':name'=>$rawName, ':assign'=>$assignedToId, ':reviewer'=>$reviewerId, ':aum'=>$aumInCrores, ':aum_val'=>$aumInCrores, ':prio'=>$rawPriority, ':cycle'=>$reviewCycleValue, ':creator'=>$currentUserId]);
+                    // Insert new client for current month
+                    $originalClientId = $previousClient ? $previousClient['id'] : null;
+
+                    $insertStmt->execute([
+                        ':name' => $rawName,
+                        ':email' => $previousClient['email'] ?? null,
+                        ':assign' => $assignedToId,
+                        ':reviewer' => $reviewerId,
+                        ':aum' => $aumInCrores,
+                        ':aum_val' => $aumInCrores,
+                        ':prio' => $rawPriority,
+                        ':cycle' => $reviewCycleValue,
+                        ':creator' => $currentUserId,
+                        ':month_year' => $monthYear,
+                        ':original_id' => $originalClientId,
+                        ':allocation_id' => $allocationId // NEW: Include allocation_id
+                    ]);
                     $summary['inserted']++;
+
+                    // Archive previous month's client if exists
+                    if ($previousClient && !empty($previousClient['id'])) {
+                        $archiveStmt = $pdo->prepare("UPDATE clients SET is_archived = 1 WHERE id = :id");
+                        $archiveStmt->execute([':id' => $previousClient['id']]);
+                    }
                 }
+                // --- MONTHLY CLIENT LOGIC END ---
             }
 
+            // NEW: Update allocation log with final counts
+            $updateAllocStmt = $pdo->prepare("
+                UPDATE allocation_log 
+                SET clients_count = :clients_count,
+                    assigned_count = :assigned_count,
+                    inserted_count = :inserted_count,
+                    updated_count = :updated_count
+                WHERE id = :id
+            ");
+            
+            $updateAllocStmt->execute([
+                ':clients_count' => $summary['processed'],
+                ':assigned_count' => $summary['assigned'],
+                ':inserted_count' => $summary['inserted'],
+                ':updated_count' => $summary['updated'],
+                ':id' => $allocationId
+            ]);
+
         } catch (Exception $e) {
+            // NEW: Delete allocation log if import failed
+            if ($allocationId > 0) {
+                try {
+                    $pdo->prepare("DELETE FROM allocation_log WHERE id = ?")->execute([$allocationId]);
+                } catch (Exception $deleteErr) {
+                    error_log("Failed to delete failed allocation log: " . $deleteErr->getMessage());
+                }
+            }
             $summary['errors'][] = "Error processing file: " . $e->getMessage();
         }
     }
@@ -496,18 +648,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             border-bottom: 1px solid #eee;
         }
         
-        .info-box {
+        .allocation-info {
             background: #e3f2fd;
             padding: 20px;
             border-radius: 8px;
             margin-top: 25px;
             border-left: 4px solid #0288D1;
+            display: none;
         }
         
-        .info-box strong {
+        .allocation-info.show {
+            display: block;
+        }
+        
+        .allocation-info strong {
             color: #0288D1;
             display: block;
             margin-bottom: 10px;
+        }
+        
+        .allocation-link {
+            display: inline-block;
+            background: #0288D1;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 10px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        .allocation-link:hover {
+            background: #0277bd;
         }
         
         .error {
@@ -820,6 +993,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
                 <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
                 <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>">Bulk Allocate</a>
+                <a href="allocation_log.php" class="<?php echo $currentPage === 'allocation_log.php' ? 'active' : ''; ?>">Allocation Log</a>
             </div>
         </div>
         <div class="nav-user" style="position:relative;">
@@ -878,6 +1052,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                             <?php endforeach; ?>
                         </ul>
                     </div>
+                <?php endif; ?>
+                
+                <?php if ($allocationId > 0 && empty($summary['errors'])): ?>
+                <div class="allocation-info show" id="allocationInfo">
+                    <strong><i class="fas fa-info-circle"></i> Allocation Created</strong>
+                    <p>This import has been logged with Allocation ID: <strong>#<?php echo $allocationId; ?></strong></p>
+                    <p>You can view the complete allocation details in the Allocation Log.</p>
+                    <a href="allocation_log.php" class="allocation-link">
+                        <i class="fas fa-external-link-alt"></i> View Allocation Log
+                    </a>
+                    <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>" target="_blank" class="allocation-link" style="margin-left: 10px;">
+                        <i class="fas fa-eye"></i> View Clients in this Allocation
+                    </a>
+                </div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
@@ -1223,25 +1411,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 loadClients(e.target.value);
             }, 300);
         });
-        
-        // Select all functionality (optional)
-        function selectAllClients() {
-            const checkboxes = document.querySelectorAll('.client-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = true;
-                selectedClients.add(parseInt(checkbox.value));
-            });
-            updateSelectedCount();
-        }
-        
-        function clearAllSelection() {
-            const checkboxes = document.querySelectorAll('.client-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            selectedClients.clear();
-            updateSelectedCount();
-        }
         
         // Close modals when clicking outside
         document.addEventListener('click', function(e) {
