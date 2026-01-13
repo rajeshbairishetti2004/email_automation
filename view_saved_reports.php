@@ -479,30 +479,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     </style>
 </head>
 <body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
-
-<nav class="navbar">
-    <div class="nav-left">
-        <div class="top-bar">
-            <img src="image.png" alt="Logo" style="height:40px; margin-right:10px;">
-            <a href="upload.php" class="nav-brand">Finance Doctor</a>
-         </div>
-        <div class="nav-links">
-            <a href="upload.php">Dashboard</a>
-            <a href="view_saved_reports.php" class="active">All Reports</a>
-            <a href="bulk_import.php">Bulk Allocate</a>
-        </div>
-    </div>
-     <div class="nav-user" style="position:relative;">
-            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-            <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:36px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:100;">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
-                    <?= htmlspecialchars($userDesignation) ?>
-                </div>
-                <a href="profile.php" style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">My Profile</a>
-                <a href="logout.php" class="logout-link" style="display:block; padding:8px 12px; text-align:right;">Logout</a>
-            </div>
-        </div>
-</nav>
+  
+<?php include 'navbar.php'; ?>
 
 <div class="container">
 

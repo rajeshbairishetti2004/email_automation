@@ -717,36 +717,12 @@ $unassignedClients = $totalClients - count($assignedClients);
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-left">
-            <div class="top-bar">
-                <img src="image.png" alt="Logo">
-                <a href="upload.php" class="nav-brand">Finance Doctor</a>
-            </div>
-            <div class="nav-links">
-                <a href="upload.php">Dashboard</a>
-                <a href="view_allocation_clients.php" class="active">View Allocations</a>
-                <a href="view_saved_reports.php">All Reports</a>
-                <a href="bulk_import.php">Bulk Allocate</a>
-                <a href="allocation_log.php">Allocation Log</a>
-            </div>
-        </div>
-        <div class="nav-user" style="position:relative;">
-            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-            <div id="profileDropdown" class="profile-dropdown" style="display:none;">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
-                    <?= htmlspecialchars($userDesignation) ?>
-                </div>
-                <a href="profile.php" style="color:#0288D1; font-weight:600;">My Profile</a>
-                <a href="logout.php" class="logout-link">Logout</a>
-            </div>
-        </div>
-    </nav>
+    <?php include 'navbar.php'; ?>
 
     <div class="container">
-        <button class="back-button" onclick="window.history.back()">
-            <i class="fas fa-arrow-left"></i> Back to Allocation Log
-        </button>
+<button class="back-button" onclick="window.location.href='allocation_log.php'">
+    <i class="fas fa-arrow-left"></i> Back to Allocation Log
+</button>
         
         <h2>
             <i class="fas fa-users"></i> 
@@ -815,7 +791,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                         <th>Relationship Manager</th>
                         <th>Reviewed By</th>
                         <th>Review Cycle</th>
-                        <th>AUM (£)</th>
+                        <th>AUM (₹)</th>
                         <th>Priority</th>
                         <th>Status</th>
                         <th>Last Updated</th>
@@ -838,7 +814,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                             ?>
                         </td>
                         <td><span class="tag-badge"><?php echo htmlspecialchars($client['review_cycle'] ?? 'N/A'); ?></span></td>
-                        <td class="aum-value">£<?php echo number_format($client['aum'] ?? 0, 2); ?></td>
+                        <td class="aum-value">₹<?php echo number_format($client['aum'] ?? 0, 2); ?> Cr</td>
                         <td>
                             <?php 
                             $priority = $client['priority'] ?? 'Normal';
@@ -1086,7 +1062,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                                         <th>Review Cycle</th>
                                         <th>RM</th>
                                         <th>Reviewer</th>
-                                        <th>AUM (£)</th>
+                                        <th>AUM (₹)</th>
                                         <th>Status</th>
                                         <th>Dates</th>
                                         <th>Actions</th>
@@ -1113,7 +1089,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                                 <td><span class="tag-badge">${escapeHtml(review.review_cycle || 'N/A')}</span></td>
                                 <td>${escapeHtml(review.rm_name || 'Unassigned')}</td>
                                 <td>${escapeHtml(review.reviewer_name || 'Unassigned')}</td>
-                                <td>£${parseFloat(review.aum || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td>₹${parseFloat(review.aum || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}Cr</td>
                                 <td><span class="${statusClass}">${statusText}</span></td>
                                 <td><small>${dates.join('<br>') || 'No dates'}</small></td>
                                 <td>

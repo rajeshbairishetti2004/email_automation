@@ -601,30 +601,7 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-left">
-            <div class="top-bar">
-                <img src="image.png" alt="Logo">
-                <a href="upload.php" class="nav-brand">Finance Doctor</a>
-            </div>
-            <div class="nav-links">
-                <a href="upload.php">Dashboard</a>
-                <a href="view_saved_reports.php">All Reports</a>
-                <a href="bulk_import.php">Bulk Allocate</a>
-                <a href="allocation_log.php" class="active">Allocation Log</a>
-            </div>
-        </div>
-        <div class="nav-user" style="position:relative;">
-            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-            <div id="profileDropdown" class="profile-dropdown" style="display:none;">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
-                    <?= htmlspecialchars($userDesignation) ?>
-                </div>
-                <a href="profile.php" style="color:#0288D1; font-weight:600;">My Profile</a>
-                <a href="logout.php" class="logout-link">Logout</a>
-            </div>
-        </div>
-    </nav>
+     <?php include 'navbar.php'; ?>
 
     <div class="container">
         <div class="page-header">

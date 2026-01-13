@@ -415,11 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             border-bottom: 1px solid #eaeaea;
         }
         
-        .nav-left {
-            display: flex;
-            align-items: center;
-            gap: 30px;
-        }
+
         
 .top-bar {
     display: flex;
@@ -460,97 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     height: 38px;
     width: auto;
 }
-.nav-brand {
-    font-size: 1.18rem;
-    font-weight: 600;
-    color: #0f172a;
-    font-family: 'Poppins', sans-serif;
-    text-decoration: none;
-    white-space: nowrap;
-    margin-left: 6px;
-}
 
-.nav-links {
-    display: flex;
-    gap: 32px;
-    margin-left: 32px;
-}
-.nav-links a {
-    text-decoration: none;
-    font-weight: 600;
-    color: #64748b;
-    padding: 10px 0;
-    border-bottom: 2.5px solid transparent;
-    font-size: 1.08rem;
-    transition: color 0.18s, border-color 0.18s;
-}
-.nav-links a.active {
-    color: #2563eb;
-    border-bottom: 2.5px solid #2563eb;
-}
-.nav-links a:hover {
-    color: #2563eb;
-    border-bottom: 2.5px solid #2563eb;
-}
-        
-.nav-user {
-    color: #2563eb;
-    font-weight: 600;
-    padding: 8px 22px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    background: #e3f2fd;
-    border-radius: 50px;
-    border: 1.5px solid #b3e5fc;
-    position: relative;
-    transition: 0.2s;
-    font-size: 1.08rem;
-    box-shadow: 0 2px 8px rgba(41, 182, 246, 0.10);
-}
-.nav-user:hover {
-    background: #2563eb;
-    color: #fff;
-}
-.profile-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 36px;
-    background: #fff;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    min-width: 180px;
-    z-index: 100;
-    margin-right: 20px;
-}
-.profile-dropdown div {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 5px;
-    border-bottom: 1px solid #eee;
-    padding: 8px 12px 5px;
-}
-.profile-dropdown a {
-    display: block;
-    padding: 8px 12px;
-    text-align: right;
-    color: #0288D1;
-    font-weight: 600;
-    text-decoration: none;
-}
-.profile-dropdown a.logout-link {
-    color: #e53935 !important;
-    font-weight: 700;
-    background: none;
-    transition: background 0.2s, color 0.2s;
-}
-.profile-dropdown a.logout-link:hover {
-    background: #ffebee;
-    color: #b71c1c !important;
-}
 
         .container {
             max-width: 1200px;
@@ -998,30 +904,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 </head>
 <body>
 
-    <nav class="navbar">
-        <div class="nav-left">
-            <div class="top-bar">
-                <img src="image.png" alt="Logo">
-                <a href="upload.php" class="nav-brand">Finance Doctor</a>
-            </div>
-            <div class="nav-links">
-                <a href="upload.php" class="<?php echo $currentPage === 'upload.php' ? 'active' : ''; ?>">Dashboard</a>
-                <a href="view_saved_reports.php" class="<?php echo $currentPage === 'view_saved_reports.php' ? 'active' : ''; ?>">All Reports</a>
-                <a href="bulk_import.php" class="<?php echo $currentPage === 'bulk_import.php' ? 'active' : ''; ?>">Bulk Allocate</a>
-                <a href="allocation_log.php" class="<?php echo $currentPage === 'allocation_log.php' ? 'active' : ''; ?>">Allocation Log</a>
-            </div>
-        </div>
-        <div class="nav-user" style="position:relative;">
-            <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-            <div id="profileDropdown" class="profile-dropdown" style="display:none;">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
-                    <?= htmlspecialchars($userDesignation) ?>
-                </div>
-                <a href="profile.php" style="color:#0288D1; font-weight:600;">My Profile</a>
-                <a href="logout.php" class="logout-link">Logout</a>
-            </div>
-        </div>
-    </nav>
+  <?php include 'navbar.php'; ?>
 
     <div class="container">
         <div class="page-header">
