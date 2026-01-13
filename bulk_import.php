@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     if ($_POST['ajax_action'] === 'get_clients_list') {
         $search = $_POST['search'] ?? '';
         try {
-            $sql = "SELECT id, name, email, assigned_to FROM clients WHERE 1=1";
+           $sql = "SELECT id, name, email, assigned_to, updated_at FROM clients WHERE 1=1";
             $params = [];
             if (!empty($search)) {
                 $sql .= " AND (name LIKE :search OR email LIKE :search)";
@@ -785,13 +785,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             padding: 10px;
         }
         
-        .client-checkbox-item {
-            display: flex;
-            align-items: center;
-            padding: 12px 15px;
-            border-bottom: 1px solid #f0f0f0;
-            transition: background 0.2s;
-        }
+.client-checkbox-item {
+    display: flex;
+    align-items: flex-start; /* Changed from center to flex-start */
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.2s;
+}
+
+.client-info {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.client-details {
+    flex: 1;
+}
+
+.client-meta {
+    text-align: right;
+    margin-left: 20px;
+    min-width: 150px;
+}
         
         .client-checkbox-item:hover {
             background: #f8f9fa;
@@ -806,9 +823,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             transform: scale(1.2);
         }
         
-        .client-info {
-            flex: 1;
-        }
+
         
         .client-name {
             font-weight: 500;
@@ -1268,20 +1283,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             let html = '';
             clients.forEach(client => {
                 const isSelected = selectedClients.has(parseInt(client.id));
-                html += `
-                    <div class="client-checkbox-item">
-                        <input type="checkbox" 
-                               class="client-checkbox" 
-                               id="client_${client.id}"
-                               value="${client.id}"
-                               ${isSelected ? 'checked' : ''}
-                               onchange="toggleClientSelection(${client.id})">
-                        <div class="client-info">
-                            <div class="client-name">${escapeHtml(client.name)}</div>
-                            ${client.email ? `<div class="client-email">${escapeHtml(client.email)}</div>` : ''}
-                        </div>
-                    </div>
-                `;
+html += `
+    <div class="client-checkbox-item">
+        <input type="checkbox" 
+               class="client-checkbox" 
+               id="client_${client.id}"
+               value="${client.id}"
+               ${isSelected ? 'checked' : ''}
+               onchange="toggleClientSelection(${client.id})">
+        <div class="client-info">
+            <div class="client-details">
+                <div class="client-name">${escapeHtml(client.name)}</div>
+                ${client.email ? `<div class="client-email">${escapeHtml(client.email)}</div>` : ''}
+            </div>
+            <div class="client-meta">
+                <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 3px;">
+                    ID: ${client.id}
+                </div>
+                ${client.updated_at ? `<div style="font-size: 11px; color: #888;">
+                    ${formatDate(client.updated_at)}
+                </div>` : '<div style="font-size: 11px; color: #888;">Never</div>'}
+            </div>
+        </div>
+    </div>
+`;
             });
             
             container.innerHTML = html;
@@ -1436,6 +1461,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 }
             }
         });
+function formatDate(dateString) {
+    if (!dateString) return 'Never';
+    const date = new Date(dateString);
+    
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = date.toLocaleString('en-GB', { month: 'short' });
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${day} ${month} ${year}, ${hours}:${minutes}`;
+}
     </script>
 </body>
 </html>

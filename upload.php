@@ -27,30 +27,38 @@ function safePercent($num, $den)
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
 {
-    $where  = '1=1';
+    // Build the base WHERE clause for filtering
+    $baseWhere = "1=1";
     $params = [];
+
+    // Apply context filters
     if ($context === 'mine') {
-        $where = '(assigned_to = ? OR review_assigned_to = ?)';
-        $params = [$userId, $userId];
+        $baseWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+        $params[] = $userId;
+        $params[] = $userId;
     } elseif (ctype_digit($context)) {
-        $where = '(assigned_to = ? OR review_assigned_to = ?)';
-        $params = [(int)$context, (int)$context];
+        $baseWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+        $params[] = (int)$context;
+        $params[] = (int)$context;
     }
+    
     // Add cycle filter if set
     if ($cycleFilter !== '') {
-        $where .= ' AND review_cycle = ?';
+        $baseWhere .= " AND review_cycle = ?";
         $params[] = $cycleFilter;
     }
 
+    // Get the latest record for each client and count by status
+    // Using is_latest column for efficiency
     $sql = "SELECT
-                COUNT(*) AS total,
-                SUM(IF(report_state = 'pending', 1, 0))  AS count_pending,
-                SUM(IF(report_state = 'draft', 1, 0))    AS count_draft,
-                SUM(IF(report_state = 'ready', 1, 0))    AS count_ready,
-                SUM(IF(report_state = 'reviewed', 1, 0)) AS count_reviewed,
-                SUM(IF(report_state = 'sent', 1, 0))     AS count_sent
+                COUNT(DISTINCT name) AS total,
+                SUM(CASE WHEN report_state = 'pending' THEN 1 ELSE 0 END) AS count_pending,
+                SUM(CASE WHEN report_state = 'draft' THEN 1 ELSE 0 END) AS count_draft,
+                SUM(CASE WHEN report_state = 'ready' THEN 1 ELSE 0 END) AS count_ready,
+                SUM(CASE WHEN report_state = 'reviewed' THEN 1 ELSE 0 END) AS count_reviewed,
+                SUM(CASE WHEN report_state = 'sent' THEN 1 ELSE 0 END) AS count_sent
             FROM clients
-            WHERE {$where}";
+            WHERE is_latest = TRUE AND {$baseWhere}";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -72,19 +80,18 @@ function fetchTeamStats(PDO $pdo): array
                 u.id,
                 u.username,
                 u.designation,
-                SUM(IF(c.report_state = 'pending', 1, 0)) AS pending_count,
-                SUM(IF(c.report_state = 'sent', 1, 0)) AS sent_count,
-                SUM(IF(c.priority = 'high', 1, 0)) AS high_pri,
-                COUNT(c.id) AS total_assigned
+                COUNT(DISTINCT c.name) AS total_assigned,
+                SUM(CASE WHEN c.report_state = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+                SUM(CASE WHEN c.report_state = 'sent' THEN 1 ELSE 0 END) AS sent_count,
+                SUM(CASE WHEN c.priority = 'high' THEN 1 ELSE 0 END) AS high_pri
             FROM users u
-            LEFT JOIN clients c ON c.assigned_to = u.id
+            LEFT JOIN clients c ON c.assigned_to = u.id AND c.is_latest = TRUE
             GROUP BY u.id
             ORDER BY u.username";
 
     $stmt = $pdo->query($sql);
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Rename high_pri back to high_priority for compatibility
     foreach ($result as &$row) {
         $row['high_priority'] = $row['high_pri'];
         unset($row['high_pri']);
@@ -124,26 +131,32 @@ if ($viewContext === 'all') {
     $targetName = 'User';
 }
 
-  // --- AUM CALCULATION LOGIC ---
-                    // This follows the same context/cycle filtering as the dashboard stats
-                    $aumWhere  = '1=1';
-                    $aumParams = [];
-                    if ($viewContext === 'mine') {
-                        $aumWhere = '(assigned_to = ? OR review_assigned_to = ?)';
-                        $aumParams = [$currentUserId, $currentUserId];
-                    } elseif (ctype_digit($viewContext)) {
-                        $aumWhere = '(assigned_to = ? OR review_assigned_to = ?)';
-                        $aumParams = [(int)$viewContext, (int)$viewContext];
-                    }
-                    
-                    if ($cycleFilter !== '') {
-                        $aumWhere .= ' AND review_cycle = ?';
-                        $aumParams[] = $cycleFilter;
-                    }
-                    
-                    $stmtAum = $pdo->prepare("SELECT SUM(aum) FROM clients WHERE {$aumWhere}");
-                    $stmtAum->execute($aumParams);
-                    $totalAum = $stmtAum->fetchColumn() ?: 0;
+// --- AUM CALCULATION LOGIC ---
+$aumWhere = "is_latest = TRUE";
+$aumParams = [];
+
+if ($viewContext === 'mine') {
+    $aumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+    $aumParams = [$currentUserId, $currentUserId];
+} elseif (ctype_digit($viewContext)) {
+    $aumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+    $aumParams = [(int)$viewContext, (int)$viewContext];
+}
+
+if ($cycleFilter !== '') {
+    $aumWhere .= " AND review_cycle = ?";
+    $aumParams[] = $cycleFilter;
+}
+
+// Get AUM from the latest records only
+// Get AUM from the latest records only
+$stmtAum = $pdo->prepare("
+    SELECT SUM(aum) 
+    FROM clients
+    WHERE {$aumWhere}
+");
+$stmtAum->execute($aumParams);
+$totalAum = $stmtAum->fetchColumn() ?: 0;
 
 $usersStmt = $pdo->query('SELECT id, username FROM users ORDER BY username ASC');
 $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -151,7 +164,6 @@ $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
 $viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter);
 $completionRate  = safePercent($viewStats['count_sent'], max(1, $viewStats['total']));
 $uploadError     = '';
-// In upload.php, replace the POST handling section from line ~175 onwards:
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -240,18 +252,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             AND month_year = :month_year
         ');
         
-        $insertClient = $pdo->prepare('INSERT INTO clients
-            (name, email, as_on, total_amount, profit, cagr, xirr, absolute_return,
-             total_goal_current, total_goal_target, total_sip,
-             greeting_prefix, intro_text, closing_text, rationale_text,
-             created_by, report_state, assigned_to, month_year, review_cycle,
-             is_latest, previous_version_id, review_attempt)
-            VALUES
-            (:name, :email, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
-             :total_goal_current, :total_goal_target, :total_sip,
-             :greeting_prefix, :intro_text, :closing_text, :rationale_text,
-             :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
-             :is_latest, :previous_version_id, :review_attempt)');
+$insertClient = $pdo->prepare('INSERT INTO clients
+    (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
+     total_goal_current, total_goal_target, total_sip,
+     greeting_prefix, intro_text, closing_text, rationale_text,
+     created_by, report_state, assigned_to, month_year, review_cycle,
+     is_latest, previous_version_id, review_attempt)
+    VALUES
+    (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
+     :total_goal_current, :total_goal_target, :total_sip,
+     :greeting_prefix, :intro_text, :closing_text, :rationale_text,
+     :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
+     :is_latest, :previous_version_id, :review_attempt)');
 
         $stmtGoal = $pdo->prepare('INSERT INTO client_goals
             (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
@@ -303,11 +315,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $totals  = $clientData['current']['totals'] ?? ['purchase' => 0, 'current' => 0, 'profit' => 0, 'cagr_weighted' => 0, 'xirr_weighted' => 0, 'absolute_return' => 0];
             $summary = $clientData['current']['summary'] ?? null;
 
-            $totalAmount    = $totals['current'] ?? 0;
-            $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
-            $cagr           = $totals['cagr_weighted'] ?? 0;
-            $xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
-            $absoluteReturn = $totals['absolute_return'] ?? 0;
+$totalAmount    = $totals['current'] ?? 0;
+$aum            = $totalAmount;  // Store same value, no conversion needed
+$profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
+$cagr           = $totals['cagr_weighted'] ?? 0;
+$xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
+$absoluteReturn = $totals['absolute_return'] ?? 0;
 
             $goals      = $clientData['goals'] ?? [];
             $allocation = $clientData['allocation'] ?? [];
@@ -332,6 +345,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':email'              => $email,
                 ':as_on'              => $asOn,
                 ':total_amount'       => $totalAmount,
+                ':aum'                => $aum,  // Store in crores
                 ':profit'             => $profit,
                 ':cagr'               => $cagr,
                 ':xirr'               => $xirr,
@@ -513,9 +527,9 @@ $userDesignation = $currentUser['designation'] ?? '';
                     <?php $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>
                     <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
                         <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
-                        <div style="font-size: 22px; font-weight: 800; color: #1e293b;">
-                            ₹<?= number_format($totalAum, 2); ?> <span style="font-size: 13px;">Cr</span>
-                        </div>
+<div style="font-size: 22px; font-weight: 800; color: #1e293b;">
+    ₹<?= number_format($totalAum, 2); ?> <span style="font-size: 13px;">Cr</span>
+</div>
                     </div>
                 </div>
             </div>
@@ -567,11 +581,6 @@ $userDesignation = $currentUser['designation'] ?? '';
                 <div class="number"><?php echo (int)$viewStats['count_sent']; ?></div>
             </a>
         </div>
-
-       
-       
-        <!-- Review not started block removed as requested -->
-        <!-- Review not started block removed as requested -->
 
         <div class="upload-section" style="position:relative;">
             <?php if (!empty($_GET['auto_search'])): ?>
