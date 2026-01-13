@@ -727,20 +727,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             allowInput: true
         });
         
-        // Profile dropdown
-        const profilePic = document.getElementById('profilePic');
-        const profileDropdown = document.getElementById('profileDropdown');
-        
-        if (profilePic) {
-            profilePic.addEventListener('click', function(e) {
-                profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
-                e.stopPropagation();
-            });
-            
-            document.addEventListener('click', function() {
-                profileDropdown.style.display = 'none';
-            });
-        }
         
         // Auto-submit when month is selected
         document.querySelector('select[name="month"]').addEventListener('change', function() {

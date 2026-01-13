@@ -1006,36 +1006,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
 </style>
 </head>
 <body>
-
-<div class="full-width-header-bar">
-    <header class="header">
-        <div class="header-left">
-            <img src="image.png" alt="Company Logo">
-            <span class="greeting">Hi <?= $displayName ?>!</span>
-        </div>
-        
-        <div class="header-right">
-            <button onclick="location.reload()" title="Refresh Page" style="background:transparent; border:none; cursor:pointer; margin-right:16px; font-size:20px; color:#007bff;">
-                <span style="display:inline-block; vertical-align:middle;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 0-.908-.418A6 6 0 1 0 8 2v1z"/>
-                        <path d="M8 1a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 0-1H8.707A5.978 5.978 0 0 1 8 1z"/>
-                    </svg>
-                </span>
-            </button>
-            <div class="profile-pic" onclick="toggleDropdown()">
-                <?= $initials ?>
-            </div>
-
-            <div id="profileDropdown" class="profile-dropdown">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px;">
-                    <?= htmlspecialchars($userDesignation) ?>
-                </div>
-                <a href="logout.php" class="logout-link">Logout</a>
-            </div>
-        </div>
-    </header>
-</div>
+  <?php include 'navbar.php'; ?>
 
 <?php
     // Determine Status Badge Class & Text
@@ -1057,7 +1028,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
     }
 ?>
 <!-- WORKFLOW BAR -->
-<div class="workflow-bar" style="border-left-color: <?= $borderColor ?>;">
+<div class="workflow-bar" style="border-left-color: <?= $borderColor ?>;margin-top: 30px;">
     <div class="workflow-status">
         <span style="font-size: 12px; color: #666; margin-right: 10px;">Status:</span>
         <span class="workflow-status-badge <?= $statusClass ?>">

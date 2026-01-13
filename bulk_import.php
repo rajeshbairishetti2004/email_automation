@@ -1034,18 +1034,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     <?php endif; ?>
 
     <script>
-        // Profile dropdown
-        const profilePic = document.getElementById('profilePic');
-        const profileDropdown = document.getElementById('profileDropdown');
-        
-        profilePic.addEventListener('click', function(e) {
-            profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
-            e.stopPropagation();
-        });
-        
-        document.addEventListener('click', function() {
-            profileDropdown.style.display = 'none';
-        });
+
         
         // Delete functionality
         let allClients = [];
