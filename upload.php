@@ -151,6 +151,7 @@ $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
 $viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter);
 $completionRate  = safePercent($viewStats['count_sent'], max(1, $viewStats['total']));
 $uploadError     = '';
+// In upload.php, replace the POST handling section from line ~175 onwards:
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -218,42 +219,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('No client data could be parsed from the uploaded files.');
         }
 
-        $checkClient = $pdo->prepare('SELECT id FROM clients WHERE name = :name LIMIT 1');
-        $updateClient = $pdo->prepare('UPDATE clients SET
-                as_on = :as_on,
-                email = :email,
-                total_amount = :total_amount,
-                profit = :profit,
-                cagr = :cagr,
-                xirr = :xirr,
-                absolute_return = :absolute_return,
-                total_goal_current = :total_goal_current,
-                total_goal_target = :total_goal_target,
-                total_sip = :total_sip,
-                greeting_prefix = :greeting_prefix,
-                intro_text = :intro_text,
-                closing_text = :closing_text,
-                rationale_text = :rationale_text,
-            report_state = :report_state,
-            created_by = :created_by,
-            updated_at = NOW()
-            WHERE id = :id');
-
+        // NEW: Get current month_year for the review
+        $currentMonthYear = date('F Y');
+        
+        // Check for existing client with same name/email in the SAME month
+        $checkExistingReview = $pdo->prepare('
+            SELECT id, review_attempt 
+            FROM clients 
+            WHERE name = :name 
+            AND month_year = :month_year 
+            ORDER BY review_attempt DESC 
+            LIMIT 1
+        ');
+        
+        // Update previous versions to mark them as not latest
+        $markPreviousAsNotLatest = $pdo->prepare('
+            UPDATE clients 
+            SET is_latest = FALSE 
+            WHERE name = :name 
+            AND month_year = :month_year
+        ');
+        
         $insertClient = $pdo->prepare('INSERT INTO clients
             (name, email, as_on, total_amount, profit, cagr, xirr, absolute_return,
              total_goal_current, total_goal_target, total_sip,
              greeting_prefix, intro_text, closing_text, rationale_text,
-             created_by, report_state, assigned_to)
+             created_by, report_state, assigned_to, month_year, review_cycle,
+             is_latest, previous_version_id, review_attempt)
             VALUES
             (:name, :email, :as_on, :total_amount, :profit, :cagr, :xirr, :absolute_return,
              :total_goal_current, :total_goal_target, :total_sip,
              :greeting_prefix, :intro_text, :closing_text, :rationale_text,
-             :created_by, :report_state, :assigned_to)');
-
-        $wipeGoals   = $pdo->prepare('DELETE FROM client_goals WHERE client_id = :cid');
-        $wipeAlloc   = $pdo->prepare('DELETE FROM client_allocations WHERE client_id = :cid');
-        $wipeSchemes = $pdo->prepare('DELETE FROM client_schemes WHERE client_id = :cid');
-        $wipeAnnex   = $pdo->prepare('DELETE FROM client_annexures WHERE client_id = :cid');
+             :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
+             :is_latest, :previous_version_id, :review_attempt)');
 
         $stmtGoal = $pdo->prepare('INSERT INTO client_goals
             (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
@@ -274,11 +272,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $firstClientId = 0;
         foreach ($allClientReports as $clientData) {
-
             $email = trim($clientData['email'] ?? '');
             $clientName = trim($clientData['name'] ?? '');
             if ($clientName === '') {
                 continue;
+            }
+
+            // Check if this client already has a review this month
+            $checkExistingReview->execute([
+                ':name' => $clientName,
+                ':month_year' => $currentMonthYear
+            ]);
+            $existingReview = $checkExistingReview->fetch(PDO::FETCH_ASSOC);
+            
+            // Calculate review attempt number
+            $reviewAttempt = 1;
+            $previousVersionId = null;
+            
+            if ($existingReview) {
+                $reviewAttempt = (int)$existingReview['review_attempt'] + 1;
+                $previousVersionId = $existingReview['id'];
+                
+                // Mark all previous versions for this month as not latest
+                $markPreviousAsNotLatest->execute([
+                    ':name' => $clientName,
+                    ':month_year' => $currentMonthYear
+                ]);
             }
 
             $totals  = $clientData['current']['totals'] ?? ['purchase' => 0, 'current' => 0, 'profit' => 0, 'cagr_weighted' => 0, 'xirr_weighted' => 0, 'absolute_return' => 0];
@@ -294,6 +313,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allocation = $clientData['allocation'] ?? [];
             $schemes    = $clientData['schemes'] ?? [];
             $asOn       = $clientData['as_on'] ?? '';
+            
+            // Determine review cycle (you might need to add this logic)
+            $reviewCycle = $_POST['review_cycle'] ?? 'RJ'; // Default or from form
 
             $totalSip         = 0;
             $totalGoalCurrent = 0;
@@ -304,61 +326,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
             }
 
-            $checkClient->execute([':name' => $clientName]);
-            $existingId = (int)($checkClient->fetchColumn() ?: 0);
+            // INSERT NEW RECORD (not update!)
+            $insertClient->execute([
+                ':name'               => $clientName,
+                ':email'              => $email,
+                ':as_on'              => $asOn,
+                ':total_amount'       => $totalAmount,
+                ':profit'             => $profit,
+                ':cagr'               => $cagr,
+                ':xirr'               => $xirr,
+                ':absolute_return'    => $absoluteReturn,
+                ':total_goal_current' => $totalGoalCurrent,
+                ':total_goal_target'  => $totalGoalTarget,
+                ':total_sip'          => $totalSip,
+                ':greeting_prefix'    => DEFAULT_GREETING,
+                ':intro_text'         => DEFAULT_INTRO,
+                ':closing_text'       => DEFAULT_CLOSING,
+                ':rationale_text'     => DEFAULT_RATIONALE,
+                ':created_by'         => $currentUserId,
+                ':report_state'       => 'draft',
+                ':assigned_to'        => $currentUserId,
+                ':month_year'         => $currentMonthYear,
+                ':review_cycle'       => $reviewCycle,
+                ':is_latest'          => true,
+                ':previous_version_id' => $previousVersionId,
+                ':review_attempt'     => $reviewAttempt
+            ]);
 
-            if ($existingId > 0) {
-                $emailSql = $email !== '' ? $email : null;
-                $updateClient->execute([
-                    ':email' => $emailSql,
-                    ':as_on'              => $asOn,
-                    ':total_amount'       => $totalAmount,
-                    ':profit'             => $profit,
-                    ':cagr'               => $cagr,
-                    ':xirr'               => $xirr,
-                    ':absolute_return'    => $absoluteReturn,
-                    ':total_goal_current' => $totalGoalCurrent,
-                    ':total_goal_target'  => $totalGoalTarget,
-                    ':total_sip'          => $totalSip,
-                    ':greeting_prefix'    => DEFAULT_GREETING,
-                    ':intro_text'         => DEFAULT_INTRO,
-                    ':closing_text'       => DEFAULT_CLOSING,
-                    ':rationale_text'     => DEFAULT_RATIONALE,
-                    ':report_state'       => 'draft',
-                    ':created_by'         => $currentUserId,
-                    ':id'                 => $existingId,
-                ]);
-
-                $wipeGoals->execute([':cid' => $existingId]);
-                $wipeAlloc->execute([':cid' => $existingId]);
-                $wipeSchemes->execute([':cid' => $existingId]);
-                $wipeAnnex->execute([':cid' => $existingId]);
-
-                $clientId = $existingId;
-            } else {
-                $insertClient->execute([
-                    ':name'               => $clientName,
-                    ':email' => $email,
-                    ':as_on'              => $asOn,
-                    ':total_amount'       => $totalAmount,
-                    ':profit'             => $profit,
-                    ':cagr'               => $cagr,
-                    ':xirr'               => $xirr,
-                    ':absolute_return'    => $absoluteReturn,
-                    ':total_goal_current' => $totalGoalCurrent,
-                    ':total_goal_target'  => $totalGoalTarget,
-                    ':total_sip'          => $totalSip,
-                    ':greeting_prefix'    => DEFAULT_GREETING,
-                    ':intro_text'         => DEFAULT_INTRO,
-                    ':closing_text'       => DEFAULT_CLOSING,
-                    ':rationale_text'     => DEFAULT_RATIONALE,
-                    ':created_by'         => $currentUserId,
-                    ':report_state'       => 'draft',
-                    ':assigned_to'        => $currentUserId,
-                ]);
-
-                $clientId = (int)$pdo->lastInsertId();
-            }
+            $clientId = (int)$pdo->lastInsertId();
 
             if ($firstClientId === 0 && $clientId > 0) {
                 $firstClientId = $clientId;
