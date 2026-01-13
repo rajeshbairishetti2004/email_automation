@@ -953,18 +953,7 @@ if (bulkForm) {
     });
 }
 
-// Profile dropdown toggle
-const profilePic = document.getElementById('profilePic');
-const profileDropdown = document.getElementById('profileDropdown');
-if (profilePic) {
-    document.addEventListener('click', function(e) {
-        if (profilePic.contains(e.target)) {
-            profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
-        } else if (!profileDropdown.contains(e.target)) {
-            profileDropdown.style.display = 'none';
-        }
-    });
-}
+
 </script>
 
 <!-- Meeting Remarks Modal -->

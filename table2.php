@@ -41,13 +41,15 @@ if (!isset($isLocked)) {
         $dropdownClass = ($dbStatus === 'On Track') ? 'status-on' : 'status-off';
     ?>
         <tr data-goal-row-id="<?php echo (int)$g['id']; ?>">
-            <td style="padding: 0; width: 260px;">
-                <input type="text" class="goal-input autosave-field" 
-                    data-goal-id="<?php echo (int)$g['id']; ?>" 
-                    data-field="goal"
-                    value="<?php echo htmlspecialchars($g['goal']); ?>"
-                    <?php echo $isLocked ? 'readonly' : ''; ?>>
-            </td>
+<td>
+    <textarea style="padding: 0;" class="goal-input autosave-field goal-textarea"
+        data-goal-id="<?= (int)$g['id']; ?>"
+        data-field="goal"
+        rows="2"
+        <?= $isLocked ? 'readonly' : ''; ?>
+    ><?= htmlspecialchars($g['goal'] ?? '') ?></textarea>
+</td>
+
             <td style="padding: 0; width: 160px;">
                 <input type="text" class="goal-input autosave-field" 
                     data-goal-id="<?php echo (int)$g['id']; ?>" 
@@ -102,6 +104,13 @@ if (!isset($isLocked)) {
 </table>
 
 <style>
+
+    .goal-textarea {
+    resize: vertical;
+    width: 100%;
+    min-height: 48px;
+}
+
 /* --- Table 2 styles (matching Table 1) --- */
 .report-table-section {
     width: 100%;
