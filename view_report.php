@@ -437,24 +437,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $intro = trim($_POST['intro'] ?? '');
                 $closing = trim($_POST['closing'] ?? '');
                 $signatureBlock = trim($_POST['signature_block'] ?? '');
-                $isOlderThan1Year = (int)($_POST['is_older_than_1_year'] ?? 1);
-
-                $stmt = $pdo->prepare("
+$stmt = $pdo->prepare("
   UPDATE clients
   SET greeting_prefix=:g,
       intro_text=:i,
       closing_text=:c,
-      signature_block=:s,
-      is_older_than_1_year=:iot
+      signature_block=:s
   WHERE id=:id
 ");
+
 
                $stmt->execute([
   ':g'   => $greeting,
   ':i'   => $intro,
   ':c'   => $closing,
   ':s'   => $signatureBlock,
-  ':iot' => $isOlderThan1Year,
   ':id'  => $clientId
 ]);
 
@@ -632,7 +629,6 @@ $introTextStored   = trim((string)($client['intro_text'] ?? ''));
 $closingTextStored = trim((string)($client['closing_text'] ?? ''));
 $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
 $signatureStored   = trim((string)($client['signature_block'] ?? ''));
-$isOlderThan1Year  = (int)($client['is_older_than_1_year'] ?? 1);
 
 $DEFAULT_GREETING  = 'Dear Mr.';
 $DEFAULT_INTRO     = 'Introduction';
