@@ -433,27 +433,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $clientMessage = trim($_POST['client_message'] ?? '');
                 // DIRECT SAVE LOGIC - No more explode/parse confusion
                 // Since we now have 3 separate fields (greeting, intro, closing), we save them directly
-                $greeting = trim($_POST['greeting'] ?? '');
-                $intro = trim($_POST['intro'] ?? '');
-                $closing = trim($_POST['closing'] ?? '');
-                $signatureBlock = trim($_POST['signature_block'] ?? '');
-$stmt = $pdo->prepare("
-  UPDATE clients
-  SET greeting_prefix=:g,
-      intro_text=:i,
-      closing_text=:c,
-      signature_block=:s
-  WHERE id=:id
-");
+                // $greeting = trim($_POST['greeting'] ?? '');
+                // $intro = trim($_POST['intro'] ?? '');
+                // $closing = trim($_POST['closing'] ?? '');
+                // $signatureBlock = trim($_POST['signature_block'] ?? '');
+// $stmt = $pdo->prepare("
+//   UPDATE clients
+//   SET greeting_prefix=:g,
+//       intro_text=:i,
+//       closing_text=:c,
+//       signature_block=:s
+//   WHERE id=:id
+// ");
 
 
-               $stmt->execute([
-  ':g'   => $greeting,
-  ':i'   => $intro,
-  ':c'   => $closing,
-  ':s'   => $signatureBlock,
-  ':id'  => $clientId
-]);
+//                $stmt->execute([
+//   ':g'   => $greeting,
+//   ':i'   => $intro,
+//   ':c'   => $closing,
+//   ':s'   => $signatureBlock,
+//   ':id'  => $clientId
+// ]);
+
+// ONLY save signature here
+$signatureBlock = trim($_POST['signature_block'] ?? '');
+$pdo->prepare("UPDATE clients SET signature_block = :s WHERE id = :id")
+    ->execute([':s' => $signatureBlock, ':id' => $clientId]);
+
 
 
                 if (isset($_POST['recommended_scheme']) && is_array($_POST['recommended_scheme'])) {
@@ -624,45 +630,45 @@ $totalGoalCurrent  = (float)($client['total_goal_current'] ?? 0);
 $totalGoalTarget   = (float)($client['total_goal_target'] ?? 0);
 $totalSip          = (float)($client['total_sip'] ?? 0);
 
-$greetingStored    = trim((string)($client['greeting_prefix'] ?? ''));
-$introTextStored   = trim((string)($client['intro_text'] ?? ''));
-$closingTextStored = trim((string)($client['closing_text'] ?? ''));
-$rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
-$signatureStored   = trim((string)($client['signature_block'] ?? ''));
+// $greetingStored    = trim((string)($client['greeting_prefix'] ?? ''));
+// $introTextStored   = trim((string)($client['intro_text'] ?? ''));
+// $closingTextStored = trim((string)($client['closing_text'] ?? ''));
+// $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
+// $signatureStored   = trim((string)($client['signature_block'] ?? ''));
 
-$DEFAULT_GREETING  = 'Dear Mr.';
-$DEFAULT_INTRO     = 'Introduction';
-$DEFAULT_CLOSING   = 'Closing remarks';
-$DEFAULT_RATIONALE = 'Rationale for recommendations';
+// $DEFAULT_GREETING  = 'Dear Mr.';
+// $DEFAULT_INTRO     = 'Introduction';
+// $DEFAULT_CLOSING   = 'Closing remarks';
+// $DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 
-// MERGED: Combine greeting, intro, and closing into ONE message
-$clientMessageParts = [];
+// // MERGED: Combine greeting, intro, and closing into ONE message
+// $clientMessageParts = [];
 
-// Add greeting
-if ($greetingStored !== '') {
-    $clientMessageParts[] = $greetingStored;
-} else {
-    $clientMessageParts[] = $DEFAULT_GREETING . ' ' . $name . ',';
-}
+// // Add greeting
+// if ($greetingStored !== '') {
+//     $clientMessageParts[] = $greetingStored;
+// } else {
+//     $clientMessageParts[] = $DEFAULT_GREETING . ' ' . $name . ',';
+// }
 
-// Add intro
-if ($introTextStored !== '') {
-    $clientMessageParts[] = $introTextStored;
-} else {
-    $clientMessageParts[] = "I am sure that all of you are safe and fine. I am pleased to send your quarterly portfolio review. The portfolio is doing well, and the scheme selection is good. Almost all schemes are showing good comparative performance and can be continued.";
-}
+// // Add intro
+// if ($introTextStored !== '') {
+//     $clientMessageParts[] = $introTextStored;
+// } else {
+//     $clientMessageParts[] = "I am sure that all of you are safe and fine. I am pleased to send your quarterly portfolio review. The portfolio is doing well, and the scheme selection is good. Almost all schemes are showing good comparative performance and can be continued.";
+// }
 
-// Add closing
-if ($closingTextStored !== '') {
-    $clientMessageParts[] = $closingTextStored;
-} else {
-    $clientMessageParts[] = "We are very keen to have a portfolio discussion meeting with you to discuss the portfolio. Please let us know at your convenience.";
-}
+// // Add closing
+// if ($closingTextStored !== '') {
+//     $clientMessageParts[] = $closingTextStored;
+// } else {
+//     $clientMessageParts[] = "We are very keen to have a portfolio discussion meeting with you to discuss the portfolio. Please let us know at your convenience.";
+// }
 
-$clientMessage = implode("\n\n", $clientMessageParts);
+// $clientMessage = implode("\n\n", $clientMessageParts);
 
-$rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
+// $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
 
 
 ?>
@@ -1496,29 +1502,29 @@ if (isset($rmDesignation)) {
         // NOTE: RM logic has been stripped out of this general JS block.
 
         // Auto-save textareas on blur
-        document.querySelectorAll('.large-textarea').forEach(function(textarea) {
-            textarea.addEventListener('blur', function() {
-                const clientId = textarea.getAttribute('data-client-id');
-                const field = textarea.getAttribute('data-field');
-                const value = textarea.value.trim();
+        // document.querySelectorAll('.large-textarea').forEach(function(textarea) {
+        //     textarea.addEventListener('blur', function() {
+        //         const clientId = textarea.getAttribute('data-client-id');
+        //         const field = textarea.getAttribute('data-field');
+        //         const value = textarea.value.trim();
 
-                if (clientId && field) {
-                    fetch('view_report.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                        },
-                        body: new URLSearchParams({
-                            ajax: '1',
-                            client_id: clientId,
-                            field: field,
-                            value: value
-                        })
-                    })
+        //         if (clientId && field) {
+        //             fetch('view_report.php', {
+        //                 method: 'POST',
+        //                 headers: {
+        //                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        //                 },
+        //                 body: new URLSearchParams({
+        //                     ajax: '1',
+        //                     client_id: clientId,
+        //                     field: field,
+        //                     value: value
+        //                 })
+        //             })
                     
-                }
-            });
-        });
+        //         }
+        //     });
+        // });
 
         // LOCK CHECK: Pass lock status from PHP to JS
         const reportLocked = <?php echo json_encode($isLocked); ?>;

@@ -6,6 +6,7 @@
 
 // Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+
     ob_start();
     header('Content-Type: application/json');
     
@@ -136,6 +137,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         exit;
     }
 }
+
+// Load stored communication fields if not provided
+if (!isset($greetingStored) || !isset($introTextStored) || !isset($closingTextStored)) {
+    require_once __DIR__ . '/db_config.php';
+    $pdo = getPdo();
+
+    $stmt = $pdo->prepare("
+        SELECT greeting_prefix, intro_text, closing_text
+        FROM clients WHERE id = ?
+    ");
+    $stmt->execute([$clientId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    $greetingStored  = trim((string)($row['greeting_prefix'] ?? ''));
+    $introTextStored = trim((string)($row['intro_text'] ?? ''));
+    $closingTextStored = trim((string)($row['closing_text'] ?? ''));
+}
+
 ?>
 
 <style>
