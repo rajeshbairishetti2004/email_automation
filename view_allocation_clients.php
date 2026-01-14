@@ -1036,9 +1036,9 @@ $unassignedClients = $totalClients - count($assignedClients);
                         <th>Reviewed By</th>
                         <th>Review Cycle</th>
                         <th>AUM (₹)</th>
-                        <th>Status</th>
-                        <th>Last Updated</th>
-                        <th>Actions</th>
+                    
+                        
+                        
                     </tr>
                 </thead>
                 <tbody>
@@ -1063,47 +1063,8 @@ $unassignedClients = $totalClients - count($assignedClients);
                         </td>
                         <td><span class="tag-badge"><?php echo htmlspecialchars($client['review_cycle'] ?? 'N/A'); ?></span></td>
                         <td class="aum-value"> ₹<?= number_format(((float)($client['aum'] ?? 0)) / 10000000, 2); ?> Cr</td>
-                        <td>
-                            <?php 
-                            $status = $client['report_state'] ?? 'pending';
-                            $statusClass = 'status-' . $status;
-                            $statusText = ucfirst($status);
-                            
-                            $icon = '';
-                            switch($status) {
-                                case 'draft': $icon = 'fa-edit'; break;
-                                case 'ready': $icon = 'fa-check-circle'; break;
-                                case 'reviewed': $icon = 'fa-eye'; break;
-                                case 'sent': $icon = 'fa-paper-plane'; break;
-                                case 'pending': $icon = 'fa-clock'; break;
-                                default: $icon = 'fa-file';
-                            }
-                            
-                            echo "<span class='report-state-icon report-state-$status'><i class='fas $icon'></i></span>";
-                            echo "<span class='status-badge $statusClass'>$statusText</span>";
-                            ?>
-                        </td>
-                        <td><?php echo $client['last_updated'] ?? 'N/A'; ?></td>
-                        <td>
-                            <div class="action-buttons">
-                                <?php 
-                                $canViewReport = false;
-                                $reportStatus = $client['report_state'] ?? 'pending';
-                                
-                                // Include 'ready' status in the list
-                                if (in_array($reportStatus, ['ready', 'reviewed', 'sent', 'draft'])) {
-                                    $canViewReport = true;
-                                }
-                                
-                                if ($canViewReport): ?>
-                                <button class="btn-view-report" onclick="viewReport(<?php echo $client['id']; ?>)">
-                                    <i class="fas fa-file-pdf"></i> View Report
-                                </button>
-                                <?php else: ?>
-                                <span class="no-report">No report</span>
-                                <?php endif; ?>
-                            </div>
-                        </td>
+                        
+                   
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

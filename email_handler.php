@@ -240,80 +240,182 @@ function handleEmailSending($clientId) {
         ob_start();
         ?>
         <html>
-        <head>
-        <style>
-            /* Typography matching UI */
-            body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 14px; color: #333; }
-            
-            /* Headers matching UI Blue (#0288D1 / #29B6F6 theme) */
-            h4 { 
-                color: #0288D1; 
-                font-family: 'Helvetica', 'Arial', sans-serif; 
-                font-size: 16px; 
-                font-weight: bold;
-                margin-top: 25px; 
-                margin-bottom: 10px; 
-                border-bottom: 2px solid #E3F2FD; 
-                padding-bottom: 5px;
-                text-decoration: none; 
-            }
+<head>
+<style>
+    /* Main container with limited width */
+    body { 
+        font-family: 'Helvetica', 'Arial', sans-serif; 
+        font-size: 14px; 
+        color: #333; 
+        margin: 0;
+        padding: 0;
+        background-color: #f4f4f4;
+    }
+    
+    /* Email wrapper - reduced width */
+    .email-wrapper {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 5px;
+    }
+    
+    /* Headers matching UI Blue (#0288D1 / #29B6F6 theme) */
+    h4 { 
+        color: #0288D1; 
+        font-family: 'Helvetica', 'Arial', sans-serif; 
+        font-size: 16px; 
+        font-weight: bold;
+        margin-top: 25px; 
+        margin-bottom: 10px; 
+        border-bottom: 2px solid #E3F2FD; 
+        padding-bottom: 5px;
+        text-decoration: none; 
+    }
 
-            /* Clean Table Style */
-            table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; background-color: #ffffff; }
-            
-            /* Table Header: Light Blue background, White text */
-            th { 
-                background-color: #29B6F6; 
-                color: #ffffff; 
-                padding: 12px 10px; 
-                text-align: left; 
-                font-weight: bold; 
-                border: none; /* Removed heavy borders */
-            }
-            
-            /* Table Body: Clean rows with light bottom border */
-            td { 
-                padding: 10px; 
-                border-bottom: 1px solid #f0f0f0; 
-                vertical-align: middle; 
-                color: #333;
-            }
+    /* Compact Table Style */
+    table { 
+    width: 70% !important;        /* Occupy 70% */
+    border-collapse: collapse; 
+    margin: 0 0 15px 0;           /* Remove auto centering */
+    font-size: 13px; 
+    background-color: #ffffff; 
+    max-width: none;  
+    margin-left: 30px;
+    }
+    
+    /* Table Header: Light Blue background, White text */
+    th { 
+        background-color: #29B6F6; 
+        color: #ffffff; 
+        padding: 10px 8px !important; /* Reduced padding */
+        text-align: left; 
+        font-weight: bold; 
+        border: none;
+        font-size: 12px;
+    }
+    
+    /* Table Body: Clean rows with light bottom border */
+    td { 
+        padding: 8px !important; /* Reduced padding */
+        border-bottom: 1px solid #f0f0f0; 
+        vertical-align: middle; 
+        color: #333;
+        font-size: 12px;
+    }
 
-            /* Alignment utilities */
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            
-            /* UI-Match Status Badges */
-            /* Red Badge for 'Invest More' / 'Needs Attention' */
-            .status-off { 
-                background-color: #F44336; 
-                color: white; 
-                font-weight: bold; 
-                text-align: center; 
-                padding: 6px 10px; 
-                border-radius: 4px; /* Works in modern email clients */
-                white-space: nowrap;
-            }
-            
-            /* Green Badge for 'On Track' */
-            .status-on { 
-                background-color: #4CAF50; 
-                color: white; 
-                font-weight: bold; 
-                text-align: center; 
-                padding: 6px 10px; 
-                border-radius: 4px; 
-                white-space: nowrap;
-            }
+    /* Tighten text spacing */
+    .compact-text {
+        line-height: 1.4;
+        margin-bottom: 10px;
+    }
 
-            /* Action Steps (Schemes) */
-            .action-continue { background-color: #C8E6C9; color: #256029; text-align: center; font-weight: bold; border-radius: 4px; }
-            .action-drop { background-color: #FFCDD2; color: #C62828; text-align: center; font-weight: bold; border-radius: 4px; }
-            .action-switch { background-color: #FFF9C4; color: #FBC02D; text-align: center; font-weight: bold; border-radius: 4px; }
-            .action-redeem { background-color: #F5F5F5; color: #616161; text-align: center; font-weight: bold; border-radius: 4px; }
-            .action-observation { background-color: #E3F2FD; color: #0288D1; text-align: center; font-weight: bold; border-radius: 4px; }
-        </style>
+    /* Alignment utilities */
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .font-bold { font-weight: bold; }
+    
+    /* Status Badges - more compact */
+    .status-off { 
+        background-color: #F44336; 
+        color: white; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 4px 6px !important; /* Reduced padding */
+        border-radius: 3px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    
+    .status-on { 
+        background-color: #4CAF50; 
+        color: white; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 4px 6px !important; /* Reduced padding */
+        border-radius: 3px; 
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    /* Action Steps (Schemes) - more compact */
+    .action-continue { 
+        background-color: #C8E6C9; 
+        color: #256029; 
+        text-align: center; 
+        font-weight: bold; 
+        border-radius: 3px; 
+        padding: 4px 6px !important;
+        font-size: 11px;
+    }
+    .action-drop { 
+        background-color: #FFCDD2; 
+        color: #C62828; 
+        text-align: center; 
+        font-weight: bold; 
+        border-radius: 3px; 
+        padding: 4px 6px !important;
+        font-size: 11px;
+    }
+    .action-switch { 
+        background-color: #FFF9C4; 
+        color: #FBC02D; 
+        text-align: center; 
+        font-weight: bold; 
+        border-radius: 3px; 
+        padding: 4px 6px !important;
+        font-size: 11px;
+    }
+    .action-redeem { 
+        background-color: #F5F5F5; 
+        color: #616161; 
+        text-align: center; 
+        font-weight: bold; 
+        border-radius: 3px; 
+        padding: 4px 6px !important;
+        font-size: 11px;
+    }
+    .action-observation { 
+        background-color: #E3F2FD; 
+        color: #0288D1; 
+        text-align: center; 
+        font-weight: bold; 
+        border-radius: 3px; 
+        padding: 4px 6px !important;
+        font-size: 11px;
+    }
+    
+    /* Chart image - make it responsive and centered */
+    .chart-container {
+        text-align: center; 
+        margin: 15px auto; 
+        max-width: 500px;
+    }
+    .chart-container img {
+        max-width: 100%; 
+        height: auto; 
+        border: none; 
+        border-radius: 4px;
+    }
+    
+    /* Rationale box - make it narrower */
+    .rationale-box {
+        margin-top: 15px; 
+        border: 1px solid #29B6F6; 
+        border-radius: 4px; 
+        overflow: hidden;
+        max-width: 580px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    /* Reduce spacing between sections */
+    .section-spacing {
+        margin-bottom: 15px !important;
+    }
+</style>
+
         </head>
         <body>
         
@@ -502,7 +604,7 @@ function handleEmailSending($clientId) {
         $chartUrl = 'https://quickchart.io/chart?c=' . urlencode(json_encode($chartConfig));
 
         // Embed the chart as an image in the email body (works in most email clients)
-        echo '<div style="text-align: center; margin: 20px 0;">'
+        echo '<div style="text-align: left; margin: 20px 0;margin-left:60px;">'
             . '<img src="' . htmlspecialchars($chartUrl) . '" alt="Asset Allocation" style="max-width: 100%; max-height: 300px; width: auto; height: auto; border: none; border-radius: 4px;">'
             . '</div>';
 
@@ -594,7 +696,7 @@ function handleEmailSending($clientId) {
         ?>
 
         <?php if (trim($rationaleText) !== ''): ?>
-            <div style="margin-top: 20px; border: 1px solid #29B6F6; border-radius: 4px; overflow: hidden;">
+            <div style="margin-top: 20px; border: 1px solid #29B6F6; border-radius: 4px; overflow: hidden;width:70%; margin-left: 30px;">
                 <table style="margin: 0;">
                     <tr>
                         <td style="width: 120px; background-color: #E1F5FE; font-weight: bold; text-align: center; border-right: 1px solid #29B6F6; border-bottom: none;">
@@ -619,7 +721,7 @@ function handleEmailSending($clientId) {
             </ul>
         <?php endif; ?>
 
-        <p style="margin-top: 30px; font-family: 'Helvetica', 'Arial', sans-serif;">
+        <p style="margin-top: 30px; font-family: 'Helvetica', 'Arial', sans-serif; ">
             <?php echo nl2br(htmlspecialchars($signatureBlock)); ?>
         </p>
 
