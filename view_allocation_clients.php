@@ -34,42 +34,51 @@ if (!$allocation) {
     exit;
 }
 
-// Get clients for this allocation
-// Note: allocation_log.target_tag maps to clients.review_cycle
+// Get LATEST clients for this allocation - FIXED QUERY
 $clientStmt = $pdo->prepare("
     SELECT 
-        c.id,
-        c.name as client_name,
-        c.email,
-        c.assigned_to,
-        c.review_assigned_to,
-        c.report_state,
-        c.month_year,
-        c.review_cycle,
-        c.total_amount as aum,
-        c.priority,
-        c.created_at,
-        c.updated_at,
-        c.allocation_id,
-        c.reviewed_at,
-        c.sent_at,
-        c.ready_at,
-        c.draft_at,
+        c1.id,
+        c1.name as client_name,
+        c1.email,
+        c1.assigned_to,
+        c1.review_assigned_to,
+        c1.report_state,
+        c1.month_year,
+        c1.review_cycle,
+        c1.total_amount as aum,
+        c1.priority,
+        c1.created_at,
+        c1.updated_at,
+        c1.allocation_id,
+        c1.reviewed_at,
+        c1.sent_at,
+        c1.ready_at,
+        c1.draft_at,
         rm.name as rm_name,
         reviewer.name as reviewer_name,
-        DATE_FORMAT(c.updated_at, '%d %b %Y %h:%i %p') as last_updated
-    FROM clients c
-    LEFT JOIN users rm ON c.assigned_to = rm.id
-    LEFT JOIN users reviewer ON c.review_assigned_to = reviewer.id
+        DATE_FORMAT(c1.updated_at, '%d %b %Y %h:%i %p') as last_updated
+    FROM clients c1
+    LEFT JOIN users rm ON c1.assigned_to = rm.id
+    LEFT JOIN users reviewer ON c1.review_assigned_to = reviewer.id
     WHERE 
-        c.month_year = :month_year 
-        AND c.review_cycle = :review_cycle
-    ORDER BY c.name
+        c1.month_year = :month_year 
+        AND c1.review_cycle = :review_cycle
+        AND c1.id = (
+            SELECT MAX(c2.id)
+            FROM clients c2
+            WHERE c2.name = c1.name
+            AND c2.month_year = :month_year2
+            AND c2.review_cycle = :review_cycle2
+        )
+    ORDER BY c1.name
 ");
 $clientStmt->execute([
     ':month_year' => $allocation['month_year'],
-    ':review_cycle' => $allocation['target_tag']
+    ':review_cycle' => $allocation['target_tag'],
+    ':month_year2' => $allocation['month_year'],
+    ':review_cycle2' => $allocation['target_tag']
 ]);
+
 $clients = $clientStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Calculate client statistics
@@ -498,7 +507,9 @@ $unassignedClients = $totalClients - count($assignedClients);
             font-size: 12px;
         }
 
-        /* History Modal Styles */
+        /* =============================================
+           ENHANCED HISTORY MODAL STYLES
+        ============================================= */
         .history-modal {
             display: none;
             position: fixed;
@@ -516,9 +527,9 @@ $unassignedClients = $totalClients - count($assignedClients);
         .history-modal-content {
             background: white;
             border-radius: 10px;
-            width: 90%;
-            max-width: 1000px;
-            max-height: 85vh;
+            width: 95%;
+            max-width: 1400px;
+            max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             animation: modalFadeIn 0.3s ease;
@@ -537,6 +548,9 @@ $unassignedClients = $totalClients - count($assignedClients);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         
         .history-modal-header h3 {
@@ -568,107 +582,340 @@ $unassignedClients = $totalClients - count($assignedClients);
             padding: 25px;
         }
         
-        .client-info-summary {
+        /* Client Summary Header */
+        .history-client-header {
             background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
+            padding: 25px;
+            border-radius: 10px;
             margin-bottom: 25px;
-            border-left: 4px solid #0288D1;
+            border-left: 5px solid #0288D1;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
         }
         
-        .client-info-row {
+        .history-client-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .history-client-title i {
+            color: #0288D1;
+        }
+        
+        .history-client-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 15px;
         }
         
-        .client-info-item {
+        .history-client-item {
             display: flex;
             flex-direction: column;
         }
         
-        .client-info-label {
+        .history-client-label {
             font-size: 12px;
             color: #666;
-            margin-bottom: 3px;
+            margin-bottom: 5px;
+            font-weight: 500;
         }
         
-        .client-info-value {
+        .history-client-value {
             font-weight: 600;
             color: #2c3e50;
             font-size: 14px;
         }
         
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
+        .history-client-email {
+            font-size: 13px;
+            color: #666;
+            margin-top: 3px;
         }
         
-        .history-table th {
+        .history-stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .history-stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .history-stat-value {
+            font-weight: 600;
+            color: #0288D1;
+            font-size: 14px;
+        }
+        
+        .history-stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        /* History Table */
+        .history-table-section {
+            margin-top: 30px;
+        }
+        
+        .history-table-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .history-table-title i {
+            color: #0288D1;
+        }
+        
+        .history-table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-top: 15px;
+        }
+        
+        .compact-history-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1300px;
+        }
+        
+        .compact-history-table th {
             background: #f8f9fa;
-            padding: 14px 16px;
+            padding: 14px 15px;
             text-align: left;
             font-weight: 600;
             color: #495057;
             border-bottom: 2px solid #e9ecef;
-            font-size: 13px;
+            font-size: 12px;
             white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         
-        .history-table td {
-            padding: 14px 16px;
+        .compact-history-table td {
+            padding: 14px 15px;
             border-bottom: 1px solid #e9ecef;
             color: #666;
-            font-size: 13px;
-            vertical-align: top;
+            font-size: 12px;
+            vertical-align: middle;
         }
         
-        .history-table tr:hover {
+        .compact-history-table tr:hover {
             background: #f8f9fa;
         }
         
-        .history-status-badge {
+        .current-history-row {
+            background-color: #e8f5e9 !important;
+            border-left: 4px solid #4caf50;
+        }
+        
+        /* Compact badges */
+        .compact-status-badge {
             padding: 4px 10px;
-            border-radius: 20px;
+            border-radius: 12px;
             font-size: 11px;
             font-weight: 600;
             display: inline-block;
+            min-width: 80px;
+            text-align: center;
         }
         
-        .history-year-section {
-            margin-bottom: 30px;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .history-year-header {
+        .compact-tag-badge {
+            display: inline-block;
+            padding: 4px 10px;
             background: #e3f2fd;
-            padding: 12px 20px;
-            font-weight: 600;
             color: #0288D1;
-            border-bottom: 1px solid #e9ecef;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .compact-priority-badge {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+            min-width: 70px;
+            text-align: center;
+        }
+        
+        /* Date & Time */
+        .date-time-cell {
+            min-width: 150px;
+        }
+        
+        .date-time-value {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .date-time-value .date {
+            font-weight: 600;
+            color: #333;
+            display: block;
+        }
+        
+        .date-time-value .time {
+            color: #888;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        
+        /* Action buttons */
+        .btn-view-history-report {
+            background: #0288D1;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.2s;
+            min-width: 80px;
+            justify-content: center;
+        }
+        
+        .btn-view-history-report:hover {
+            background: #0277bd;
+        }
+        
+        .btn-view-history-report:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .no-report-badge {
+            font-size: 11px;
+            color: #999;
+            font-style: italic;
+        }
+        
+        /* Attachments styling */
+        .attachments-cell {
+            max-width: 200px;
+        }
+        
+        .attachments-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .attachment-item {
+            margin-bottom: 5px;
+            padding: 4px 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+            font-size: 11px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
-        .history-year-summary {
-            font-size: 13px;
-            color: #666;
-            font-weight: normal;
+        .attachment-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
         }
         
-        .no-history {
-            text-align: center;
-            padding: 40px 20px;
+        .attachment-download {
+            color: #0288D1;
+            text-decoration: none;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #e3f2fd;
+            transition: background 0.2s;
+        }
+        
+        .attachment-download:hover {
+            background: #bbdefb;
+        }
+        
+        .no-attachments {
+            font-size: 11px;
             color: #999;
+            font-style: italic;
         }
         
-        .no-history i {
-            font-size: 36px;
+        /* Filter controls */
+        .history-filter-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .history-filter-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            font-size: 12px;
+            min-width: 140px;
+        }
+        
+        .history-filter-btn {
+            padding: 8px 15px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+        
+        .history-filter-btn:hover {
+            background: #5a6268;
+        }
+        
+        .history-result-count {
+            font-size: 12px;
+            color: #666;
+            margin-left: auto;
+            font-weight: 500;
+        }
+        
+        /* Empty state */
+        .empty-history {
+            text-align: center;
+            padding: 50px 20px;
+            color: #999;
+            grid-column: 1 / -1;
+        }
+        
+        .empty-history i {
+            font-size: 48px;
             margin-bottom: 15px;
             color: #ddd;
         }
@@ -691,28 +938,25 @@ $unassignedClients = $totalClients - count($assignedClients);
             100% { transform: rotate(360deg); }
         }
         
-        .history-actions {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        
-        .btn-view-report-small {
-            background: #0288D1;
-            color: white;
-            border: none;
-            padding: 4px 10px;
-            border-radius: 4px;
+        /* Clickable client name style */
+        .client-name-link {
+            color: #0288D1;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 11px;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            transition: background 0.2s;
+            text-decoration: none;
+            transition: color 0.2s;
         }
         
-        .btn-view-report-small:hover {
-            background: #0277bd;
+        .client-name-link:hover {
+            color: #01579b;
+            text-decoration: underline;
+        }
+        
+        .history-divider {
+            border: none;
+            height: 1px;
+            background: #e9ecef;
+            margin: 20px 0;
         }
     </style>
 </head>
@@ -720,9 +964,9 @@ $unassignedClients = $totalClients - count($assignedClients);
     <?php include 'navbar.php'; ?>
 
     <div class="container">
-<button class="back-button" onclick="window.location.href='allocation_log.php'">
-    <i class="fas fa-arrow-left"></i> Back to Allocation Log
-</button>
+        <button class="back-button" onclick="window.location.href='allocation_log.php'">
+            <i class="fas fa-arrow-left"></i> Back to Allocation Log
+        </button>
         
         <h2>
             <i class="fas fa-users"></i> 
@@ -792,7 +1036,6 @@ $unassignedClients = $totalClients - count($assignedClients);
                         <th>Reviewed By</th>
                         <th>Review Cycle</th>
                         <th>AUM (₹)</th>
-                        <th>Priority</th>
                         <th>Status</th>
                         <th>Last Updated</th>
                         <th>Actions</th>
@@ -801,7 +1044,12 @@ $unassignedClients = $totalClients - count($assignedClients);
                 <tbody>
                     <?php foreach ($clients as $client): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($client['client_name'] ?? 'N/A'); ?></td>
+                        <td>
+                            <span class="client-name-link" 
+                                  onclick="showClientHistory(<?php echo $client['id']; ?>, '<?php echo htmlspecialchars($client['client_name'] ?? 'Client', ENT_QUOTES); ?>', '<?php echo htmlspecialchars($client['email'] ?? 'N/A', ENT_QUOTES); ?>')">
+                                <?php echo htmlspecialchars($client['client_name'] ?? 'N/A'); ?>
+                            </span>
+                        </td>
                         <td><?php echo htmlspecialchars($client['email'] ?? 'N/A'); ?></td>
                         <td><?php echo htmlspecialchars($client['rm_name'] ?? 'Unassigned'); ?></td>
                         <td>
@@ -814,14 +1062,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                             ?>
                         </td>
                         <td><span class="tag-badge"><?php echo htmlspecialchars($client['review_cycle'] ?? 'N/A'); ?></span></td>
-                        <td class="aum-value">₹<?php echo number_format($client['aum'] ?? 0, 2); ?> Cr</td>
-                        <td>
-                            <?php 
-                            $priority = $client['priority'] ?? 'Normal';
-                            $priorityClass = 'priority-' . strtolower($priority);
-                            echo "<span class='priority-badge $priorityClass'>$priority</span>";
-                            ?>
-                        </td>
+                        <td class="aum-value"> ₹<?= number_format(((float)($client['aum'] ?? 0)) / 10000000, 2); ?> Cr</td>
                         <td>
                             <?php 
                             $status = $client['report_state'] ?? 'pending';
@@ -849,6 +1090,7 @@ $unassignedClients = $totalClients - count($assignedClients);
                                 $canViewReport = false;
                                 $reportStatus = $client['report_state'] ?? 'pending';
                                 
+                                // Include 'ready' status in the list
                                 if (in_array($reportStatus, ['ready', 'reviewed', 'sent', 'draft'])) {
                                     $canViewReport = true;
                                 }
@@ -860,11 +1102,6 @@ $unassignedClients = $totalClients - count($assignedClients);
                                 <?php else: ?>
                                 <span class="no-report">No report</span>
                                 <?php endif; ?>
-                                
-                                <!-- Always show History button -->
-                                <button class="btn-view-history" onclick="showClientHistory(<?php echo $client['id']; ?>, '<?php echo htmlspecialchars($client['client_name'] ?? 'Client'); ?>', '<?php echo htmlspecialchars($client['email'] ?? 'N/A'); ?>')">
-                                    <i class="fas fa-history"></i> History
-                                </button>
                             </div>
                         </td>
                     </tr>
@@ -891,270 +1128,384 @@ $unassignedClients = $totalClients - count($assignedClients);
         <div class="history-modal-content">
             <div class="history-modal-header">
                 <h3><i class="fas fa-history"></i> Client Review History</h3>
-                <button class="history-modal-close" onclick="closeHistoryModal()">×</button>
+               <button class="history-modal-close" onclick="closeHistoryModal()">×</button>
             </div>
             <div class="history-modal-body" id="historyModalBody">
                 <!-- Content will be loaded via AJAX -->
             </div>
         </div>
     </div>
-
-    <script>
-        function viewReport(clientId) {
-            window.open(`view_report.php?client_id=${clientId}`, '_blank');
+<script>
+    // Function for main table View Report button
+    function viewReport(clientId) {
+        // Use 'id' parameter as per your example URL
+        window.open(`view_report.php?id=${clientId}`, '_blank');
+    }
+    
+    function exportToCSV() {
+        const table = document.querySelector('.client-table');
+        let csv = [];
+        
+        const headers = [];
+        table.querySelectorAll('thead th').forEach(header => {
+            headers.push(header.textContent.trim());
+        });
+        csv.push(headers.join(','));
+        
+        table.querySelectorAll('tbody tr').forEach(row => {
+            const rowData = [];
+            row.querySelectorAll('td').forEach(cell => {
+                const text = cell.textContent.trim().replace(/,/g, ';');
+                rowData.push(`"${text}"`);
+            });
+            csv.push(rowData.join(','));
+        });
+        
+        const csvContent = csv.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', `allocation_clients_<?php echo htmlspecialchars($allocation['month_year']); ?>_<?php echo htmlspecialchars($allocation['target_tag']); ?>.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // SIMPLE UTILITY FUNCTION
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // SIMPLIFIED History Function
+    function showClientHistory(clientId, clientName, clientEmail) {
+        console.log('Showing history for client:', {clientId, clientName});
+        
+        const modal = document.getElementById('historyModal');
+        const modalBody = document.getElementById('historyModalBody');
+        
+        if (!modal || !modalBody) {
+            alert('History modal not found. Please refresh the page.');
+            return;
         }
         
-        function exportToCSV() {
-            const table = document.querySelector('.client-table');
-            let csv = [];
-            
-            const headers = [];
-            table.querySelectorAll('thead th').forEach(header => {
-                headers.push(header.textContent.trim());
-            });
-            csv.push(headers.join(','));
-            
-            table.querySelectorAll('tbody tr').forEach(row => {
-                const rowData = [];
-                row.querySelectorAll('td').forEach(cell => {
-                    const text = cell.textContent.trim().replace(/,/g, ';');
-                    rowData.push(`"${text}"`);
-                });
-                csv.push(rowData.join(','));
-            });
-            
-            const csvContent = csv.join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            
-            link.setAttribute('href', url);
-            link.setAttribute('download', `allocation_clients_<?php echo htmlspecialchars($allocation['month_year']); ?>_<?php echo htmlspecialchars($allocation['target_tag']); ?>.csv`);
-            link.style.visibility = 'hidden';
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-        
-        // Profile dropdown
-        const profilePic = document.getElementById('profilePic');
-        const profileDropdown = document.getElementById('profileDropdown');
-        
-        if (profilePic) {
-            profilePic.addEventListener('click', function(e) {
-                profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
-                e.stopPropagation();
-            });
-            
-            document.addEventListener('click', function() {
-                profileDropdown.style.display = 'none';
-            });
-        }
-        
-        // History Modal Functions
-        function showClientHistory(clientId, clientName, clientEmail) {
-            const modal = document.getElementById('historyModal');
-            const modalBody = document.getElementById('historyModalBody');
-            
-            // Show loading state
-            modalBody.innerHTML = `
-                <div class="loading-spinner">
-                    <i class="fas fa-spinner"></i> Loading client history...
+        // Show loading message
+        modalBody.innerHTML = `
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <div style="margin-left: 15px;">
+                    <div>Loading complete client history...</div>
+                    <div style="font-size: 12px; margin-top: 5px; color: #666;">
+                        Client: ${escapeHtml(clientName)}<br>
+                        ID: ${clientId}
+                    </div>
                 </div>
-            `;
-            
-            modal.style.display = 'flex';
-            
-            // Fetch client history via AJAX
-            fetch(`get_client_history.php?client_id=${clientId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        renderClientHistory(data, clientName, clientEmail);
-                    } else {
-                        modalBody.innerHTML = `
-                            <div class="no-history">
-                                <i class="fas fa-history"></i>
-                                <h3>No History Found</h3>
-                                <p>No review history found for this client.</p>
-                            </div>
-                        `;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading history:', error);
+            </div>
+        `;
+        
+        // Show modal
+        modal.style.display = 'flex';
+        
+        // Fetch data - using client name instead of ID to get ALL records
+        const apiUrl = `get_client_history.php?client_name=${encodeURIComponent(clientName)}&include_attachments=1`;
+        console.log('Fetching all records for client:', clientName);
+        
+        fetch(apiUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Received complete history data:', data);
+                if (data.success) {
+                    displayCompleteHistory(data, clientName, clientEmail, clientId);
+                } else {
                     modalBody.innerHTML = `
-                        <div class="no-history">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <h3>Error Loading History</h3>
-                            <p>Could not load client history. Please try again.</p>
+                        <div style="text-align: center; padding: 40px;">
+                            <i class="fas fa-exclamation-circle" style="font-size: 48px; color: #ff9800; margin-bottom: 20px;"></i>
+                            <h3>No History Found</h3>
+                            <p>${data.error || 'No review history available for this client.'}</p>
                         </div>
                     `;
-                });
-        }
-        
-        function renderClientHistory(data, clientName, clientEmail) {
-            const modalBody = document.getElementById('historyModalBody');
-            let html = `
-                <div class="client-info-summary">
-                    <div class="client-info-row">
-                        <div class="client-info-item">
-                            <span class="client-info-label">Client Name</span>
-                            <span class="client-info-value">${escapeHtml(clientName)}</span>
-                        </div>
-                        <div class="client-info-item">
-                            <span class="client-info-label">Email</span>
-                            <span class="client-info-value">${escapeHtml(clientEmail)}</span>
-                        </div>
-                        <div class="client-info-item">
-                            <span class="client-info-label">Total Reviews</span>
-                            <span class="client-info-value">${data.total_reviews || 0}</span>
-                        </div>
-                    </div>
-                    <div class="client-info-row">
-                        <div class="client-info-item">
-                            <span class="client-info-label">Years Covered</span>
-                            <span class="client-info-value">${data.years_covered || 'N/A'}</span>
-                        </div>
-                        <div class="client-info-item">
-                            <span class="client-info-label">Latest Review</span>
-                            <span class="client-info-value">${data.latest_review_date || 'N/A'}</span>
-                        </div>
-                        <div class="client-info-item">
-                            <span class="client-info-label">First Review</span>
-                            <span class="client-info-value">${data.first_review_date || 'N/A'}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            if (data.history && data.history.length > 0) {
-                // Group by year
-                const groupedByYear = {};
-                data.history.forEach(review => {
-                    const year = new Date(review.month_year + '-01').getFullYear();
-                    if (!groupedByYear[year]) {
-                        groupedByYear[year] = [];
-                    }
-                    groupedByYear[year].push(review);
-                });
-                
-                // Sort years in descending order
-                const years = Object.keys(groupedByYear).sort((a, b) => b - a);
-                
-                years.forEach(year => {
-                    const yearReviews = groupedByYear[year];
-                    const sortedReviews = yearReviews.sort((a, b) => {
-                        return new Date(b.month_year + '-01') - new Date(a.month_year + '-01');
-                    });
-                    
-                    html += `
-                        <div class="history-year-section">
-                            <div class="history-year-header">
-                                <span>${year}</span>
-                                <span class="history-year-summary">${sortedReviews.length} review(s)</span>
-                            </div>
-                            <table class="history-table">
-                                <thead>
-                                    <tr>
-                                        <th>Month</th>
-                                        <th>Review Cycle</th>
-                                        <th>RM</th>
-                                        <th>Reviewer</th>
-                                        <th>AUM (₹)</th>
-                                        <th>Status</th>
-                                        <th>Dates</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
-                    
-                    sortedReviews.forEach(review => {
-                        const month = new Date(review.month_year + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                        const statusClass = `history-status-badge status-${review.report_state || 'pending'}`;
-                        const statusText = (review.report_state || 'pending').charAt(0).toUpperCase() + (review.report_state || 'pending').slice(1);
-                        
-                        // Format dates
-                        const dates = [];
-                        if (review.draft_at) dates.push(`Draft: ${formatDate(review.draft_at)}`);
-                        if (review.ready_at) dates.push(`Ready: ${formatDate(review.ready_at)}`);
-                        if (review.reviewed_at) dates.push(`Reviewed: ${formatDate(review.reviewed_at)}`);
-                        if (review.sent_at) dates.push(`Sent: ${formatDate(review.sent_at)}`);
-                        
-                        html += `
-                            <tr>
-                                <td><strong>${month}</strong></td>
-                                <td><span class="tag-badge">${escapeHtml(review.review_cycle || 'N/A')}</span></td>
-                                <td>${escapeHtml(review.rm_name || 'Unassigned')}</td>
-                                <td>${escapeHtml(review.reviewer_name || 'Unassigned')}</td>
-                                <td>₹${parseFloat(review.aum || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}Cr</td>
-                                <td><span class="${statusClass}">${statusText}</span></td>
-                                <td><small>${dates.join('<br>') || 'No dates'}</small></td>
-                                <td>
-                                    <div class="history-actions">
-                                        ${review.report_state && review.report_state !== 'pending' ? 
-                                            `<button class="btn-view-report-small" onclick="viewReport(${review.id})">
-                                                <i class="fas fa-eye"></i> View
-                                            </button>` : 
-                                            '<span class="no-report">No report</span>'
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                    
-                    html += `
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                });
-            } else {
-                html += `
-                    <div class="no-history">
-                        <i class="fas fa-history"></i>
-                        <h3>No Review History Found</h3>
-                        <p>This client doesn't have any review history yet.</p>
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                modalBody.innerHTML = `
+                    <div style="text-align: center; padding: 40px;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 48px; color: #dc3545; margin-bottom: 20px;"></i>
+                        <h3>Error Loading History</h3>
+                        <p>Could not load client history. Please try again.</p>
+                        <p style="font-size: 12px; color: #666; margin-top: 10px;">Error: ${error.message}</p>
                     </div>
                 `;
-            }
-            
-            modalBody.innerHTML = html;
-        }
+            });
+    }
+    
+    function displayCompleteHistory(data, clientName, clientEmail, currentClientId) {
+        const modalBody = document.getElementById('historyModalBody');
         
-        function closeHistoryModal() {
-            document.getElementById('historyModal').style.display = 'none';
-        }
+        // Calculate statistics
+        const totalRecords = data.history ? data.history.length : 0;
+        let totalAUM = 0;
+        let years = new Set();
+        let cycles = new Set();
+        let statuses = new Set();
         
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('historyModal');
-            if (event.target === modal) {
-                closeHistoryModal();
-            }
-        }
-        
-        // Utility functions
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        function formatDate(dateString) {
-            if (!dateString) return '';
-            const date = new Date(dateString);
-            return date.toLocaleDateString('en-GB', { 
-                day: '2-digit', 
-                month: 'short', 
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
+        if (data.history && data.history.length > 0) {
+            data.history.forEach(review => {
+                totalAUM += parseFloat(review.aum || 0);
+                if (review.month_year) {
+                    const year = review.month_year.split('-')[0];
+                    if (year) years.add(year);
+                }
+                if (review.review_cycle) cycles.add(review.review_cycle);
+                if (review.report_state) statuses.add(review.report_state);
             });
         }
-    </script>
+        
+        // Get RM and Reviewer names from current record
+        let currentRM = 'Unassigned';
+        let currentReviewer = 'Unassigned';
+        let currentAUM = '₹0.00';
+        if (data.history && data.history.length > 0) {
+            const currentRecord = data.history.find(r => parseInt(r.id) === parseInt(currentClientId));
+            if (currentRecord) {
+                currentRM = currentRecord.rm_name || 'Unassigned';
+                currentReviewer = currentRecord.reviewer_name || 'Unassigned';
+                currentAUM = parseFloat(currentRecord.aum || 0) > 0 
+                    ? `₹${(parseFloat(currentRecord.aum || 0)/10000000).toFixed(2)} Cr` 
+                    : '₹0.00';
+            }
+        }
+        
+        let html = `
+            <!-- CLIENT HEADER SECTION -->
+            <div class="history-client-header">
+                <div class="history-client-title">
+                    <i class="fas fa-user-circle"></i>
+                    Client Overview
+                </div>
+                
+                <div class="history-client-grid">
+                    <div class="history-client-item">
+                        <span class="history-client-label">Client Name</span>
+                        <span class="history-client-value">${escapeHtml(clientName)}</span>
+                        <span class="history-client-email">${escapeHtml(clientEmail || 'N/A')}</span>
+                    </div>
+                    
+                    <div class="history-client-item">
+                        <span class="history-client-label">Relationship Manager</span>
+                        <span class="history-client-value">${escapeHtml(currentRM)}</span>
+                    </div>
+                    
+                    <div class="history-client-item">
+                        <span class="history-client-label">Reviewed By</span>
+                        <span class="history-client-value">${escapeHtml(currentReviewer)}</span>
+                    </div>
+                    
+                    <div class="history-client-item">
+                        <span class="history-client-label">Current AUM</span>
+                        <span class="history-client-value">${currentAUM}</span>
+                    </div>
+                </div>
+                
+                <div class="history-stats-bar">
+                    <div class="history-stat-item">
+                        <span class="history-stat-value">${totalRecords}</span>
+                        <span class="history-stat-label">Total Records</span>
+                    </div>
+                    
+                    <div class="history-stat-item">
+                        <span class="history-stat-value">${Array.from(years).length}</span>
+                        <span class="history-stat-label">Years Covered</span>
+                    </div>
+                    
+                    <div class="history-stat-item">
+                        <span class="history-stat-value">${currentClientId}</span>
+                        <span class="history-stat-label">Current ID</span>
+                    </div>
+                    
+                    
+                </div>
+            </div>
+            
+            <hr class="history-divider">
+            
+        
+        `;
+        
+        if (data.history && data.history.length > 0) {
+            
+            html += `<div class="history-table-container">`;
+            html += `<table class="compact-history-table" id="historyTable">`;
+            html += `<thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Month/Year</th>
+                    <th>Review Cycle</th>
+                    <th>RM</th>
+                    <th>Reviewed By</th>
+                    <th>AUM (₹)</th>
+                    <th>Status</th>
+                    <th>Date & Time</th>
+                    <th>Actions</th>
+                </tr>
+            </thead><tbody>`;
+            
+            // Sort by created_at descending (newest first)
+            data.history.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            data.history.forEach(review => {
+                const status = review.report_state || 'pending';
+                const statusClass = `compact-status-badge status-${status}`;
+                const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+                
+                // Check if this is the current row
+                const isCurrentRow = parseInt(review.id) === parseInt(currentClientId);
+                const rowClass = isCurrentRow ? 'current-history-row' : '';
+                
+                // Priority badge
+                const priority = review.priority || 'Normal';
+                const priorityClass = `compact-priority-badge priority-${priority.toLowerCase()}`;
+                
+                // Format date and time
+                const createdDate = review.created_at ? new Date(review.created_at) : null;
+                let dateTimeHtml = 'N/A';
+                if (createdDate) {
+                    const dateStr = createdDate.toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                    });
+                    const timeStr = createdDate.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                    }).toLowerCase();
+                    dateTimeHtml = `
+                        <div class="date-time-value">
+                            <span class="date">${dateStr}</span>
+                            <span class="time">${timeStr}</span>
+                        </div>
+                    `;
+                }
+                
+                // Format AUM
+                const aumValue = parseFloat(review.aum || 0);
+                const aumDisplay = aumValue > 0 ? `₹${(aumValue/10000000).toFixed(2)} Cr` : '₹0.00';
+                
+                // View button - only show if report exists
+                const canView = status !== 'pending';
+                // Use direct onclick with 'id' parameter
+                const viewButton = canView ? 
+                    `<button class="btn-view-history-report" onclick="window.open('view_report.php?id=${review.id}', '_blank')">
+                        <i class="fas fa-eye"></i> View Report
+                    </button>` :
+                    `<span class="no-report-badge">No report</span>`;
+                
+                html += `
+                    <tr class="${rowClass}" data-cycle="${review.review_cycle || ''}" data-status="${status}">
+                        <td>
+                            ${review.id} 
+                            ${isCurrentRow ? '<i class="fas fa-star" style="color: #ff9800; margin-left: 5px;" title="Current Record"></i>' : ''}
+                        </td>
+                        <td><strong>${escapeHtml(review.month_year || 'N/A')}</strong></td>
+                        <td><span class="compact-tag-badge">${escapeHtml(review.review_cycle || 'N/A')}</span></td>
+                        <td>${escapeHtml(review.rm_name || 'Unassigned')}</td>
+                        <td>${escapeHtml(review.reviewer_name || 'Unassigned')}</td>
+                        <td style="font-weight: 600;">${aumDisplay}</td>
+                        <td><span class="${statusClass}">${statusText}</span></td>
+                        <td class="date-time-cell">${dateTimeHtml}</td>
+                        <td>${viewButton}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `</tbody></table></div>`;
+        } else {
+            html += `
+                <div class="empty-history">
+                    <i class="fas fa-history"></i>
+                    <h3>No Review History</h3>
+                    <p>This client doesn't have any review history yet.</p>
+                </div>
+            `;
+        }
+        
+        html += `</div>`; // Close history-table-section
+        
+        modalBody.innerHTML = html;
+    }
+    
+    function filterHistoryTable() {
+        const cycleFilter = document.getElementById('cycleFilter').value;
+        const statusFilter = document.getElementById('statusFilter').value;
+        const rows = document.querySelectorAll('#historyTable tbody tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const cycle = row.getAttribute('data-cycle');
+            const status = row.getAttribute('data-status');
+            let show = true;
+            
+            if (cycleFilter && cycle !== cycleFilter) {
+                show = false;
+            }
+            if (statusFilter && status !== statusFilter) {
+                show = false;
+            }
+            
+            row.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+        
+        // Update count display
+        const countElement = document.getElementById('resultCount');
+        if (countElement) {
+            countElement.innerHTML = `Showing ${visibleCount} records`;
+        }
+    }
+    
+    function resetHistoryFilters() {
+        document.getElementById('cycleFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        filterHistoryTable();
+    }
+    
+    // Function for history modal View Report button
+    function viewReportFromHistory(clientId) {
+        // Use 'id' parameter as per your example URL
+        window.open(`view_report.php?id=${clientId}`, '_blank');
+    }
+    
+    function closeHistoryModal() {
+        document.getElementById('historyModal').style.display = 'none';
+        document.getElementById('historyModalBody').innerHTML = '';
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('historyModal');
+        if (event.target === modal) {
+            closeHistoryModal();
+        }
+    }
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeHistoryModal();
+        }
+    });
+</script>
 </body>
 </html>

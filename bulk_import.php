@@ -5,6 +5,7 @@
 // - Case-Sensitive RM Assignment
 // - Added delete functionality with search and selection
 // - NEW: Includes allocation_id support for tracking imports
+// - UPDATED: Always creates new records instead of updating existing ones
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -33,25 +34,25 @@ function getCurrentMonthYear() {
 // Modified logAllocation function to return allocation_id
 function logAllocation($pdo, $userId, $monthYear, $targetTag, $summary, $fileName = null) {
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO allocation_log 
-            (user_id, month_year, target_tag, file_name, clients_count, 
-             assigned_count, inserted_count, updated_count) 
-            VALUES (:user_id, :month_year, :target_tag, :file_name, :clients_count,
-                    :assigned_count, :inserted_count, :updated_count)
-        ");
+$stmt = $pdo->prepare("
+    INSERT INTO allocation_log 
+    (user_id, month_year, target_tag, file_name, clients_count, 
+     assigned_count, unassigned_count, inserted_count, updated_count) 
+    VALUES (:user_id, :month_year, :target_tag, :file_name, :clients_count,
+            :assigned_count, :unassigned_count, :inserted_count, :updated_count)
+");
         
-        $stmt->execute([
-            ':user_id' => $userId,
-            ':month_year' => $monthYear,
-            ':target_tag' => $targetTag,
-            ':file_name' => $fileName,
-            ':clients_count' => $summary['processed'],
-            ':assigned_count' => $summary['assigned'],
-            ':inserted_count' => $summary['inserted'],
-            ':updated_count' => $summary['updated']
-        ]);
-        
+$stmt->execute([
+    ':user_id' => $userId,
+    ':month_year' => $monthYear,    
+    ':target_tag' => $targetTag,
+    ':file_name' => $fileName,
+    ':clients_count' => $summary['processed'],
+    ':assigned_count' => $summary['assigned'],
+    ':unassigned_count' => $summary['unassigned'],  // Add this
+    ':inserted_count' => $summary['inserted'],
+    ':updated_count' => $summary['updated']
+]);
         // Return the allocation ID
         return $pdo->lastInsertId();
     } catch (Exception $e) {
@@ -71,6 +72,7 @@ $summary = [
     'inserted'    => 0,
     'updated'     => 0,
     'skipped'     => 0,
+    'duplicates'  => 0,
     'errors'      => [],
 ];
 
@@ -194,14 +196,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
         try {
             // NEW: Create allocation log entry BEFORE processing
-            $allocationId = logAllocation(
-                $pdo,
-                $currentUserId,
-                $monthYear,
-                $targetTag,
-                ['processed' => 0, 'assigned' => 0, 'inserted' => 0, 'updated' => 0],
-                $fileName
-            );
+$allocationId = logAllocation(
+    $pdo,
+    $currentUserId,
+    $monthYear,
+    $targetTag,
+    ['processed' => 0, 'assigned' => 0, 'unassigned' => 0, 'inserted' => 0, 'updated' => 0],
+    $fileName
+);
 
             if (!$allocationId) {
                 throw new Exception("Failed to create allocation log entry");
@@ -211,40 +213,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             $sheet = $spreadsheet->getActiveSheet();
             $rows = $sheet->toArray(null, true, true, true);
 
-            // NEW: Prepare statements with allocation_id
-            $checkStmt = $pdo->prepare("
-                SELECT id FROM clients 
-                WHERE name = :name AND month_year = :month_year LIMIT 1
-            ");
+            // NEW: Prepare statements with allocation_id (UPDATED VERSION)
             
+            // Check if client exists in any month (for reference)
             $checkPrevStmt = $pdo->prepare("
-                SELECT id, email, assigned_to, review_cycle 
+                SELECT id, email, assigned_to, review_cycle, aum, priority 
                 FROM clients 
                 WHERE name = :name 
                 ORDER BY created_at DESC LIMIT 1
             ");
             
+            // NEW: Check for exact duplicates (same name, month, allocation)
+            $checkDuplicateStmt = $pdo->prepare("
+                SELECT id FROM clients 
+                WHERE name = :name 
+                AND month_year = :month_year 
+                AND allocation_id = :allocation_id 
+                LIMIT 1
+            ");
+            
+            // ALWAYS INSERT - never update
             $insertStmt = $pdo->prepare("
                 INSERT INTO clients 
                 (name, email, assigned_to, review_assigned_to, total_amount, aum, priority, 
                  review_cycle, report_state, created_at, created_by, month_year, 
-                 original_client_id, allocation_id) 
+                 original_client_id, allocation_id, is_latest) 
                 VALUES (:name, :email, :assign, :reviewer, :aum, :aum_val, :prio, 
                         :cycle, 'pending', NOW(), :creator, :month_year, 
-                        :original_id, :allocation_id)
+                        :original_id, :allocation_id, 1)
             ");
             
-            $updateStmt = $pdo->prepare("
+            // Update is_latest for previous records of this client
+            $updatePreviousLatestStmt = $pdo->prepare("
                 UPDATE clients 
-                SET assigned_to = :assign, 
-                    review_assigned_to = :reviewer, 
-                    total_amount = :aum, 
-                    aum = :aum_val, 
-                    priority = :prio, 
-                    review_cycle = :cycle, 
-                    updated_at = NOW(),
-                    allocation_id = :allocation_id
-                WHERE id = :id
+                SET is_latest = 0, updated_at = NOW()
+                WHERE name = :name 
+                AND is_latest = 1
             ");
 
             foreach ($rows as $rowIndex => $row) {
@@ -299,79 +303,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // --- AUM CLEANING & CRORE CONVERSION ---
                 $cleanAumVal = preg_replace('/[^-0-9.]/', '', (string)$rawAum);
                 $numericAum  = (float)$cleanAumVal;
-                $aumInCrores = $numericAum / 10000000; // Conversion Logic
+                $aumInCrores = $numericAum; // Conversion Logic
 
                 $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
 
-                // --- MONTHLY CLIENT LOGIC START ---
-                // Check if client exists in current month
-                $checkStmt->execute([':name' => $rawName, ':month_year' => $monthYear]);
-                $existsCurrentMonth = $checkStmt->fetchColumn();
-
-                // Check if client exists in any previous month (for reference)
+                // --- NEW LOGIC: Always create new record ---
+                
+                // Check for exact duplicates first
+                $checkDuplicateStmt->execute([
+                    ':name' => $rawName,
+                    ':month_year' => $monthYear,
+                    ':allocation_id' => $allocationId
+                ]);
+                $duplicateExists = $checkDuplicateStmt->fetchColumn();
+                
+                if ($duplicateExists) {
+                    // Skip if exact duplicate already exists (same allocation)
+                    $summary['duplicates']++;
+                    continue;
+                }
+                
+                // Check if client exists in any previous record (for reference)
                 $checkPrevStmt->execute([':name' => $rawName]);
                 $previousClient = $checkPrevStmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Get previous client's info for continuity
+                $clientEmail = null;
+                $originalClientId = null;
+                if ($previousClient) {
+                    $clientEmail = $previousClient['email'] ?? null;
+                    $originalClientId = $previousClient['id'] ?? null;
+                    
+                    // Mark all previous records as not latest
+                    $updatePreviousLatestStmt->execute([':name' => $rawName]);
+                }
+                
+                // --- PRIORITY CARRY-FORWARD LOGIC ---
+                // If client exists before, use previous priority, otherwise use new priority
+                $finalPriority = $rawPriority;
+                if ($previousClient && !empty($previousClient['priority'])) {
+                    $finalPriority = $previousClient['priority'];
+                }
+                if (empty($finalPriority)) {
+                    $finalPriority = 'Normal';
+                }
 
-                if ($existsCurrentMonth) {
-                    // Update existing client for current month
-                    $updateStmt->execute([
-                        ':assign' => $assignedToId,
-                        ':reviewer' => $reviewerId,
-                        ':aum' => $aumInCrores,
-                        ':aum_val' => $aumInCrores,
-                        ':prio' => $rawPriority,
-                        ':cycle' => $reviewCycleValue,
-                        ':allocation_id' => $allocationId, // NEW: Include allocation_id
-                        ':id' => (int)$existsCurrentMonth
-                    ]);
-                    $summary['updated']++;
-                } else {
-                    // Insert new client for current month
-                    $originalClientId = $previousClient ? $previousClient['id'] : null;
-
+                // Always insert new record for current month
+                try {
                     $insertStmt->execute([
                         ':name' => $rawName,
-                        ':email' => $previousClient['email'] ?? null,
+                        ':email' => $clientEmail,
                         ':assign' => $assignedToId,
                         ':reviewer' => $reviewerId,
                         ':aum' => $aumInCrores,
                         ':aum_val' => $aumInCrores,
-                        ':prio' => $rawPriority,
+                        ':prio' => $finalPriority,
                         ':cycle' => $reviewCycleValue,
                         ':creator' => $currentUserId,
                         ':month_year' => $monthYear,
                         ':original_id' => $originalClientId,
-                        ':allocation_id' => $allocationId // NEW: Include allocation_id
+                        ':allocation_id' => $allocationId
                     ]);
                     $summary['inserted']++;
-
-                    // Archive previous month's client if exists
-                    if ($previousClient && !empty($previousClient['id'])) {
-                        $archiveStmt = $pdo->prepare("UPDATE clients SET is_archived = 1 WHERE id = :id");
-                        $archiveStmt->execute([':id' => $previousClient['id']]);
-                    }
+                    
+                } catch (Exception $e) {
+                    $summary['errors'][] = "Failed to insert client '{$rawName}': " . $e->getMessage();
+                    $summary['skipped']++;
                 }
-                // --- MONTHLY CLIENT LOGIC END ---
             }
 
-            // NEW: Update allocation log with final counts
-            $updateAllocStmt = $pdo->prepare("
-                UPDATE allocation_log 
-                SET clients_count = :clients_count,
-                    assigned_count = :assigned_count,
-                    inserted_count = :inserted_count,
-                    updated_count = :updated_count
-                WHERE id = :id
-            ");
-            
-            $updateAllocStmt->execute([
-                ':clients_count' => $summary['processed'],
-                ':assigned_count' => $summary['assigned'],
-                ':inserted_count' => $summary['inserted'],
-                ':updated_count' => $summary['updated'],
-                ':id' => $allocationId
-            ]);
+$updateAllocStmt = $pdo->prepare("
+    UPDATE allocation_log 
+    SET clients_count = :clients_count,
+        assigned_count = :assigned_count,
+        unassigned_count = :unassigned_count,
+        inserted_count = :inserted_count,
+        updated_count = :updated_count
+    WHERE id = :id
+");
 
+$updateAllocStmt->execute([
+    ':clients_count' => $summary['processed'],
+    ':assigned_count' => $summary['assigned'],
+    ':unassigned_count' => $summary['unassigned'],  // Add this
+    ':inserted_count' => $summary['inserted'],
+    ':updated_count' => $summary['updated'],
+    ':id' => $allocationId
+]);
         } catch (Exception $e) {
             // NEW: Delete allocation log if import failed
             if ($allocationId > 0) {
@@ -415,49 +433,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             border-bottom: 1px solid #eaeaea;
         }
         
-
+        .top-bar {
+            display: flex;
+            align-items: center;
+            padding: 12px 28px;
+            background: rgba(148, 227, 241, 0.319);
+            margin-bottom: 18px;
+        }
         
-.top-bar {
-    display: flex;
-    align-items: center;
-    padding: 12px 28px;
-    background:rgba(148, 227, 241, 0.319);
-    margin-bottom: 18px;
-
-}
-.top-bar img {
-    height: 40px;
-    vertical-align: middle;
-    margin-right: 10px;
-}
-
-.brand-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #e3f2fd;
-    border-radius: 8px;
-    padding: 10px 24px 10px 14px;
-}
-.brand-wrapper img {
-    height: 38px;
-    width: auto;
-}
-
-.brand-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #e3f2fd;
-    border-radius: 8px;
-    padding: 10px 24px 10px 14px;
-}
-.brand-wrapper img {
-    height: 38px;
-    width: auto;
-}
-
-
+        .top-bar img {
+            height: 40px;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        
+        .brand-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            padding: 10px 24px 10px 14px;
+        }
+        
+        .brand-wrapper img {
+            height: 38px;
+            width: auto;
+        }
+        
         .container {
             max-width: 1200px;
             margin: 30px auto;
@@ -598,6 +601,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             border-left: 4px solid #dc3545;
         }
         
+        .info-note {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            border-left: 4px solid #0288D1;
+        }
+        
         /* Delete Modal Styles */
         .delete-modal-overlay {
             display: none;
@@ -691,30 +703,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             padding: 10px;
         }
         
-.client-checkbox-item {
-    display: flex;
-    align-items: flex-start; /* Changed from center to flex-start */
-    padding: 12px 15px;
-    border-bottom: 1px solid #f0f0f0;
-    transition: background 0.2s;
-}
-
-.client-info {
-    flex: 1;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.client-details {
-    flex: 1;
-}
-
-.client-meta {
-    text-align: right;
-    margin-left: 20px;
-    min-width: 150px;
-}
+        .client-checkbox-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
         
         .client-checkbox-item:hover {
             background: #f8f9fa;
@@ -729,7 +724,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             transform: scale(1.2);
         }
         
-
+        .client-info {
+            flex: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .client-details {
+            flex: 1;
+        }
+        
+        .client-meta {
+            text-align: right;
+            margin-left: 20px;
+            min-width: 150px;
+        }
         
         .client-name {
             font-weight: 500;
@@ -890,10 +900,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             font-weight: 500;
             color: #0288D1;
         }
+        
         .select-all-checkbox {
             margin-right: 15px;
             transform: scale(1.2);
         }
+        
         .select-all-all-label {
             margin-left: 10px;
             color: #dc3545;
@@ -917,6 +929,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         </div>
         
         <p style="color:#666; margin-bottom: 25px;">Upload the "<?php echo date('M Y'); ?>" Customer List format to assign tasks.</p>
+        
+        <div class="info-note">
+            <i class="fas fa-info-circle"></i> <strong>Important:</strong> This import will always create new records. 
+            Existing clients will get new entries while preserving old data. Duplicate records (same client in same allocation) will be skipped.
+        </div>
 
         <form method="post" enctype="multipart/form-data">
             
@@ -937,9 +954,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])): ?>
             <div class="summary">
                 <h4>Import Result for Tag: "<?php echo htmlspecialchars($targetTag); ?>"</h4>
-                <div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?> (Skipped: <?php echo (int)$summary['skipped']; ?>)</div>
-                <div style="margin-top:5px;"><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> | <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?></div>
-                <div style="margin-top:5px;"><strong>New Clients:</strong> <?php echo (int)$summary['inserted']; ?> | <strong>Updated:</strong> <?php echo (int)$summary['updated']; ?></div>
+<div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?> 
+    (Skipped: <?php echo (int)$summary['skipped']; ?>)</div>
+                <div style="margin-top:5px;"><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> | 
+                    <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?></div>
+                <div style="margin-top:5px;"><strong>New Clients Created:</strong> <?php echo (int)$summary['inserted']; ?></div>
                 
                 <?php if (!empty($summary['errors'])): ?>
                     <div class="error" style="margin-top:15px;">
@@ -956,7 +975,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 <div class="allocation-info show" id="allocationInfo">
                     <strong><i class="fas fa-info-circle"></i> Allocation Created</strong>
                     <p>This import has been logged with Allocation ID: <strong>#<?php echo $allocationId; ?></strong></p>
-                    <p>You can view the complete allocation details in the Allocation Log.</p>
+                    <p>All client data has been preserved. New records have been created for this month.</p>
                     <a href="allocation_log.php" class="allocation-link">
                         <i class="fas fa-external-link-alt"></i> View Allocation Log
                     </a>
@@ -1034,8 +1053,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
     <?php endif; ?>
 
     <script>
-
-        
         // Delete functionality
         let allClients = [];
         let selectedClients = new Set();
@@ -1184,23 +1201,6 @@ html += `
             container.innerHTML = html;
         }
 
-        // Select All logic
-        function toggleSelectAll(checkbox) {
-            const checkboxes = document.querySelectorAll('.client-checkbox');
-            if (checkbox.checked) {
-                checkboxes.forEach(cb => {
-                    cb.checked = true;
-                    selectedClients.add(parseInt(cb.value));
-                });
-            } else {
-                checkboxes.forEach(cb => {
-                    cb.checked = false;
-                    selectedClients.delete(parseInt(cb.value));
-                });
-            }
-            updateSelectedCount();
-        }
-
         function toggleClientSelection(clientId) {
             if (selectedClients.has(clientId)) {
                 selectedClients.delete(clientId);
@@ -1333,18 +1333,19 @@ html += `
                 }
             }
         });
-function formatDate(dateString) {
-    if (!dateString) return 'Never';
-    const date = new Date(dateString);
-    
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('en-GB', { month: 'short' });
-    const year = date.getFullYear();
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    
-    return `${day} ${month} ${year}, ${hours}:${minutes}`;
-}
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'Never';
+            const date = new Date(dateString);
+            
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = date.toLocaleString('en-GB', { month: 'short' });
+            const year = date.getFullYear();
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            
+            return `${day} ${month} ${year}, ${hours}:${minutes}`;
+        }
     </script>
 </body>
 </html>

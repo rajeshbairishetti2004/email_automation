@@ -13,6 +13,56 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 $pdo = getPdo();
 $currentUserId = (int)($_SESSION['user_id'] ?? 1);
 
+// Handle delete actions
+$successMessage = '';
+$errorMessage = '';
+
+// Handle single delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_allocation'])) {
+    $allocationId = (int)$_POST['allocation_id'];
+    
+    if ($allocationId > 0) {
+        try {
+            // Delete the allocation log entry
+            $deleteStmt = $pdo->prepare("DELETE FROM allocation_log WHERE id = ?");
+            $deleteStmt->execute([$allocationId]);
+            
+            $successMessage = "Allocation record deleted successfully!";
+        } catch (Exception $e) {
+            $errorMessage = "Error deleting allocation: " . $e->getMessage();
+        }
+    }
+}
+
+// Handle bulk delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_delete'])) {
+    $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
+    
+    if (!empty($selectedIds)) {
+        try {
+            // Sanitize IDs
+            $selectedIds = array_filter(array_map('intval', $selectedIds));
+            
+            if (!empty($selectedIds)) {
+                // Delete in batches for safety
+                $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
+                $deleteStmt = $pdo->prepare("DELETE FROM allocation_log WHERE id IN ($placeholders)");
+                $deleteStmt->execute($selectedIds);
+                
+                $affectedRows = $deleteStmt->rowCount();
+                $successMessage = "Successfully deleted $affectedRows allocation record(s).";
+            }
+        } catch (Exception $e) {
+            $errorMessage = "Error deleting allocations: " . $e->getMessage();
+        }
+    } else {
+        $errorMessage = "Please select at least one allocation to delete.";
+    }
+}
+
+// Check delete mode
+$deleteMode = isset($_GET['delete_mode']) && $_GET['delete_mode'] === '1';
+
 // Get unique months for dropdown
 $monthStmt = $pdo->query("SELECT DISTINCT month_year FROM allocation_log ORDER BY month_year DESC");
 $months = $monthStmt->fetchAll(PDO::FETCH_COLUMN);
@@ -416,81 +466,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             border-radius: 6px;
             font-size: 14px;
         }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
-            text-align: center;
-        }
-        .stat-card h4 {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-        .stat-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: #0288D1;
-        }
-        .stat-details {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-        }
-        .state-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-        .state-draft { background: #ffc107; }
-        .state-ready { background: #17a2b8; }
-        .state-reviewed { background: #28a745; }
-        .state-sent { background: #6f42c1; }
-        .progress-bar {
-            height: 8px;
-            background: #e9ecef;
-            border-radius: 4px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #0288D1;
-            border-radius: 4px;
-        }
-        .rm-stats {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 25px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
-        }
-        .rm-stats table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .rm-stats th {
-            text-align: left;
-            padding: 10px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
-        }
-        .rm-stats td {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        .rm-stats tr:hover {
-            background: #f8f9fa;
-        }
         
         .table-container {
             background: white;
@@ -569,12 +544,7 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             color: #999;
         }
         
-        .action-type {
-            font-weight: 600;
-            color: #2c3e50;
-        }
-        
-        /* New styles for clickable rows */
+        /* Clickable rows */
         .clickable-row {
             cursor: pointer;
             transition: background-color 0.2s;
@@ -593,63 +563,274 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             cursor: pointer;
             font-size: 12px;
             transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
         }
         
         .btn-view:hover {
             background: #218838;
         }
+        
+        .btn-delete {
+            background: #e53935;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 5px;
+        }
+        
+        .btn-delete:hover {
+            background: #c62828;
+        }
+        
+        /* Delete Mode Styles */
+        .delete-mode-active { 
+            background-color: #fff5f5 !important; 
+        }
+        
+        .delete-mode-btn { 
+            background-color: #ffebee; 
+            color: #e53935; 
+            border: 2px solid #e53935; 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 6px; 
+            margin-left: 10px; 
+            transition: all 0.2s; 
+            text-decoration: none;
+        }
+        
+        .delete-mode-btn:hover { 
+            background-color: #e53935; 
+            color: white; 
+        }
+        
+        .cancel-delete-btn { 
+            background-color: #6c757d; 
+            color: white; 
+            border: none; 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 6px; 
+            margin-left: 10px; 
+            text-decoration: none;
+        }
+        
+        .cancel-delete-btn:hover { 
+            background-color: #5a6268; 
+        }
+        
+        .delete-confirm-modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            z-index: 10000; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        
+        .delete-confirm-content { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            width: 500px; 
+            max-width: 90%; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
+        }
+        
+        .warning-icon { 
+            color: #e53935; 
+            font-size: 48px; 
+            text-align: center; 
+            margin-bottom: 20px; 
+        }
+        
+        .client-checkbox { 
+            width: 18px; 
+            height: 18px; 
+            cursor: pointer; 
+        }
+        
+        .select-all-cell { 
+            position: relative; 
+        }
+        
+        .select-all-label { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-size: 11px; 
+            color: #666; 
+            pointer-events: none; 
+        }
+        
+        .bulk-actions-bar {
+            background: #f8f9fa;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .bulk-selection-info {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .bulk-actions-bar button {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid transparent;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        
+        /* Action buttons container */
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
     </style>
 </head>
-<body>
-     <?php include 'navbar.php'; ?>
+<body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
+    <?php include 'navbar.php'; ?>
 
     <div class="container">
         <div class="page-header">
             <h2><i class="fas fa-chart-line"></i> Allocation Log & Analytics</h2>
+            <div>
+                <?php if (!$deleteMode): ?>
+                    <?php
+                    // Build query string for delete mode
+                    $deleteModeParams = [];
+                    if ($fromDate != date('Y-m-01')) $deleteModeParams['from_date'] = $fromDate;
+                    if ($toDate != date('Y-m-t')) $deleteModeParams['to_date'] = $toDate;
+                    if ($selectedMonth) $deleteModeParams['month'] = $selectedMonth;
+                    $deleteModeQuery = !empty($deleteModeParams) ? '?' . http_build_query($deleteModeParams) . '&delete_mode=1' : '?delete_mode=1';
+                    ?>
+                    <a href="allocation_log.php<?php echo $deleteModeQuery; ?>" 
+                       class="delete-mode-btn">
+                        <i class="fa-solid fa-trash"></i> Enable Delete Mode
+                    </a>
+                <?php else: ?>
+                    <?php
+                    $paramString = '';
+                    $firstParam = true;
+                    
+                    // Helper function to add parameters
+                    function addParam(&$paramString, &$firstParam, $name, $value) {
+                        if (!empty($value)) {
+                            $paramString .= $firstParam ? '?' : '&';
+                            $paramString .= $name . '=' . urlencode($value);
+                            $firstParam = false;
+                        }
+                    }
+                    
+                    addParam($paramString, $firstParam, 'from_date', $fromDate);
+                    addParam($paramString, $firstParam, 'to_date', $toDate);
+                    addParam($paramString, $firstParam, 'month', $selectedMonth);
+                    ?>
+                    
+                    <a href="allocation_log.php<?php echo $paramString; ?>" 
+                       class="cancel-delete-btn">
+                        <i class="fa-solid fa-times"></i> Cancel Delete Mode
+                    </a>
+                <?php endif; ?>
+            </div>
         </div>
         
+        <!-- Success/Error Messages -->
+        <?php if ($successMessage): ?>
+            <div class="alert alert-success" id="successMessage">
+                <?php echo htmlspecialchars($successMessage); ?>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($errorMessage): ?>
+            <div class="alert alert-error">
+                <?php echo htmlspecialchars($errorMessage); ?>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($deleteMode): ?>
+            <div class="alert alert-warning">
+                <strong><i class="fa-solid fa-exclamation-triangle"></i> Delete Mode Active</strong>
+                <p style="margin: 5px 0 0 0;">Select allocations using checkboxes, then click "Delete Selected" to remove them.</p>
+            </div>
+        <?php endif; ?>
+
         <div class="filters">
             <form method="GET" action="">
-                <div class="filter-row">
-                    <div class="filter-group">
-                        <label><i class="fas fa-calendar-alt"></i> Date Range</label>
-                        <div class="date-range-picker">
-                            <input type="text" name="from_date" class="date-input datepicker" 
-                                   placeholder="From Date" value="<?php echo htmlspecialchars($fromDate); ?>">
-                            <span>to</span>
-                            <input type="text" name="to_date" class="date-input datepicker" 
-                                   placeholder="To Date" value="<?php echo htmlspecialchars($toDate); ?>">
-                        </div>
-                    </div>
-                    
-                    <div class="filter-group">
-                        <label><i class="fas fa-filter"></i> Or Select Month</label>
-                        <select name="month" onchange="this.form.submit()">
-                            <option value="">Select Month</option>
-                            <?php foreach ($months as $month): ?>
-                                <option value="<?php echo htmlspecialchars($month); ?>" 
-                                    <?php echo $selectedMonth == $month ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($month); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
+                <input type="hidden" name="delete_mode" value="<?php echo $deleteMode ? '1' : '0'; ?>">
                 
-                <div class="filter-row">
-                    <button type="submit" class="btn-apply">
-                        <i class="fas fa-chart-bar"></i> Generate Report
-                    </button>
-                    <button type="button" class="btn-reset" onclick="window.location.href='allocation_log.php'">
-                        <i class="fas fa-redo"></i> Reset
-                    </button>
-                </div>
+                
+                
             </form>
         </div>
         
-        <!-- Summary Statistics -->
-        
-        
+        <!-- Bulk Actions Bar for Delete Mode -->
+        <?php if ($deleteMode && !empty($logs)): ?>
+        <form method="post" id="bulkDeleteForm">
+            <input type="hidden" name="bulk_delete" value="1">
+            <div class="bulk-actions-bar">
+                <span class="bulk-selection-info">With Selected:</span>
+                <button type="button" onclick="confirmDelete()" class="btn-delete" style="margin-left: 0;">
+                    <i class="fa-solid fa-trash"></i> Delete Selected
+                </button>
+                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
+            </div>
+        <?php endif; ?>
+
         <!-- Allocation Log Table -->
         <?php if (!empty($logs)): ?>
         <div class="table-container">
@@ -657,6 +838,12 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             <table>
                 <thead>
                     <tr>
+                        <?php if ($deleteMode): ?>
+                        <th style="width: 40px;" class="select-all-cell">
+                            <input type="checkbox" id="selectAllCheckbox" class="client-checkbox" onclick="toggleSelectAll(this)">
+                            <span class="select-all-label">All</span>
+                        </th>
+                        <?php endif; ?>
                         <th>Date & Time</th>
                         <th>User</th>
                         <th>Month</th>
@@ -670,7 +857,12 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
                 </thead>
                 <tbody>
                     <?php foreach ($logs as $log): ?>
-                    <tr class="clickable-row" onclick="viewAllocationDetails(<?php echo $log['id']; ?>)">
+                    <tr class="clickable-row" onclick="!<?php echo $deleteMode ? 'true' : 'false'; ?> && viewAllocationDetails(<?php echo $log['id']; ?>)">
+                        <?php if ($deleteMode): ?>
+                        <td>
+                            <input type="checkbox" class="client-checkbox delete-checkbox" name="selected_ids[]" value="<?php echo (int)$log['id']; ?>" onchange="updateSelectedCount()">
+                        </td>
+                        <?php endif; ?>
                         <td>
                             <div><?php echo date('d M Y', strtotime($log['created_at'])); ?></div>
                             <div class="timestamp"><?php echo date('h:i A', strtotime($log['created_at'])); ?></div>
@@ -701,15 +893,25 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
                             <?php endif; ?>
                         </td>
                         <td>
-                            <button class="btn-view" onclick="event.stopPropagation(); viewAllocationDetails(<?php echo $log['id']; ?>)">
-                                <i class="fas fa-eye"></i> View Clients
-                            </button>
+                            <div class="action-buttons">
+                                <button class="btn-view" onclick="event.stopPropagation(); viewAllocationDetails(<?php echo $log['id']; ?>)">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                                <?php if (!$deleteMode): ?>
+                                <button class="btn-delete" onclick="event.stopPropagation(); confirmSingleDelete(<?php echo $log['id']; ?>, '<?php echo htmlspecialchars(addslashes($log['month_year'] . ' - ' . $log['target_tag'])); ?>')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
+        <?php if ($deleteMode): ?>
+        </form>
+        <?php endif; ?>
         <?php else: ?>
         <div class="empty-state">
             <i class="fas fa-chart-bar"></i>
@@ -719,6 +921,34 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         <?php endif; ?>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="delete-confirm-modal">
+        <div class="delete-confirm-content">
+            <div class="warning-icon">
+                <i class="fa-solid fa-exclamation-triangle"></i>
+            </div>
+            <h3 style="color: #e53935; text-align: center; margin-bottom: 15px;">Confirm Deletion</h3>
+            <p id="deleteConfirmMessage" style="text-align: center; margin-bottom: 25px;">
+                Are you sure you want to delete <span id="deleteCount">0</span> selected allocation(s)?
+            </p>
+            <p style="text-align: center; color: #666; font-size: 14px; margin-bottom: 25px;">
+                <i class="fa-solid fa-exclamation-circle"></i> This action cannot be undone. All allocation data will be permanently deleted.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 15px;">
+                <button type="button" onclick="closeDeleteModal()" style="padding: 10px 24px; border: 1px solid #ced4da; background: #fff; color: #555; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+                <button type="button" onclick="submitDelete()" style="padding: 10px 24px; border: none; background: #e53935; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                    <i class="fa-solid fa-trash"></i> Delete Selected
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Single Delete Form (hidden) -->
+    <form id="singleDeleteForm" method="post" style="display: none;">
+        <input type="hidden" name="delete_allocation" value="1">
+        <input type="hidden" name="allocation_id" id="deleteAllocationId" value="">
+    </form>
+
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
         // Initialize date pickers
@@ -726,7 +956,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             dateFormat: 'Y-m-d',
             allowInput: true
         });
-        
         
         // Auto-submit when month is selected
         document.querySelector('select[name="month"]').addEventListener('change', function() {
@@ -751,6 +980,91 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         function viewAllocationDetails(allocationId) {
             window.open(`view_allocation_clients.php?id=${allocationId}`, '_blank');
         }
+        
+        // Toggle select all checkboxes
+        function toggleSelectAll(checkbox) {
+            const checkboxes = document.querySelectorAll('.delete-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+            });
+            updateSelectedCount();
+        }
+        
+        // Update selected count
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.delete-checkbox');
+            const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            document.getElementById('selectedCount').textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+            
+            // Update select all checkbox state
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            if (!selectAllCheckbox) return;
+            const allChecked = selectedCount > 0 && Array.from(checkboxes).every(c => c.checked);
+            const someChecked = Array.from(checkboxes).some(c => c.checked);
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        }
+        
+        // Show delete confirmation modal for bulk delete
+        function confirmDelete() {
+            const checkboxes = document.querySelectorAll('.delete-checkbox');
+            const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            
+            if (selectedCount === 0) {
+                alert('Please select at least one allocation to delete.');
+                return;
+            }
+            
+            document.getElementById('deleteCount').textContent = selectedCount;
+            document.getElementById('deleteConfirmMessage').innerHTML = 
+                `Are you sure you want to delete <span id="deleteCount">${selectedCount}</span> selected allocation(s)?`;
+            document.getElementById('deleteConfirmModal').style.display = 'flex';
+        }
+        
+        // Show single delete confirmation
+        function confirmSingleDelete(allocationId, allocationName) {
+            if (confirm(`Are you sure you want to delete allocation: ${allocationName}?\n\nThis action cannot be undone.`)) {
+                document.getElementById('deleteAllocationId').value = allocationId;
+                document.getElementById('singleDeleteForm').submit();
+            }
+        }
+        
+        // Close delete modal
+        function closeDeleteModal() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
+        }
+        
+        // Submit delete form
+        function submitDelete() {
+            document.getElementById('bulkDeleteForm').submit();
+        }
+        
+        // Update count on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.querySelector('.delete-checkbox')) {
+                updateSelectedCount();
+            }
+            
+            // Add checkbox event listeners
+            const checkboxes = document.querySelectorAll('.delete-checkbox');
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', updateSelectedCount);
+            });
+            
+            // Auto-hide success message after 3 seconds
+            const successMessage = document.getElementById('successMessage');
+            if (successMessage) {
+                setTimeout(function() {
+                    successMessage.style.transition = 'opacity 0.5s ease';
+                    successMessage.style.opacity = '0';
+                    
+                    // Remove from DOM after fade out
+                    setTimeout(function() {
+                        successMessage.style.display = 'none';
+                    }, 500);
+                }, 3000);
+            }
+        });
     </script>
 </body>
 </html>

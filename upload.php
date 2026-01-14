@@ -1,6 +1,7 @@
 <?php
 // upload.php
 // Clean rebuild: dashboard + upload/parse/save pipeline
+// UPDATED: AUM carry-forward logic - clients keep same AUM across reviews
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -23,6 +24,24 @@ function safePercent($num, $den)
 {
     if ($den <= 0) return 0;
     return (int)round(($num / $den) * 100);
+}
+
+/**
+ * Get the latest AUM for a client from previous reviews
+ */
+function getLatestAumForClient(PDO $pdo, string $clientName): float
+{
+    $stmt = $pdo->prepare("
+        SELECT aum 
+        FROM clients 
+        WHERE name = :name 
+        AND aum > 0 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+    $stmt->execute([':name' => $clientName]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return (float)($result['aum'] ?? 0);
 }
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
@@ -149,7 +168,6 @@ if ($cycleFilter !== '') {
 }
 
 // Get AUM from the latest records only
-// Get AUM from the latest records only
 $stmtAum = $pdo->prepare("
     SELECT SUM(aum) 
     FROM clients
@@ -252,18 +270,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             AND month_year = :month_year
         ');
         
-$insertClient = $pdo->prepare('INSERT INTO clients
-    (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
-     total_goal_current, total_goal_target, total_sip,
-     greeting_prefix, intro_text, closing_text, rationale_text,
-     created_by, report_state, assigned_to, month_year, review_cycle,
-     is_latest, previous_version_id, review_attempt)
-    VALUES
-    (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
-     :total_goal_current, :total_goal_target, :total_sip,
-     :greeting_prefix, :intro_text, :closing_text, :rationale_text,
-     :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
-     :is_latest, :previous_version_id, :review_attempt)');
+        $insertClient = $pdo->prepare('INSERT INTO clients
+            (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
+             total_goal_current, total_goal_target, total_sip,
+             greeting_prefix, intro_text, closing_text, rationale_text,
+             created_by, report_state, assigned_to, month_year, review_cycle,
+             is_latest, previous_version_id, review_attempt)
+            VALUES
+            (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
+             :total_goal_current, :total_goal_target, :total_sip,
+             :greeting_prefix, :intro_text, :closing_text, :rationale_text,
+             :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
+             :is_latest, :previous_version_id, :review_attempt)');
 
         $stmtGoal = $pdo->prepare('INSERT INTO client_goals
             (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
@@ -315,12 +333,23 @@ $insertClient = $pdo->prepare('INSERT INTO clients
             $totals  = $clientData['current']['totals'] ?? ['purchase' => 0, 'current' => 0, 'profit' => 0, 'cagr_weighted' => 0, 'xirr_weighted' => 0, 'absolute_return' => 0];
             $summary = $clientData['current']['summary'] ?? null;
 
-$totalAmount    = $totals['current'] ?? 0;
-$aum            = $totalAmount;  // Store same value, no conversion needed
-$profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
-$cagr           = $totals['cagr_weighted'] ?? 0;
-$xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
-$absoluteReturn = $totals['absolute_return'] ?? 0;
+            $totalAmount    = $totals['current'] ?? 0;
+            
+            // --- AUM CARRY-FORWARD LOGIC ---
+            // 1. Get latest AUM from previous reviews for this client
+            $latestAum = getLatestAumForClient($pdo, $clientName);
+            
+            // 2. Calculate AUM: Carry forward if exists, otherwise calculate from total_amount
+            if ($latestAum > 0) {
+                $aum = $latestAum; // Carry forward existing AUM
+            } else {
+                $aum = $totalAmount > 0 ? ($totalAmount / 10000000) : 0; // Calculate from portfolio
+            }
+            
+            $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
+            $cagr           = $totals['cagr_weighted'] ?? 0;
+            $xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
+            $absoluteReturn = $totals['absolute_return'] ?? 0;
 
             $goals      = $clientData['goals'] ?? [];
             $allocation = $clientData['allocation'] ?? [];
@@ -345,7 +374,7 @@ $absoluteReturn = $totals['absolute_return'] ?? 0;
                 ':email'              => $email,
                 ':as_on'              => $asOn,
                 ':total_amount'       => $totalAmount,
-                ':aum'                => $aum,  // Store in crores
+                ':aum'                => $aum,  // Store in crores (carried forward or calculated)
                 ':profit'             => $profit,
                 ':cagr'               => $cagr,
                 ':xirr'               => $xirr,
@@ -493,9 +522,10 @@ $userDesignation = $currentUser['designation'] ?? '';
                     <?php $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>
                     <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
                         <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
-<div style="font-size: 22px; font-weight: 800; color: #1e293b;">
-    ₹<?= number_format($totalAum, 2); ?> <span style="font-size: 13px;">Cr</span>
-</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #1e293b;">
+                            ₹<?= number_format($totalAum / 10000000, 2); ?>
+                            <span style="font-size: 13px;">Cr</span>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -217,8 +217,10 @@ if ($sortColumn === 'priority') {
 }
 
 // Update the SELECT query to include meeting_status and meeting_remarks:
+// Update the SELECT query to include aum column:
 $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
+           c.aum,
            c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
            c.priority, c.meeting_status, c.meeting_remarks,
            c.review_cycle,
@@ -666,167 +668,169 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 </thead>
                 <tbody>
                 <?php foreach ($clients as $c): 
-                    // --- WORKFLOW BADGE LOGIC ---
-                    $statusHtml = '';
-                    
-                    if (isset($c['review_not_ok']) && $c['review_not_ok'] == 1) {
-                        $comment = htmlspecialchars($c['review_comment'] ?? '');
-                        $statusHtml = "<span class='badge badge-rejected' title='RM Comment: $comment'>NOT OK</span>";
-                    } else {
-                        $state = $c['report_state'] ?? 'draft';
-                        $badgeClass = 'badge-' . $state;
+    // --- WORKFLOW BADGE LOGIC ---
+    $statusHtml = '';
+    
+    if (isset($c['review_not_ok']) && $c['review_not_ok'] == 1) {
+        $comment = htmlspecialchars($c['review_comment'] ?? '');
+        $statusHtml = "<span class='badge badge-rejected' title='RM Comment: $comment'>NOT OK</span>";
+    } else {
+        $state = $c['report_state'] ?? 'draft';
+        $badgeClass = 'badge-' . $state;
 
-                        if ($state === 'sent') {
-                            $displayText = 'Email Sent';
-                        } elseif ($state === 'pending') {
-                            $displayText = 'Review Not Started';
-                            $badgeClass = 'badge-pending';
-                        } else {
-                            $displayText = ucfirst($state);
-                        }
+        if ($state === 'sent') {
+            $displayText = 'Email Sent';
+        } elseif ($state === 'pending') {
+            $displayText = 'Review Not Started';
+            $badgeClass = 'badge-pending';
+        } else {
+            $displayText = ucfirst($state);
+        }
 
-                        $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
-                    }
+        $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
+    }
 
-                    // Check for attachments
-                    $hasAttachments = false;
-                    $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
-                    if (is_dir($cDir)) {
-                        $files = array_diff(scandir($cDir), ['.', '..']);
-                        if (count($files) > 0) {
-                            $hasAttachments = true;
-                        }
-                    }
-                    
-                    // Priority badge styling
-                    $priorityBadgeClass = 'badge';
-                    $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
-                    
-                    if (strtolower($priorityText) === 'high') {
-                        $priorityBadgeClass .= ' badge-ready';
-                    } elseif (strtolower($priorityText) === 'low') {
-                        $priorityBadgeClass .= ' badge-draft';
-                    }
-                ?>
-                    <tr>
-                        <?php if ($deleteMode): ?>
-                        <td>
-                            <input type="checkbox" class="client-checkbox delete-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
-                        </td>
-                        <?php endif; ?>
-                        <td><?php echo (int)$c['id']; ?></td>
-                        <td>
-                            <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
-                                <span><?php echo htmlspecialchars($c['name']); ?></span>
-                                <?php if($hasAttachments): ?>
-                                    <span title="Has Attachments">📎</span>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                        <td>
-                            <span style="font-weight:600; color:#1976d2;">
-                                ₹<?php echo number_format((float)($c['total_amount'] ?? 0), 2); ?> Cr
-                            </span>
-                        </td>
-                        <td>
-                            <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
-                            <?php if ($currState === 'pending'): ?>
-                                <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
-                            <?php else: ?>
-                                <?php if (!empty($c['created_by_username'])): ?>
-                                    <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                        <?php echo htmlspecialchars($c['created_by_username']); ?>
-                                    </span>
-                                <?php else: ?>
-                                    <span style="color: #999; font-size: 0.85em;">System</span>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <span style="color:#333; font-weight:600;">
-                                <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
-                            </span>
-                        </td>
-                        <td>
-                            <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
-                                <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php 
-                                $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
-                                $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
-                                if ($isReviewer) {
-                                    $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
-                                }
-                            ?>
-                            <?php if (!empty($c['reviewer_username'])): ?>
-                                <span class="badge" style="<?php echo $reviewerStyle; ?>">
-                                    <?php echo htmlspecialchars($c['reviewer_username']); ?>
-                                    <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
-                                </span>
-                            <?php else: ?>
-                                <span style="color: #999; font-size: 0.85em;">Unassigned</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($c['priority'])): ?>
-                                <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
-                                    <?php echo $priorityText; ?>
-                                </span>
-                            <?php else: ?>
-                                <span style="color: #999; font-size: 0.85em;">Normal</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($c['updated_at'])): ?>
-                                <span style="color: #555; font-size: 0.9em;">
-                                    <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
-                                    <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
-                                </span>
-                            <?php else: ?>
-                                <span style="color: #999; font-size: 0.85em;">N/A</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?php echo $statusHtml; ?></td>
-                        <td style="text-align: center;">
-                            <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                                    class="meet-select"
-                                    id="meet_select_<?php echo $c['id']; ?>">
-                                <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
-                                <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
-                                <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
-                            </select>
-                        </td>
+    // Check for attachments
+    $hasAttachments = false;
+    $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
+    if (is_dir($cDir)) {
+        $files = array_diff(scandir($cDir), ['.', '..']);
+        if (count($files) > 0) {
+            $hasAttachments = true;
+        }
+    }
+    
+    // Priority badge styling
+    $priorityBadgeClass = 'badge';
+    $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
+    
+    if (strtolower($priorityText) === 'high') {
+        $priorityBadgeClass .= ' badge-ready';
+    } elseif (strtolower($priorityText) === 'low') {
+        $priorityBadgeClass .= ' badge-draft';
+    }
+?>
+    <tr>
+        <?php if ($deleteMode): ?>
+        <td>
+            <input type="checkbox" class="client-checkbox delete-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
+        </td>
+        <?php endif; ?>
+        <td><?php echo (int)$c['id']; ?></td>
+        <td>
+            <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
+                <span><?php echo htmlspecialchars($c['name']); ?></span>
+                <?php if($hasAttachments): ?>
+                    <span title="Has Attachments">📎</span>
+                <?php endif; ?>
+            </div>
+        </td>
+        <!-- AUM Column - FIXED -->
+<td>
+    <span style="font-weight:600; color:#1976d2;">
+        ₹<?= number_format(((float)($c['aum'] ?? 0)) / 10000000, 2); ?> Cr
+    </span>
+</td>
 
-                        <td style="text-align: center;">
-                            <button type="button" 
-                                    id="meet_btn_<?php echo $c['id']; ?>"
-                                    class="meet-btn"
-                                    onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                    style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                            </button>
-                            
-                            <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                        </td>
-                        <td>
-                            <?php if (($c['report_state'] ?? '') === 'pending'): ?>
-                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
-                                   style="font-weight: 600; color:#0288D1; text-decoration:none;">
-                                    📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
-                                </a>
-                            <?php else: ?>
-                                <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" 
-                                   style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
-                                <span style="color:#ccc; margin:0 6px;">|</span>
-                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
-                                   style="font-size:0.9em; color:#555; text-decoration:none;" 
-                                   title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
+        <td>
+            <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+            <?php if ($currState === 'pending'): ?>
+                <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
+            <?php else: ?>
+                <?php if (!empty($c['created_by_username'])): ?>
+                    <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+                        <?php echo htmlspecialchars($c['created_by_username']); ?>
+                    </span>
+                <?php else: ?>
+                    <span style="color: #999; font-size: 0.85em;">System</span>
+                <?php endif; ?>
+            <?php endif; ?>
+        </td>
+        <td>
+            <span style="color:#333; font-weight:600;">
+                <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+            </span>
+        </td>
+        <td>
+            <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
+                <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
+            </span>
+        </td>
+        <td>
+            <?php 
+                $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
+                if ($isReviewer) {
+                    $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
+                }
+            ?>
+            <?php if (!empty($c['reviewer_username'])): ?>
+                <span class="badge" style="<?php echo $reviewerStyle; ?>">
+                    <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                    <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
+                </span>
+            <?php else: ?>
+                <span style="color: #999; font-size: 0.85em;">Unassigned</span>
+            <?php endif; ?>
+        </td>
+        <td>
+            <?php if (!empty($c['priority'])): ?>
+                <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
+                    <?php echo $priorityText; ?>
+                </span>
+            <?php else: ?>
+                <span style="color: #999; font-size: 0.85em;">Normal</span>
+            <?php endif; ?>
+        </td>
+        <td>
+            <?php if (!empty($c['updated_at'])): ?>
+                <span style="color: #555; font-size: 0.9em;">
+                    <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
+                    <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
+                </span>
+            <?php else: ?>
+                <span style="color: #999; font-size: 0.85em;">N/A</span>
+            <?php endif; ?>
+        </td>
+        <td><?php echo $statusHtml; ?></td>
+        <td style="text-align: center;">
+            <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                    class="meet-select"
+                    id="meet_select_<?php echo $c['id']; ?>">
+                <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
+                <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
+                <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
+            </select>
+        </td>
+
+        <td style="text-align: center;">
+            <button type="button" 
+                    id="meet_btn_<?php echo $c['id']; ?>"
+                    class="meet-btn"
+                    onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                    style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+            </button>
+            
+            <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+        </td>
+        <td>
+            <?php if (($c['report_state'] ?? '') === 'pending'): ?>
+                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                   style="font-weight: 600; color:#0288D1; text-decoration:none;">
+                    📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
+                </a>
+            <?php else: ?>
+                <a href="view_report.php?id=<?php echo (int)$c['id']; ?>" 
+                   style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
+                <span style="color:#ccc; margin:0 6px;">|</span>
+                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>" 
+                   style="font-size:0.9em; color:#555; text-decoration:none;" 
+                   title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
+            <?php endif; ?>
+        </td>
+    </tr>
+<?php endforeach; ?>
                 </tbody>
             </table>
         </form>
