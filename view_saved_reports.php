@@ -594,10 +594,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 </button>
                 <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
             </div>
-        <?php endif; ?>
-        
+        <?php else: ?>
         <!-- Reassignment Form (only when not in delete mode) -->
-        <?php if (!$deleteMode): ?>
         <form method="post" id="bulkReassignForm">
             <input type="hidden" name="action_type" value="reassign">
             <div class="bulk-actions-bar">
@@ -611,18 +609,18 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     <?php endforeach; ?>
                 </select>
                 <button type="submit" style="background-color: #28a745; color: white;">Reassign</button>
+                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
             </div>
         <?php endif; ?>
 
             <table>
                 <thead>
                     <tr>
-                        <?php if ($deleteMode): ?>
+                        <!-- Show checkboxes for both delete and reassign modes -->
                         <th style="width: 40px;" class="select-all-cell">
                             <input type="checkbox" id="selectAllCheckbox" class="client-checkbox" onclick="toggleSelectAll(this)">
                             <span class="select-all-label">All</span>
                         </th>
-                        <?php endif; ?>
                         <th>
                             <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
@@ -711,11 +709,10 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     }
 ?>
     <tr>
-        <?php if ($deleteMode): ?>
+        <!-- Show checkboxes for both delete and reassign modes -->
         <td>
             <input type="checkbox" class="client-checkbox delete-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
         </td>
-        <?php endif; ?>
         <td><?php echo (int)$c['id']; ?></td>
         <td>
             <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
@@ -895,8 +892,10 @@ function toggleSelectAll(checkbox) {
 function updateSelectedCount() {
     const checkboxes = document.querySelectorAll('.delete-checkbox');
     const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-    document.getElementById('selectedCount').textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
-    
+    const selectedCountElem = document.getElementById('selectedCount');
+    if (selectedCountElem) {
+        selectedCountElem.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+    }
     // Update select all checkbox state
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
     if (!selectAllCheckbox) return;
@@ -910,12 +909,10 @@ function updateSelectedCount() {
 function confirmDelete() {
     const checkboxes = document.querySelectorAll('.delete-checkbox');
     const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-    
     if (selectedCount === 0) {
         alert('Please select at least one client to delete.');
         return;
     }
-    
     document.getElementById('deleteCount').textContent = selectedCount;
     document.getElementById('deleteConfirmModal').style.display = 'flex';
 }
@@ -945,19 +942,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Prevent reassignment form submission if no owner selected
+// Prevent reassignment form submission if no owner selected or no clients selected
 const bulkForm = document.getElementById('bulkReassignForm');
 if (bulkForm) {
     bulkForm.addEventListener('submit', function(e) {
         const newOwner = document.getElementById('newOwnerSelect').value;
+        const checkboxes = document.querySelectorAll('.delete-checkbox');
+        const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
         if (!newOwner) {
             e.preventDefault();
             alert('Please select a user to assign to before clicking Reassign.');
+        } else if (selectedCount === 0) {
+            e.preventDefault();
+            alert('Please select at least one client to reassign.');
         }
     });
 }
-
-
 </script>
 
 <!-- Meeting Remarks Modal -->
