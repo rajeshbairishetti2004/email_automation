@@ -600,6 +600,7 @@ $userDesignation = $currentUser['designation'] ?? '';
                                 </span>
                         </button>
             <h3>Upload & Generate Reports</h3>
+         <p>Attach Excel and PDF files. We will parse and build the reports.</p>
 
             <?php if ($uploadError !== ''): ?>
                 <div class="flash-error">Error: <?php echo htmlspecialchars($uploadError); ?></div>
