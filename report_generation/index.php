@@ -11,7 +11,13 @@ $current_page = isset($_GET['page']) ? max(1, min(23, intval($_GET['page']))) : 
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
+
 <body>
+    <nav class="top-nav">
+        <a href="../upload.php" class="btn-back">
+            <i class="fa-solid fa-arrow-left"></i> Dashboard
+        </a>
+    </nav>
     <div class="container">
         <!-- Header -->
         <div class="header">

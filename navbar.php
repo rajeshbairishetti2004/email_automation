@@ -178,6 +178,8 @@ $userDesignation = $_SESSION['designation'] ??
             <a href="view_saved_reports.php" class="<?= ($currentPage === 'view_saved_reports.php') ? 'active' : '' ?>">All Reports</a>
             <a href="bulk_import.php" class="<?= ($currentPage === 'bulk_import.php') ? 'active' : '' ?>">Bulk Allocate</a>
             <a href="allocation_log.php" class="<?= ($currentPage === 'allocation_log.php') ? 'active' : '' ?>">Allocation Log</a>
+            <a href="report_generation/index.php" class="<?= ($currentPage === 'report_generation/index.php') ? 'active' : '' ?>">Report Generation</a>
+    
     
         </div>
     </div>
