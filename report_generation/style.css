@@ -1,0 +1,610 @@
+/* report_generator/style.css - OPTIMIZED VERSION */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #f5f3f3 0%, #88c7eb 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* Main Container */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 90vh;
+}
+
+/* Header */
+.header {
+    background: linear-gradient(to right, #89bdee, #0a5276);
+    color: white;
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    flex-shrink: 0;
+}
+
+.client-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.client-avatar {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #FFC000, #FF5733);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.client-info h1 {
+    font-size: 24px;
+    margin-bottom: 2px;
+}
+
+.client-info p {
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+/* Controls */
+.controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid white;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    transition: all 0.3s;
+    font-size: 14px;
+}
+
+.btn:hover {
+    background: white;
+    color: #2E75B6;
+}
+
+/* Navigation */
+.navigation {
+    background: #f8f9fa;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.nav-btn {
+    background: #2E75B6;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.nav-btn:disabled {
+    background: #95B3D7;
+    cursor: not-allowed;
+}
+
+.nav-btn:hover:not(:disabled) {
+    background: #1F4E79;
+}
+
+.page-indicator {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2E75B6;
+}
+
+.page-selector {
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: 2px solid #2E75B6;
+    color: #2E75B6;
+    font-weight: 600;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/* Page Container */
+.page-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: white;
+}
+
+.page-content {
+    min-height: 600px;
+    padding: 30px;
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 8px;
+}
+
+/* Footer Navigation */
+.footer-nav {
+    background: #f8f9fa;
+    padding: 15px 30px;
+    border-top: 2px solid #e9ecef;
+    flex-shrink: 0;
+}
+
+.page-thumbnails {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.thumbnail {
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #dee2e6;
+    color: #495057;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: 600;
+    transition: all 0.3s;
+    font-size: 14px;
+}
+
+.thumbnail:hover {
+    background: #adb5bd;
+    color: white;
+}
+
+.thumbnail.active {
+    background: #2E75B6;
+    color: white;
+}
+
+/* Page Content Styles (for page1.php to page23.php) */
+.section-title {
+    color: #2E75B6;
+    font-size: 28px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #2E75B6;
+}
+
+.sub-title {
+    color: #1F4E79;
+    font-size: 22px;
+    margin: 25px 0 15px 0;
+    font-weight: 600;
+}
+
+.content-box {
+    background: #f8f9fa;
+    border-left: 5px solid #FFC000;
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 0 8px 8px 0;
+}
+
+.highlight-box {
+    background: #FFF2CC;
+    border: 2px solid #FFC000;
+    padding: 20px;
+    margin: 15px 0;
+    border-radius: 8px;
+}
+
+.note-box {
+    background: #E6F2FF;
+    border: 2px solid #2E75B6;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 8px;
+}
+
+.amount {
+    color: #C00000;
+    font-weight: bold;
+}
+
+.list-item {
+    margin: 10px 0;
+    padding-left: 20px;
+    position: relative;
+}
+
+.list-item:before {
+    content: "•";
+    color: #2E75B6;
+    font-size: 20px;
+    position: absolute;
+    left: 0;
+    top: -2px;
+}
+
+.contact-card {
+    background: linear-gradient(135deg, #1F4E79, #2E75B6);
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    margin: 30px 0;
+}
+
+.interpretation {
+    background: #f8f9fa;
+    border-left: 4px solid #00B050;
+    padding: 20px;
+    margin: 20px 0;
+    font-style: italic;
+    color: #555;
+}
+
+/* PDF All-in-One Page Specific Styles (for pdf-all-in-one.php) */
+.pdf-page-container {
+    width: 210mm;
+    min-height: 297mm;
+    background: white;
+    margin: 0 auto 20px auto;
+    padding: 20mm;
+    position: relative;
+}
+
+.pdf-print-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    background: #2E75B6;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.pdf-print-btn:hover {
+    background: #1F4E79;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .header {
+        padding: 15px;
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .client-info {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .controls {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .btn {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+    
+    .navigation {
+        padding: 10px;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+    }
+    
+    .nav-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+    
+    .page-selector {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+    
+    .page-container {
+        padding: 10px;
+    }
+    
+    .page-content {
+        padding: 20px;
+        min-height: 500px;
+    }
+    
+    .footer-nav {
+        padding: 10px;
+    }
+    
+    .thumbnail {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+    }
+    
+    /* For PDF all-in-one page on mobile */
+    .pdf-page-container {
+        width: 100%;
+        padding: 15mm;
+        margin: 10px auto;
+    }
+    
+    .pdf-print-btn {
+        top: 10px;
+        right: 10px;
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    /* For index.php (single page print) */
+    .header, .navigation, .footer-nav, .controls {
+        display: none !important;
+    }
+    
+    .container {
+        box-shadow: none;
+        border-radius: 0;
+        height: auto;
+    }
+    
+    .page-content {
+        border: none;
+        page-break-after: always;
+        padding: 20mm;
+        width: 210mm;
+        height: 297mm;
+    }
+    
+    /* For pdf-all-in-one.php */
+    .pdf-print-btn {
+        display: none !important;
+    }
+    
+    .pdf-page-container {
+        margin: 0 auto;
+        page-break-after: always;
+        break-after: page;
+        box-shadow: none;
+    }
+    
+    /* Common print settings */
+    @page {
+        size: A4;
+        margin: 20mm;
+    }
+    
+    body {
+        background: white !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Ensure colors print correctly */
+    .section-title, .sub-title, .amount, .contact-card,
+    .content-box, .highlight-box, .note-box, .interpretation {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+}
+
+/* Loading animation for PDF generation */
+.pdf-loading {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    text-align: center;
+}
+
+.pdf-loading.show {
+    display: flex;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #95B3D7;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2E75B6;
+}
+
+/* Utility classes */
+.text-center {
+    text-align: center;
+}
+
+.mt-20 {
+    margin-top: 20px;
+}
+
+.mb-20 {
+    margin-bottom: 20px;
+}
+
+.page-number {
+    position: absolute;
+    bottom: 20px;
+    right: 40px;
+    color: #666;
+    font-size: 14px;
+}
+
+/* For date display */
+.current-date {
+    font-weight: 600;
+    color: #2E75B6;
+}
+
+/* Add to existing style.css */
+
+/* PPT Button specific styling */
+.btn-ppt {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid white;
+    color: white;
+}
+
+.btn-ppt:hover {
+    background: #C43E1C; /* PowerPoint orange color */
+    color: white;
+}
+
+/* Loading overlay enhancements */
+.pdf-loading {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.pdf-loading.show {
+    display: flex;
+}
+
+.pdf-loading .loading-message {
+    font-size: 18px;
+    margin: 20px 0;
+    color: white;
+}
+
+/* Progress bar */
+#loadingProgress {
+    height: 100%;
+    background: #2E75B6;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 2px;
+}
+
+/* Add to your existing style.css - ensure this is included */
+
+/* PPT Button Styling - Make sure it's visible */
+.btn-ppt {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid white;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    display: flex !important; /* Force display */
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.btn-ppt:hover {
+    background: #C43E1C; /* PowerPoint orange */
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Make sure controls container shows all buttons */
+.controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Loading overlay */
+.pdf-loading {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    color: white;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.pdf-loading.show {
+    display: flex;
+}

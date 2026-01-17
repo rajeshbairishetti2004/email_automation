@@ -1,0 +1,27 @@
+# Set default behavior for all files
+* text=auto
+
+# Binary files should stay as-is
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+
+# Specific handling for files
+*.php text
+*.html text
+*.css text
+*.js text
+*.json text
+*.md text
+
+# Composer files - explicitly set to LF
+composer.json text eol=lf
+composer.lock text eol=lf
+package.json text eol=lf
+package-lock.json text eol=lf
+
+# Never normalize these
+*.sh text eol=lf
