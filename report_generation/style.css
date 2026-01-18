@@ -609,9 +609,7 @@ body {
     display: flex;
 }
 
-
-
-        .btn-back {
+.btn-back {
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -625,4 +623,4 @@ body {
             transition: background 0.2s;
         }
 
-        .btn-back:hover { background: #475569; }
+.btn-back:hover { background: #475569; }

@@ -15,7 +15,7 @@
         </p>
     </div>
     <div style="margin-top: 120px;">
-         <img src="image.png" alt="Finance Doctor Logo" style="width: 200px; margin-bottom: 20px;align-self: left;">
+         <img src="../image.png" alt="Finance Doctor Logo" style="width: 200px; margin-bottom: 20px;align-self: left;">
         <div style="font-size: 28px; color: #2E75B6; font-weight: bold; margin-bottom: 10px;">
             Finance Doctor
         </div>
