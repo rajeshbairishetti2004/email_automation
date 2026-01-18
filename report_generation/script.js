@@ -1,90 +1,13 @@
-// script.js - PPT-ONLY VERSION
+// report_generator/script.js - UPDATED
 
-// ========== LOADING FUNCTIONS ==========
-function showLoading(message = 'Processing...', details = '') {
-    let loading = document.getElementById('loadingOverlay');
-    if (!loading) {
-        loading = document.createElement('div');
-        loading.id = 'loadingOverlay';
-        loading.className = 'loading-overlay';
-        loading.innerHTML = `
-            <div class="loading-content">
-                <i class="fas fa-file-powerpoint fa-spin fa-3x" style="color: #C43E1C;"></i>
-                <p id="loadingMessage" style="margin-top: 20px; font-size: 18px; color: #333;">${message}</p>
-                <div id="progressDetails" style="margin-top: 10px; font-size: 14px; color: #666;">${details}</div>
-            </div>
-        `;
-        document.body.appendChild(loading);
-        const style = document.createElement('style');
-        style.textContent = `
-            .loading-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0,0,0,0.85);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 9999;
-            }
-            .loading-content {
-                background: white;
-                padding: 40px;
-                border-radius: 10px;
-                text-align: center;
-                box-shadow: 0 0 30px rgba(0,0,0,0.3);
-                min-width: 300px;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        `;
-        document.head.appendChild(style);
-    } else {
-        loading.style.display = 'flex';
-        document.getElementById('loadingMessage').textContent = message;
-        document.getElementById('progressDetails').innerHTML = details;
-    }
-}
-
-function hideLoading() {
-    const loading = document.getElementById('loadingOverlay');
-    if (loading) {
-        loading.style.display = 'none';
-    }
-}
-
-// ========== SUCCESS MESSAGE ==========
-function showSuccess(message) {
-    const successDiv = document.createElement('div');
-    successDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #28a745;
-        color: white;
-        padding: 15px 20px;
-        border-radius: 5px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        z-index: 9999;
-        max-width: 400px;
-        animation: slideIn 0.3s ease-out;
-    `;
-    successDiv.innerHTML = `
+// Utility Functions
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
         <div style="display: flex; align-items: center; gap: 10px;">
-            <i class="fas fa-check-circle" style="font-size: 20px;"></i>
-            <div>
-                <strong>Success!</strong>
-                <div style="font-size: 14px; margin-top: 5px;">${message}</div>
-            </div>
-            <button onclick="this.parentElement.parentElement.remove()" 
-            <div>
-                <strong>Success!</strong>
-                <div style="font-size: 14px; margin-top: 5px;">${message}</div>
-            </div>
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <div>${message}</div>
             <button onclick="this.parentElement.parentElement.remove()" 
                     style="background: none; border: none; color: white; cursor: pointer; margin-left: auto;">
                 <i class="fas fa-times"></i>
@@ -92,518 +15,499 @@ function showSuccess(message) {
         </div>
     `;
     
-    document.body.appendChild(successDiv);
+    document.body.appendChild(notification);
     
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // Auto-remove after 5 seconds
     setTimeout(() => {
-        if (successDiv.parentElement) {
-            successDiv.remove();
+        if (notification.parentElement) {
+            notification.remove();
         }
     }, 5000);
 }
 
-
-// ========== PPT DOWNLOAD ==========
-function downloadPPT() {
-    showLoading('Creating PowerPoint', 'Generating 25 slides...');
+function showLoading(message = 'Processing...') {
+    const overlay = document.getElementById('loadingOverlay');
+    const messageEl = document.getElementById('loadingMessage');
     
-    try {
-        // Create a progress indicator
-        let progress = 0;
-        const progressInterval = setInterval(() => {
-            progress += 2;
-            document.getElementById('progressDetails').innerHTML = 
-                `Progress: ${progress}% - Creating slides...`;
-            if (progress >= 98) clearInterval(progressInterval);
-        }, 100);
-        
-        // Create form for POST request
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'generate-ppt.php';
-        form.target = '_blank';
-        form.style.display = 'none';
-        
-        // Add CSRF token if needed
-        const csrfToken = document.createElement('input');
-        csrfToken.type = 'hidden';
-        csrfToken.name = 'csrf_token';
-        csrfToken.value = '<?php echo bin2hex(random_bytes(32)); ?>';
-        
-        // Add data
-        const clientInput = document.createElement('input');
-        clientInput.type = 'hidden';
-        clientInput.name = 'client_name';
-        clientInput.value = 'Ms. Mukta Dutta Tomar';
-        
-        const periodInput = document.createElement('input');
-        periodInput.type = 'hidden';
-        periodInput.name = 'period';
-        periodInput.value = 'January - March 2026';
-        
-        form.appendChild(csrfToken);
-        form.appendChild(clientInput);
-        form.appendChild(periodInput);
-        document.body.appendChild(form);
-        
-        // Submit form
-        form.submit();
-        
-        // Clean up
-        setTimeout(() => {
-            document.body.removeChild(form);
-            clearInterval(progressInterval);
-            hideLoading();
+    if (overlay && messageEl) {
+        messageEl.textContent = message;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// Sidebar Functions
+function openSidebar() {
+    document.getElementById('sidebar').classList.add('open');
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+}
+
+// Modal Functions
+function showPageManager() {
+    document.getElementById('pageManagerModal').classList.add('active');
+    loadSlidesGrid();
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function switchTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabId).classList.add('active');
+    
+    // Activate corresponding button
+    event.target.classList.add('active');
+}
+
+// Slide Management
+function loadSlidesGrid() {
+    fetch('get_slides.php')
+        .then(response => response.json())
+        .then(slides => {
+            const grid = document.getElementById('slidesGrid');
+            grid.innerHTML = '';
             
-            // Show success message
-            showSuccess(
-                '✅ PowerPoint is being generated!\n\n' +
-                'File: Portfolio_Review_' + new Date().toISOString().split('T')[0] + '.pptx\n\n' +
-                'If download doesn\'t start:\n' +
-                '1. Check browser downloads\n' +
-                '2. Look for .pptx file\n' +
-                '3. Allow downloads if prompted'
-            );
-        }, 3000);
-        
-    } catch (error) {
-        hideLoading();
-        console.error('PPT Generation Error:', error);
-        alert('❌ Error generating PPT:\n' + error.message);
-    }
-}
-
-// ========== PAGE NAVIGATION ==========
-function nextPage() {
-    const current = parseInt(document.getElementById('currentPage').textContent);
-    if (current < 23) {
-        showLoading('Loading page ' + (current + 1), 'Please wait...');
-        setTimeout(() => {
-            window.location.href = `?page=${current + 1}`;
-        }, 300);
-    }
-}
-
-function prevPage() {
-    const current = parseInt(document.getElementById('currentPage').textContent);
-    if (current > 1) {
-        showLoading('Loading page ' + (current - 1), 'Please wait...');
-        setTimeout(() => {
-            window.location.href = `?page=${current - 1}`;
-        }, 300);
-    }
-}
-
-function goToPage(page) {
-    if (page >= 1 && page <= 23) {
-        showLoading('Loading page ' + page, 'Please wait...');
-        setTimeout(() => {
-            window.location.href = `?page=${page}`;
-        }, 300);
-    }
-}
-
-
-// ========== HELP MODAL FUNCTIONS ==========
-function showHelp() {
-    const modal = document.getElementById('helpModal');
-    if (modal) {
-        modal.style.display = 'block';
-    } else {
-        // Create modal if it doesn't exist
-        const helpModal = document.createElement('div');
-        helpModal.id = 'helpModal';
-        helpModal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 9999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        `;
-        
-        helpModal.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: #2E75B6;"><i class="fas fa-question-circle"></i> Help & Instructions</h2>
-                    <button onclick="closeHelp()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
-                </div>
-                <div id="helpContent"></div>
-            </div>
-        `;
-        
-        document.body.appendChild(helpModal);
-        setTimeout(() => {
-            document.getElementById('helpContent').innerHTML = getHelpContent();
-        }, 100);
-    }
-}
-
-function closeHelp() {
-    const modal = document.getElementById('helpModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-function getHelpContent() {
-    return `
-        <div style="margin-bottom: 20px;">
-            
-            <p><strong>Troubleshooting:</strong></p>
-            <ul style="padding-left: 20px;">
-                <li><strong>If popup blocked:</strong> Allow popups for this site</li>
-                <li><strong>If pages missing:</strong> Check all page files exist (page1.php to page23.php)</li>
-                <li><strong>If content cut off:</strong> Set margins to "None" in print dialog</li>
-            </ul>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <h3 style="color: #1F4E79;">🔄 Page Navigation</h3>
-            <ul style="padding-left: 20px;">
-                <li><kbd>←</kbd> <kbd>→</kbd> Arrow keys to navigate</li>
-                <li><kbd>Home</kbd> Go to first page</li>
-                <li><kbd>End</kbd> Go to last page</li>
-                <li>Click page numbers at bottom</li>
-            </ul>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <h3 style="color: #1F4E79;">⚡ Keyboard Shortcuts</h3>
-            <ul style="padding-left: 20px;">
-                <li><kbd>Ctrl</kbd> + <kbd>P</kbd> - Print current page</li>
-
-                <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> - PowerPoint</li>
-                <li><kbd>F1</kbd> - Show help</li>
-                <li><kbd>Esc</kbd> - Close help/modal</li>
-            </ul>
-        </div>
-        
-        <div>
-            <h3 style="color: #1F4E79;">📊 System Status</h3>
-            <p id="systemStatusInfo">Checking system status...</p>
-            <button onclick="createAllTemplates()" style="
-                background: #2E75B6;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-top: 10px;
-            ">
-                <i class="fas fa-plus"></i> Create Missing Page Templates
-            </button>
-        </div>
-    `;
-}
-
-// ========== INITIALIZATION ==========
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Portfolio Review System Loaded');
-    console.log('Available pages: 1-23');
-    
-    // Check for print parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('print')) {
-        showLoading('Opening print dialog', 'Please wait...');
-        setTimeout(() => {
-            window.print();
-            hideLoading();
-        }, 1000);
-    }
-    
-    // Update dates
-    const now = new Date();
-    document.querySelectorAll('[data-current-date]').forEach(el => {
-        el.textContent = now.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+            slides.forEach(slide => {
+                const slideItem = document.createElement('div');
+                slideItem.className = `slide-item ${slide.page_number == currentPage ? 'active' : ''}`;
+                slideItem.innerHTML = `
+                    <div class="slide-number">${slide.page_number}</div>
+                    <div class="slide-title">${slide.title || 'Slide ' + slide.page_number}</div>
+                    <small>${new Date(slide.updated_at).toLocaleDateString()}</small>
+                `;
+                slideItem.onclick = () => selectSlide(slide.page_number);
+                grid.appendChild(slideItem);
+            });
         });
-    });
-    
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Navigation
-        if (e.key === 'ArrowRight' || e.key === ' ') {
-            e.preventDefault();
-            nextPage();
-        }
-        else if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            prevPage();
-        }
-        else if (e.key === 'Home') {
-            e.preventDefault();
-            goToPage(1);
-        }
-        else if (e.key === 'End') {
-            e.preventDefault();
-            goToPage(23);
-        }
-        
-        // Downloads with Ctrl/Cmd + Shift
-        else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
-            e.preventDefault();
-            downloadPPT();
-        }
+}
 
-        else if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-            e.preventDefault();
-            window.print();
+function selectSlide(pageNumber) {
+    if (editMode) {
+        if (confirm('Switch to slide ' + pageNumber + '?')) {
+            goToPage(pageNumber);
+            closeModal('pageManagerModal');
         }
-        
-        // Help
-        else if (e.key === 'F1' || (e.key === '?' && e.shiftKey)) {
-            e.preventDefault();
-            showHelp();
-        }
-        
-        // Close help with Escape
-        else if (e.key === 'Escape') {
-            closeHelp();
-        }
-    });
-    
-    // Add image to all pages (if needed)
-    addImageToAllPages();
-    
-    // Show system status
-    setTimeout(() => {
-        const missingPages = window.missingPages || [];
-        if (missingPages.length > 0) {
-            console.warn('Missing page files:', missingPages);
-            
-            // Also show a user-friendly warning
-            if (missingPages.length > 5) {
-                const warning = document.createElement('div');
-                warning.style.cssText = `
-                    position: fixed;
-                    bottom: 20px;
-                    right: 20px;
-                    background: #f8d7da;
-                    color: #721c24;
-                    padding: 15px;
-                    border-radius: 5px;
-                    border: 1px solid #f5c6cb;
-                    z-index: 1000;
-                    max-width: 300px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                `;
-                warning.innerHTML = `
-                    <strong>⚠️ Missing Pages</strong>
-                    <p>${missingPages.length} page files are missing</p>
-                    <button onclick="showHelp()" style="
-                        background: #dc3545;
-                        color: white;
-                        border: none;
-                        padding: 5px 10px;
-                        border-radius: 3px;
-                        cursor: pointer;
-                        margin-top: 5px;
-                    ">
-                        Show Help
-                    </button>
-                    <button onclick="this.parentElement.remove()" style="
-                        background: none;
-                        border: none;
-                        color: #721c24;
-                        float: right;
-                        cursor: pointer;
-                    ">
-                        ×
-                    </button>
-                `;
-                document.body.appendChild(warning);
-            }
-        } else {
-            console.log('✅ All 23 page files are present');
-            
-            // Show success indicator
-            const successIndicator = document.createElement('div');
-            successIndicator.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: #d4edda;
-                color: #155724;
-                padding: 10px 15px;
-                border-radius: 5px;
-                border: 1px solid #c3e6cb;
-                z-index: 1000;
-                animation: fadeIn 0.3s;
-            `;
-            successIndicator.innerHTML = `
-                <span>✅ All pages ready</span>
-                <button onclick="this.parentElement.remove()" style="
-                    background: none;
-                    border: none;
-                    color: #155724;
-                    margin-left: 10px;
-                    cursor: pointer;
-                ">
-                    ×
-                </button>
-            `;
-            
-            // Add fade animation
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            `;
-            document.head.appendChild(style);
-            
-            document.body.appendChild(successIndicator);
-            
-            // Auto-remove after 5 seconds
-            setTimeout(() => {
-                if (successIndicator.parentElement) {
-                    successIndicator.remove();
-                }
-            }, 5000);
-        }
-    }, 500);
-});
+    } else {
+        goToPage(pageNumber);
+        closeModal('pageManagerModal');
+    }
+}
 
-// ========== IMAGE TO PAGES ==========
-function addImageToAllPages() {
-    const pages = document.querySelectorAll('.page-content');
-    
-    pages.forEach(page => {
-        // Check if this is page 1 (skip logo)
-        const pageText = page.textContent || '';
-        const isPage1 = pageText.includes('Page 1') || 
-                       pageText.includes('Executive Summary') ||
-                       (page.querySelector('h1') && page.querySelector('h1').textContent.includes('1'));
+function duplicateSlide() {
+    if (confirm('Duplicate current slide?')) {
+        const content = editor ? editor.getData() : document.getElementById('editableContent').innerHTML;
         
-        if (!isPage1) {
-            // Add logo to other pages
-            if (!page.querySelector('.global-image')) {
-                const img = document.createElement('img');
-                img.src = 'image.png';
-                img.className = 'global-image';
-                img.alt = 'Finance Doctor Logo';
-                img.style.cssText = `
-                    position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    max-height: 50px;
-                    max-width: 150px;
-                    z-index: 100;
-                    opacity: 0.9;
-                `;
-                page.style.position = 'relative';
-                page.appendChild(img);
+        fetch('duplicate_slide.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                source_page: currentPage,
+                content: content,
+                title: document.getElementById('pageTitle').value + ' (Copy)'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Slide duplicated successfully!');
+                loadSlidesGrid();
             }
+        });
+    }
+}
+
+function deleteSlide() {
+    if (confirm('Delete this slide? This cannot be undone.')) {
+        fetch(`delete_slide.php?page=${currentPage}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Slide deleted successfully!');
+                // Reset current slide
+                document.getElementById('editableContent').innerHTML = 
+                    `<div class="section-title">Slide ${currentPage}</div><p>Content goes here</p>`;
+                loadSlidesGrid();
+            }
+        });
+    }
+}
+
+// Image Management
+function insertImage() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    
+    input.onchange = function(e) {
+        Array.from(e.target.files).forEach(file => {
+            uploadImage(file);
+        });
+    };
+    
+    input.click();
+}
+
+function uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('page_number', currentPage);
+    
+    showLoading('Uploading image...');
+    
+    fetch('upload_image.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Insert image at cursor position
+            const imgHtml = `<img src="uploads/${data.filename}" alt="${data.alt}" style="max-width: 100%;" data-image-id="${data.id}">`;
+            
+            if (editor) {
+                editor.model.change(writer => {
+                    const imageElement = writer.createElement('image', {
+                        src: `uploads/${data.filename}`,
+                        alt: data.alt
+                    });
+                    editor.model.insertContent(imageElement);
+                });
+            } else {
+                // Insert at cursor position
+                const contentEditable = document.getElementById('editableContent');
+                const selection = window.getSelection();
+                
+                if (selection.rangeCount) {
+                    const range = selection.getRangeAt(0);
+                    const imgNode = document.createElement('img');
+                    imgNode.src = `uploads/${data.filename}`;
+                    imgNode.alt = data.alt;
+                    imgNode.style.maxWidth = '100%';
+                    
+                    range.insertNode(imgNode);
+                    range.setStartAfter(imgNode);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                } else {
+                    contentEditable.innerHTML += imgHtml;
+                }
+            }
+            
+            showNotification('Image uploaded successfully!');
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error uploading image!', 'error');
+    })
+    .finally(() => {
+        hideLoading();
     });
 }
 
-// ========== ERROR HANDLING ==========
-window.onerror = function(message, source, lineno, colno, error) {
-    console.error('Global Error:', { message, source, lineno, colno, error });
-    
-    // Show user-friendly error
-    const errorDiv = document.createElement('div');
-    errorDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #f8d7da;
-        color: #721c24;
-        padding: 15px;
-        border-radius: 5px;
-        border: 1px solid #f5c6cb;
-        z-index: 9999;
-        max-width: 500px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    `;
-    errorDiv.innerHTML = `
-        <strong>⚠️ Application Error</strong>
-        <p>Please refresh the page and try again.</p>
-        <button onclick="this.parentElement.remove()" style="
-            background: none;
-            border: none;
-            color: #721c24;
-            float: right;
-            cursor: pointer;
-        ">
-            ×
-        </button>
-    `;
-    document.body.appendChild(errorDiv);
-    
-    return false;
-};
-
-// ========== PRINT ENHANCEMENTS ==========
-function enhancePrint() {
-    // Add print-specific styles
-    const printStyle = document.createElement('style');
-    printStyle.media = 'print';
-    printStyle.textContent = `
-        body { margin: 0; padding: 0; }
-        .no-print, nav, .controls, .navigation, .footer-nav { display: none !important; }
-        .page-content { padding: 20mm; }
-    `;
-    document.head.appendChild(printStyle);
+function editImage(imageId) {
+    fetch(`get_image.php?id=${imageId}`)
+        .then(response => response.json())
+        .then(image => {
+            document.getElementById('imagePreview').src = `uploads/${image.filename}`;
+            document.getElementById('imageAlt').value = image.alt_text;
+            document.getElementById('imageEditorModal').classList.add('active');
+        });
 }
 
-// ========== CREATE ALL TEMPLATES ==========
-function createAllTemplates() {
-    const missingPages = window.missingPages || [];
-    if (missingPages.length === 0) {
-        alert('No missing pages found!');
-        return;
+function deleteImage(imageId) {
+    if (confirm('Delete this image?')) {
+        fetch(`delete_image.php?id=${imageId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove image from DOM
+                document.querySelector(`[data-image-id="${imageId}"]`).remove();
+                showNotification('Image deleted successfully!');
+            }
+        });
+    }
+}
+
+// Template Functions
+function applyTemplate(templateType) {
+    let templateContent = '';
+    
+    switch (templateType) {
+        case 'title':
+            templateContent = `
+                <div style="text-align: center; padding: 100px 20px;">
+                    <h1 style="color: #2E75B6; font-size: 48px;">Slide Title</h1>
+                    <h2 style="color: #1F4E79; font-size: 36px;">Subtitle</h2>
+                    <p style="margin-top: 50px; color: #666;">Your content here</p>
+                </div>
+            `;
+            break;
+            
+        case 'content':
+            templateContent = `
+                <div class="section-title">Content Slide</div>
+                <ul style="font-size: 18px; line-height: 1.6;">
+                    <li>First bullet point</li>
+                    <li>Second bullet point</li>
+                    <li>Third bullet point</li>
+                    <li>Fourth bullet point</li>
+                </ul>
+            `;
+            break;
+            
+        case 'chart':
+            templateContent = `
+                <div class="section-title">Chart Slide</div>
+                <div style="display: flex; gap: 20px; margin-top: 40px;">
+                    <div style="flex: 1; background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                        <h3 style="color: #2E75B6;">Chart Title</h3>
+                        <div style="height: 200px; background: linear-gradient(90deg, #2E75B6, #FFC000); border-radius: 4px;"></div>
+                    </div>
+                    <div style="flex: 1; padding: 20px;">
+                        <h3 style="color: #2E75B6;">Key Insights</h3>
+                        <p>Add your analysis and insights here.</p>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'summary':
+            templateContent = `
+                <div class="section-title">Summary</div>
+                <div style="background: #E6F2FF; padding: 30px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="color: #1F4E79;">Key Takeaways</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                        <div style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #2E75B6;">
+                            <strong>Point 1</strong>
+                            <p>Description of point 1</p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #FFC000;">
+                            <strong>Point 2</strong>
+                            <p>Description of point 2</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            break;
     }
     
-    showLoading('Creating page templates', `Creating ${missingPages.length} missing pages...`);
+    if (editor) {
+        editor.setData(templateContent);
+    } else {
+        document.getElementById('editableContent').innerHTML = templateContent;
+    }
     
-    let createdCount = 0;
+    document.getElementById('saveBtn').disabled = false;
+    showNotification(`Applied ${templateType} template!`);
+}
+
+// Text Formatting
+function formatText(style) {
+    if (editor) {
+        editor.execute(style);
+    } else {
+        document.execCommand(style, false, null);
+    }
+}
+
+function formatHeading(heading) {
+    if (editor) {
+        editor.execute('heading', { value: heading });
+    } else {
+        document.execCommand('formatBlock', false, `<${heading}>`);
+    }
+}
+
+function changeColor(color) {
+    if (editor) {
+        editor.execute('fontColor', { value: color });
+    } else {
+        document.execCommand('foreColor', false, color);
+    }
+}
+
+// Export Functions
+function downloadPPT() {
+    showLoading('Generating PowerPoint presentation...');
     
-    // Create each page sequentially
-    missingPages.forEach((pageNum, index) => {
-        setTimeout(() => {
-            fetch('create_page.php?page=' + pageNum)
-                .then(response => {
-                    if (response.ok) {
-                        createdCount++;
-                        const progress = Math.round((createdCount / missingPages.length) * 100);
-                        document.getElementById('progressDetails').innerHTML = 
-                            `Created ${createdCount} of ${missingPages.length} pages (${progress}%)`;
-                        
-                        if (createdCount === missingPages.length) {
-                            setTimeout(() => {
-                                hideLoading();
-                                showSuccess(`✅ Created ${missingPages.length} page templates!`);
-                                setTimeout(() => {
-                                    window.location.reload();
-                                }, 2000);
-                            }, 1000);
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Failed to create page ' + pageNum, error);
-                });
-        }, index * 300); // Stagger requests to avoid server overload
+    fetch('generate-ppt.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            client_name: 'Ms. Mukta Dutta Tomar',
+            period: 'January - March 2026'
+        })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Portfolio_Review_${new Date().toISOString().slice(0,10)}.pptx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showNotification('PPT download started!');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error generating PPT!', 'error');
+    })
+    .finally(() => {
+        hideLoading();
     });
 }
+
+function downloadPDF() {
+    showLoading('Generating PDF document...');
+    
+    fetch('generate-pdf.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            page_numbers: Array.from({length: 23}, (_, i) => i + 1)
+        })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Portfolio_Report_${new Date().toISOString().slice(0,10)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showNotification('PDF download started!');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Error generating PDF!', 'error');
+    })
+    .finally(() => {
+        hideLoading();
+    });
+}
+
+// Additional Helper Functions
+function previewPage() {
+    const content = editor ? editor.getData() : document.getElementById('editableContent').innerHTML;
+    const previewWindow = window.open('', '_blank');
+    previewWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Preview - Slide ${currentPage}</title>
+            <style>
+                body { font-family: Arial; padding: 40px; }
+                .section-title { color: #2E75B6; font-size: 28px; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            ${content}
+        </body>
+        </html>
+    `);
+}
+
+function resetPage() {
+    if (confirm('Reset this slide to default? All changes will be lost.')) {
+        fetch(`get_default_page.php?page=${currentPage}`)
+            .then(response => response.json())
+            .then(data => {
+                if (editor) {
+                    editor.setData(data.content);
+                } else {
+                    document.getElementById('editableContent').innerHTML = data.content;
+                }
+                document.getElementById('saveBtn').disabled = false;
+                showNotification('Slide reset to default!');
+            });
+    }
+}
+
+function saveProperties() {
+    const title = document.getElementById('pageTitle').value;
+    const bgColor = document.getElementById('pageBgColor').value;
+    const fontSize = document.getElementById('pageFontSize').value;
+    const tags = document.getElementById('pageTags').value;
+    const notes = document.getElementById('pageNotes').value;
+    
+    // Apply background color
+    document.getElementById('pageContent').style.backgroundColor = bgColor;
+    
+    // Apply font size
+    document.getElementById('editableContent').style.fontSize = fontSize + 'px';
+    
+    showNotification('Properties saved!');
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Enable image drag & drop
+    const dropZone = document.getElementById('pageContent');
+    
+    if (dropZone) {
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadImage(files[0]);
+            }
+        });
+    }
+    
+    // Auto-save indicator
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('autoSaveStatus').textContent = 
+            `Auto-save: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    }, 60000);
+});

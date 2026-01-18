@@ -30,3 +30,12 @@
 <div style="position: absolute; bottom: 20px; right: 40px; color: #666; font-size: 14px;">
     Page 1 of 23
 </div>
+<div class="content-box">
+    <!-- Optional image (will be inserted by editor if uploaded) -->
+    <!-- <img src="uploads/page1_1680000000.jpg" style="max-width:300px;max-height:200px;float:right;margin:10px;" /> -->
+    <div class="slide-content">
+        <!-- Your slide content here. You can use HTML. -->
+        <h2 class="section-title">Executive Summary</h2>
+        <p>Welcome to your quarterly portfolio review.</p>
+    </div>
+</div>
