@@ -83,15 +83,7 @@ for ($i = 1; $i <= 23; $i++) {
             </div>
             
             <div class="controls">
-                <button class="btn" onclick="window.print()">
-                    <i class="fas fa-print"></i> Print Current
-                </button>
-                <button class="btn btn-pdf" onclick="downloadFullPDF()">
-                    <i class="fas fa-file-pdf"></i> Full PDF (23 Pages)
-                </button>
-                <button class="btn btn-secondary" onclick="downloadCurrentPDF()">
-                    <i class="fas fa-file-pdf"></i> Current Page
-                </button>
+
                 <button class="btn btn-ppt" onclick="downloadPPT()">
                     <i class="fas fa-file-powerpoint"></i> Download PPT
                 </button>
@@ -168,15 +160,6 @@ for ($i = 1; $i <= 23; $i++) {
             <h2><i class="fas fa-question-circle"></i> Help & Instructions</h2>
             
             <div class="help-section">
-                <h3>📄 PDF Generation</h3>
-                <p><strong>Full PDF (23 Pages):</strong></p>
-                <ol>
-                    <li>Click "Full PDF" button</li>
-                    <li>Wait for new window/tab to open</li>
-                    <li>Click "Generate PDF" in that window</li>
-                    <li>In print dialog, choose "Save as PDF"</li>
-                    <li>Save the file</li>
-                </ol>
                 
                 <p><strong>Troubleshooting:</strong></p>
                 <ul>
@@ -200,7 +183,6 @@ for ($i = 1; $i <= 23; $i++) {
                 <h3>⚡ Keyboard Shortcuts</h3>
                 <ul>
                     <li><kbd>Ctrl</kbd> + <kbd>P</kbd> - Print current page</li>
-                    <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> - Full PDF</li>
                     <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> - PowerPoint</li>
                     <li><kbd>Esc</kbd> - Close help/modal</li>
                 </ul>

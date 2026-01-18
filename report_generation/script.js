@@ -1,22 +1,20 @@
-// script.js - COMPLETE WORKING VERSION with PHP fix
+// script.js - PPT-ONLY VERSION
 
 // ========== LOADING FUNCTIONS ==========
 function showLoading(message = 'Processing...', details = '') {
     let loading = document.getElementById('loadingOverlay');
-    
     if (!loading) {
         loading = document.createElement('div');
         loading.id = 'loadingOverlay';
         loading.className = 'loading-overlay';
         loading.innerHTML = `
             <div class="loading-content">
-                <i class="fas fa-spinner fa-spin fa-3x" style="color: #2E75B6;"></i>
+                <i class="fas fa-file-powerpoint fa-spin fa-3x" style="color: #C43E1C;"></i>
                 <p id="loadingMessage" style="margin-top: 20px; font-size: 18px; color: #333;">${message}</p>
                 <div id="progressDetails" style="margin-top: 10px; font-size: 14px; color: #666;">${details}</div>
             </div>
         `;
         document.body.appendChild(loading);
-        
         const style = document.createElement('style');
         style.textContent = `
             .loading-overlay {
@@ -31,7 +29,6 @@ function showLoading(message = 'Processing...', details = '') {
                 align-items: center;
                 z-index: 9999;
             }
-            
             .loading-content {
                 background: white;
                 padding: 40px;
@@ -40,7 +37,6 @@ function showLoading(message = 'Processing...', details = '') {
                 box-shadow: 0 0 30px rgba(0,0,0,0.3);
                 min-width: 300px;
             }
-            
             @keyframes spin {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
@@ -77,10 +73,14 @@ function showSuccess(message) {
         max-width: 400px;
         animation: slideIn 0.3s ease-out;
     `;
-    
     successDiv.innerHTML = `
         <div style="display: flex; align-items: center; gap: 10px;">
             <i class="fas fa-check-circle" style="font-size: 20px;"></i>
+            <div>
+                <strong>Success!</strong>
+                <div style="font-size: 14px; margin-top: 5px;">${message}</div>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" 
             <div>
                 <strong>Success!</strong>
                 <div style="font-size: 14px; margin-top: 5px;">${message}</div>
@@ -112,59 +112,6 @@ function showSuccess(message) {
     }, 5000);
 }
 
-// ========== PDF DOWNLOAD ==========
-function downloadFullPDF() {
-    showLoading('Opening PDF Generator', 'Preparing 23-page document...');
-    
-    // Create timestamp for cache busting
-    const timestamp = new Date().getTime();
-    const pdfUrl = 'pdf-all-in-one.php?t=' + timestamp + '&auto=1';
-    
-    // Open in new window with specific features
-    const pdfWindow = window.open(pdfUrl, '_blank', 
-        'width=1200,height=800,scrollbars=yes,resizable=yes,toolbar=yes');
-    
-    // Check if popup was blocked
-    setTimeout(() => {
-        if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
-            hideLoading();
-            
-            // Show alternative options
-            const shouldDirect = confirm(
-                '⚠️ Popup was blocked!\n\n' +
-                'Please choose:\n' +
-                'OK - Open PDF generator in same tab\n' +
-                'Cancel - Try again with popup allowed'
-            );
-            
-            if (shouldDirect) {
-                // Open in same tab
-                window.location.href = pdfUrl;
-            } else {
-                // Show instructions
-                alert(
-                    'To allow popups:\n\n' +
-                    '1. Look for popup blocker icon in address bar\n' +
-                    '2. Click it and select "Always allow popups from this site"\n' +
-                    '3. Try the PDF button again\n\n' +
-                    'Or manually go to: ' + pdfUrl
-                );
-            }
-        } else {
-            // Monitor the PDF window
-            const checkWindow = setInterval(() => {
-                if (pdfWindow.closed) {
-                    clearInterval(checkWindow);
-                    hideLoading();
-                    showSuccess('PDF generation completed! Check your downloads folder.');
-                }
-            }, 1000);
-            
-            // Auto-hide loading after 5 seconds
-            setTimeout(hideLoading, 5000);
-        }
-    }, 1500);
-}
 
 // ========== PPT DOWNLOAD ==========
 function downloadPPT() {
@@ -266,16 +213,6 @@ function goToPage(page) {
     }
 }
 
-// ========== CURRENT PAGE PDF ==========
-function downloadCurrentPDF() {
-    const currentPage = document.getElementById('currentPage').textContent;
-    showLoading('Preparing page ' + currentPage, 'Opening print dialog...');
-    
-    setTimeout(() => {
-        window.open(`?page=${currentPage}&print=1`, '_blank');
-        hideLoading();
-    }, 1000);
-}
 
 // ========== HELP MODAL FUNCTIONS ==========
 function showHelp() {
@@ -326,15 +263,6 @@ function closeHelp() {
 function getHelpContent() {
     return `
         <div style="margin-bottom: 20px;">
-            <h3 style="color: #1F4E79;">📄 PDF Generation</h3>
-            <p><strong>Full PDF (23 Pages):</strong></p>
-            <ol style="padding-left: 20px;">
-                <li>Click "Full PDF" button</li>
-                <li>Wait for new window/tab to open</li>
-                <li>Click "Generate PDF" in that window</li>
-                <li>In print dialog, choose "Save as PDF"</li>
-                <li>Save the file</li>
-            </ol>
             
             <p><strong>Troubleshooting:</strong></p>
             <ul style="padding-left: 20px;">
@@ -358,7 +286,7 @@ function getHelpContent() {
             <h3 style="color: #1F4E79;">⚡ Keyboard Shortcuts</h3>
             <ul style="padding-left: 20px;">
                 <li><kbd>Ctrl</kbd> + <kbd>P</kbd> - Print current page</li>
-                <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> - Full PDF</li>
+
                 <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> - PowerPoint</li>
                 <li><kbd>F1</kbd> - Show help</li>
                 <li><kbd>Esc</kbd> - Close help/modal</li>
@@ -433,10 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             downloadPPT();
         }
-        else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
-            e.preventDefault();
-            downloadFullPDF();
-        }
+
         else if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
             e.preventDefault();
             window.print();
