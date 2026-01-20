@@ -209,6 +209,7 @@ $allEmails = [
                         </select>
                     </div>
 
+
                     <div class="email-field-group">
                         <label for="recipient_email_search">Primary Recipient (To)</label>
                         <div class="custom-dropdown" style="position:relative;">
@@ -217,6 +218,11 @@ $allEmails = [
                             <div id="recipient_email_list" class="dropdown-list" style="display:none;position:absolute;z-index:100;width:100%;background:#fff;border:1px solid var(--border-gray);box-shadow:0 4px 6px rgba(0,0,0,0.1);max-height:180px;overflow-y:auto;"></div>
                         </div>
                     </div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:5px;">
+        <input type="checkbox" id="use_custom_email" onchange="toggleCustomEmail()">
+        <span style="font-size:11px; color:#666;">Use custom email (not from directory)</span>
+    </label>
+</div>
                 </div>
 
                 <div class="email-field-group cc-panel">
@@ -278,9 +284,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var searchInput = document.getElementById('recipient_email_search');
     var listDiv = document.getElementById('recipient_email_list');
     var hiddenInput = document.getElementById('recipient_email_hidden');
+    var useCustomEmail = document.getElementById('use_custom_email');
+    var autocompleteEnabled = true;
 
-    searchInput.addEventListener('input', function() {
-        var filter = this.value.toLowerCase();
+    function autocompleteHandler() {
+        if (!autocompleteEnabled) return;
+        var filter = searchInput.value.toLowerCase();
         var html = '';
         emails.forEach(function(email) {
             if (email.toLowerCase().includes(filter)) {
@@ -289,7 +298,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         listDiv.innerHTML = html || '<div style="padding:8px; color:#999;">No matches</div>';
         listDiv.style.display = 'block';
-    });
+    }
+
+    searchInput.addEventListener('input', autocompleteHandler);
 
     window.selectRecipient = function(val) {
         searchInput.value = val;
@@ -300,5 +311,43 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (!searchInput.contains(e.target)) listDiv.style.display = 'none';
     });
+
+    // Custom email toggle logic
+    useCustomEmail.addEventListener('change', function() {
+        if (useCustomEmail.checked) {
+            autocompleteEnabled = false;
+            searchInput.placeholder = "Enter email address...";
+            listDiv.style.display = 'none';
+            hiddenInput.value = '';
+        } else {
+            autocompleteEnabled = true;
+            searchInput.placeholder = "Search client directory...";
+            // Optionally, trigger autocomplete if input is not empty
+            if (searchInput.value) autocompleteHandler();
+        }
+    });
+
+    // Keep hidden input in sync for custom email
+    searchInput.addEventListener('input', function() {
+        if (useCustomEmail.checked) {
+            hiddenInput.value = searchInput.value;
+        }
+    });
 });
+
+// JavaScript:
+function toggleCustomEmail() {
+    var customCheckbox = document.getElementById('use_custom_email');
+    var searchInput = document.getElementById('recipient_email_search');
+    var listDiv = document.getElementById('recipient_email_list');
+    
+    if (customCheckbox.checked) {
+        searchInput.placeholder = "Enter email address...";
+        listDiv.style.display = 'none';
+        searchInput.removeEventListener('input', autocompleteHandler); // Remove autocomplete
+    } else {
+        searchInput.placeholder = "Search client directory...";
+        searchInput.addEventListener('input', autocompleteHandler); // Re-add autocomplete
+    }
+}
 </script>
