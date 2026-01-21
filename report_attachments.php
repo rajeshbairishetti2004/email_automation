@@ -6,33 +6,28 @@
 // 1. AJAX HANDLING (when called directly)
 // ==============================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
-    // Handle AJAX requests for attachments
     require_once 'db_config.php';
-    
     header('Content-Type: application/json');
-    
     $clientId = (int)($_POST['client_id'] ?? 0);
     $ajax_action = $_POST['ajax_action'];
-    
+
     if ($clientId <= 0) {
         echo json_encode(['success' => false, 'error' => 'Invalid Client ID']);
         exit;
     }
-    
+
     try {
         $pdo = getPdo();
-        
         switch ($ajax_action) {
             case 'upload_attachment':
                 $stmtClient = $pdo->prepare("SELECT name FROM clients WHERE id = :id LIMIT 1");
                 $stmtClient->execute([':id' => $clientId]);
                 $targetClientName = $stmtClient->fetchColumn();
-                
                 if (!$targetClientName) throw new Exception("Client not found with ID: " . $clientId);
-    
+
                 $baseDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
                 if (!is_dir($baseDir)) mkdir($baseDir, 0777, true);
-    
+
                 $savedFiles = [];
                 if (isset($_FILES['files']) && is_array($_FILES['files']['name'])) {
                     for ($i = 0; $i < count($_FILES['files']['name']); $i++) {
@@ -58,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                             $targetPath = $baseDir . '/' . $fileName;
                             if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $targetPath)) {
                                 $savedFiles[] = $fileName;
-                                // Insert into DB
                                 $stmt = $pdo->prepare("INSERT INTO report_attachments (client_id, file_name) VALUES (:client_id, :file_name)");
                                 $stmt->execute([':client_id' => $clientId, ':file_name' => $fileName]);
                             }
@@ -67,25 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 }
                 echo json_encode(['success' => true, 'files' => $savedFiles]);
                 break;
-                
+
             case 'delete_attachment':
                 $file = basename($_POST['file_name']);
                 if (!$clientId || !$file) {
                     echo json_encode(['success'=>false,'error'=>'Invalid params']);
                     exit;
                 }
-    
                 $path = __DIR__ . "/uploads/attachments/client_$clientId/$file";
-    
                 $pdo->beginTransaction();
                 try {
                     if (file_exists($path)) {
                         unlink($path);
                     }
-    
                     $stmt = $pdo->prepare("DELETE FROM report_attachments WHERE client_id = :cid AND file_name = :file");
                     $stmt->execute([':cid' => $clientId, ':file' => $file]);
-    
                     $pdo->commit();
                     echo json_encode(['success'=>true]);
                 } catch (Throwable $e) {
@@ -93,42 +83,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                     echo json_encode(['success'=>false,'error'=>'Delete failed']);
                 }
                 break;
-                
+
             case 'rename_attachment':
                 $old = basename($_POST['old_name']);
                 $new = basename($_POST['new_name']);
-    
                 if (!$clientId || !$old || !$new) {
                     echo json_encode(['success'=>false,'error'=>'Invalid params']);
                     exit;
                 }
-    
-                // enforce .pdf once
                 if (!preg_match('/\.pdf$/i', $new)) {
                     $new .= '.pdf';
                 }
-    
                 $dir = __DIR__ . "/uploads/attachments/client_$clientId/";
                 $oldPath = $dir . $old;
                 $newPath = $dir . $new;
-    
                 if (!file_exists($oldPath)) {
                     echo json_encode(['success'=>false,'error'=>'File not found']);
                     exit;
                 }
-    
                 if (file_exists($newPath)) {
                     echo json_encode(['success'=>false,'error'=>'File already exists']);
                     exit;
                 }
-    
                 $pdo->beginTransaction();
                 try {
                     rename($oldPath, $newPath);
-    
                     $stmt = $pdo->prepare("UPDATE report_attachments SET file_name = :new WHERE client_id = :cid AND file_name = :old");
                     $stmt->execute([':new' => $new, ':old' => $old, ':cid' => $clientId]);
-    
                     $pdo->commit();
                     echo json_encode(['success'=>true,'new_name'=>$new]);
                 } catch (Throwable $e) {
@@ -136,14 +117,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                     echo json_encode(['success'=>false,'error'=>'Rename failed: ' . $e->getMessage()]);
                 }
                 break;
-                
+
             default:
                 echo json_encode(['success' => false, 'error' => 'Unknown action']);
                 break;
         }
-        
         exit;
-        
     } catch (Throwable $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         exit;
@@ -156,14 +135,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 if (!isset($clientId)) {
     throw new Exception('clientId must be set before including report_attachments.php');
 }
-
-// Use existing PDO if available, else require db_config.php
 if (!isset($pdo)) {
     require_once 'db_config.php';
     $pdo = getPdo();
 }
-
-// --- Add isLocked logic ---
 if (!isset($isLocked)) {
     $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
@@ -172,7 +147,6 @@ if (!isset($isLocked)) {
     $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
     $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
 }
-
 $stmt = $pdo->prepare("SELECT file_name FROM report_attachments WHERE client_id = :client_id ORDER BY uploaded_at DESC, id DESC");
 $stmt->execute([':client_id' => $clientId]);
 $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -292,7 +266,6 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     document.addEventListener('DOMContentLoaded', function() {
         initAttachmentHandlers();
-        // Disable refresh button if locked
         if (isLocked) {
             const refreshBtn = document.getElementById('refreshAttachments');
             if (refreshBtn) {
@@ -308,7 +281,6 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
         const refreshAttachmentsBtn = document.getElementById('refreshAttachments');
         const refreshAttachmentsIcon = document.getElementById('refreshAttachmentsIcon');
         const editModal = document.getElementById('editAttachmentModal');
-        const editForm = document.getElementById('editAttachmentForm');
         const editOldFileName = document.getElementById('editOldAttachmentFileName');
         const editNewFileName = document.getElementById('editNewAttachmentFileName');
         const editCancel = document.getElementById('editAttachmentCancel');
@@ -330,14 +302,11 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
             });
         }
 
-        // Fix: Use event delegation for dynamically created elements
         document.addEventListener('click', function(e) {
             const target = e.target.closest('a');
             if (!target) return;
-            
-            // Check if click is inside attachment_list
             if (!e.target.closest('#attachment_list')) return;
-            
+
             if (target.classList.contains('annex-delete')) {
                 e.preventDefault();
                 const fileName = target.getAttribute('data-filename');
@@ -355,11 +324,8 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
                 .then(response => response.json().catch(()=>({success:false, error:'Invalid JSON'})))
                 .then(data => {
                     if (data.success) {
-                        // Remove from DOM
                         const listItem = target.closest('li');
                         if (listItem) listItem.remove();
-                        
-                        // Also remove from annexures if present
                         const annexList = document.getElementById('annexures_list');
                         if (annexList) {
                             annexList.querySelectorAll('li[data-filename]')
@@ -367,8 +333,6 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
                                     if (li.dataset.filename === fileName) li.remove(); 
                                 });
                         }
-                        
-                        // If no attachments left, show message
                         const attachmentList = document.getElementById('attachment_list');
                         if (attachmentList && attachmentList.children.length === 0) {
                             attachmentList.innerHTML = '<li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>';
@@ -382,131 +346,111 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
                 e.preventDefault();
                 const fileName = target.getAttribute('data-filename');
                 if (!fileName) return;
-                
-                // Show modal
-                editOldFileName.value = fileName;
-                // Remove .pdf extension for editing if present
-                editNewFileName.value = fileName.replace(/\.pdf$/i, '');
-                editModal.style.display = 'flex';
-                
-                // Focus and select text for easy editing
+
+                // Remove previous listeners by replacing the form node
+                const editForm = document.getElementById('editAttachmentForm');
+                const newForm = editForm.cloneNode(true);
+                editForm.parentNode.replaceChild(newForm, editForm);
+
+                document.getElementById('editOldAttachmentFileName').value = fileName;
+                document.getElementById('editNewAttachmentFileName').value = fileName.replace(/\.pdf$/i, '');
+                document.getElementById('editAttachmentModal').style.display = 'flex';
+
                 setTimeout(() => {
-                    editNewFileName.focus();
-                    editNewFileName.select();
+                    document.getElementById('editNewAttachmentFileName').focus();
+                    document.getElementById('editNewAttachmentFileName').select();
                 }, 100);
-            }
-        });
 
-        // Cancel button
-        if (editCancel) {
-            editCancel.addEventListener('click', function() {
-                editModal.style.display = 'none';
-            });
-        }
+                document.getElementById('editAttachmentCancel').onclick = function() {
+                    document.getElementById('editAttachmentModal').style.display = 'none';
+                };
 
-        // Submit rename
-        if (editForm) {
-            editForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const oldName = editOldFileName.value;
-                let newNameInput = editNewFileName.value.trim();
-                
-                if (!oldName || !newNameInput) {
-                    alert('Please enter a new name.');
-                    return;
-                }
-                
-                // Disallow invalid characters (basic check)
-                if (/[\/\\:*?"<>|]/.test(newNameInput)) {
-                    alert('Filename contains invalid characters.');
-                    return;
-                }
-                
-                // Prevent duplicate names
-                const existingNames = Array.from(document.querySelectorAll('#attachment_list li[data-filename]'))
-                    .map(li => li.dataset.filename.toLowerCase());
-                
-                // Check if new name already exists (with or without .pdf)
-                const newNameWithPdf = newNameInput.toLowerCase().endsWith('.pdf') ? 
-                    newNameInput.toLowerCase() : 
-                    newNameInput.toLowerCase() + '.pdf';
-                    
-                if (existingNames.includes(newNameWithPdf)) {
-                    alert('A file with this name already exists.');
-                    return;
-                }
-                
-                fetch('report_attachments.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                    body: new URLSearchParams({
-                        ajax_action: 'rename_attachment',
-                        client_id: clientIdForAttachments,
-                        old_name: oldName,
-                        new_name: newNameInput
+                newForm.onsubmit = function(e) {
+                    e.preventDefault();
+                    const oldName = document.getElementById('editOldAttachmentFileName').value;
+                    let newNameInput = document.getElementById('editNewAttachmentFileName').value.trim();
+
+                    if (!oldName || !newNameInput) {
+                        alert('Please enter a new name.');
+                        return;
+                    }
+                    if (/[\/\\:*?"<>|]/.test(newNameInput)) {
+                        alert('Filename contains invalid characters.');
+                        return;
+                    }
+                    const existingNames = Array.from(document.querySelectorAll('#attachment_list li[data-filename]'))
+                        .map(li => li.dataset.filename.toLowerCase());
+                    const newNameWithPdf = newNameInput.toLowerCase().endsWith('.pdf') ?
+                        newNameInput.toLowerCase() :
+                        newNameInput.toLowerCase() + '.pdf';
+                    if (existingNames.includes(newNameWithPdf)) {
+                        alert('A file with this name already exists.');
+                        return;
+                    }
+                    fetch('report_attachments.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                        body: new URLSearchParams({
+                            ajax_action: 'rename_attachment',
+                            client_id: clientIdForAttachments,
+                            old_name: oldName,
+                            new_name: newNameInput
+                        })
                     })
-                })
-                .then(response => response.json().catch(() => ({success:false, error:'Invalid JSON'})))
-                .then(data => {
-                    if (data.success) {
-                        const finalName = data.new_name;
-                        
-                        // Update DOM in attachment_list
-                        document.querySelectorAll('#attachment_list li[data-filename]').forEach(li => {
-                            if (li.dataset.filename === oldName) {
-                                li.dataset.filename = finalName;
-                                const strongElement = li.querySelector('strong');
-                                if (strongElement) strongElement.textContent = finalName;
-                                
-                                // Update all anchor tags within this li
-                                li.querySelectorAll('a').forEach(a => {
-                                    a.setAttribute('data-filename', finalName);
-                                });
-                            }
-                        });
-                        
-                        // Also update in annexures list if present
-                        const annexList = document.getElementById('annexures_list');
-                        if (annexList) {
-                            annexList.querySelectorAll('li[data-filename]').forEach(li => {
+                    .then(response => response.json().catch(() => ({success:false, error:'Invalid JSON'})))
+                    .then(data => {
+                        if (data.success) {
+                            const finalName = data.new_name;
+                            document.querySelectorAll('#attachment_list li[data-filename]').forEach(li => {
                                 if (li.dataset.filename === oldName) {
                                     li.dataset.filename = finalName;
                                     const strongElement = li.querySelector('strong');
                                     if (strongElement) strongElement.textContent = finalName;
-                                    
                                     li.querySelectorAll('a').forEach(a => {
                                         a.setAttribute('data-filename', finalName);
                                     });
                                 }
                             });
+                            const annexList = document.getElementById('annexures_list');
+                            if (annexList) {
+                                annexList.querySelectorAll('li[data-filename]').forEach(li => {
+                                    if (li.dataset.filename === oldName) {
+                                        li.dataset.filename = finalName;
+                                        const strongElement = li.querySelector('strong');
+                                        if (strongElement) strongElement.textContent = finalName;
+                                        li.querySelectorAll('a').forEach(a => {
+                                            a.setAttribute('data-filename', finalName);
+                                        });
+                                    }
+                                });
+                            }
+                            document.getElementById('editAttachmentModal').style.display = 'none';
+                            alert('File renamed successfully to: ' + finalName);
+                        } else {
+                            alert('Error: ' + (data.error || 'Rename failed'));
                         }
-                        
-                        editModal.style.display = 'none';
-                        
-                        // Show success message
-                        alert('File renamed successfully to: ' + finalName);
-                    } else {
-                        alert('Error: ' + (data.error || 'Rename failed'));
-                    }
-                })
-                .catch((error) => {
-                    console.error('Rename error:', error);
-                    alert('Rename error: ' + error.message);
-                });
-            });
-        }
-        
-        // Close modal when clicking outside
-        editModal.addEventListener('click', function(e) {
-            if (e.target === editModal) {
-                editModal.style.display = 'none';
+                    })
+                    .catch((error) => {
+                        console.error('Rename error:', error);
+                        alert('Rename error: ' + error.message);
+                    });
+                };
             }
         });
-        
-        // Close modal with Escape key
+
+        document.getElementById('editAttachmentCancel').onclick = function() {
+            document.getElementById('editAttachmentModal').style.display = 'none';
+        };
+
+        document.getElementById('editAttachmentModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && editModal.style.display === 'flex') {
-                editModal.style.display = 'none';
+            if (e.key === 'Escape' && document.getElementById('editAttachmentModal').style.display === 'flex') {
+                document.getElementById('editAttachmentModal').style.display = 'none';
             }
         });
     }
