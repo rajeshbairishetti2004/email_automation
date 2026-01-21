@@ -151,74 +151,49 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                     <div class="form-row">
                         <!-- Send As Dropdown -->
                         <div class="email-field-group">
-                            <label for="send_as_select">Send As</label>
-                            <div class="search-container">
-                                <div class="search-input-wrapper">
-                                    <span class="search-icon">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <circle cx="11" cy="11" r="8"></circle>
-                                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                        </svg>
-                                    </span>
-                                    <select id="send_as_select" class="modern-search-input" onchange="handleSendAsSelect()">
-                                        <option value="">Select sender profile...</option>
-                                        <?php foreach ($sendAsProfiles as $email => $profile): ?>
-                                            <option value="<?php echo htmlspecialchars($email); ?>" data-name="<?php echo htmlspecialchars($profile['name']); ?>">
-                                                <?php echo htmlspecialchars($profile['name'] . ' - ' . $profile['designation']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <button type="button" class="search-clear-btn" id="send_as_clear_btn" onclick="clearSendAsSelect()">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                    </button>
-                                </div>
-                                
-                                <!-- Hidden inputs for form submission -->
-                                <input type="hidden" name="from_email" id="from_email_hidden">
-                                <input type="hidden" name="from_name" id="from_name_hidden" value="Finance Doctor">
-                                
-                                <!-- Validation message -->
-                                <div class="email-validation" id="send_as_validation"></div>
-                                
-                                <!-- Smart hint -->
-                                <div class="smart-hint" id="send_as_hint">
-                                    Select a sender profile from the dropdown.
-                                </div>
-                            </div>
-                            
-                            <!-- Selected Send As Display -->
-                            <div id="selected_send_as_display" class="selected-email-display">
-                                <div class="selected-email-header">
-                                    <span class="selected-email-label">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                        Selected Sender
-                                    </span>
-                                    <button type="button" class="remove-email-btn" onclick="removeSelectedSendAs()">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                        Remove
-                                    </button>
-                                </div>
-                                <div class="selected-email-content">
-                                    <div class="selected-email-avatar" id="selected_send_as_avatar">FD</div>
-                                    <div class="selected-email-info">
-                                        <div class="selected-email-address" id="selected_send_as_name"></div>
-                                        <div class="selected-email-status" id="selected_send_as_status">
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
-                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                            </svg>
-                                            <span id="send_as_source">Profile selected</span>
-                                        </div>
+                            <label>Send As</label>
+
+                            <div class="sendas-wrapper" id="sendAsWrapper">
+                                <div class="sendas-input" onclick="toggleSendAsDropdown()">
+                                    <div class="sendas-avatar" id="sendAsAvatar">FD</div>
+                                    <div class="sendas-text">
+                                        <div class="sendas-name" id="sendAsName">Select sender profile</div>
+                                        <div class="sendas-role" id="sendAsRole">Click to choose</div>
                                     </div>
+                                    <span class="sendas-arrow">⌄</span>
+                                </div>
+
+                                <div class="sendas-dropdown" id="sendAsDropdown">
+                                    <input
+                                        type="text"
+                                        class="sendas-search"
+                                        placeholder="Search sender..."
+                                        oninput="filterSendAs(this.value)"
+                                    >
+
+                                    <?php foreach ($sendAsProfiles as $email => $profile): ?>
+                                        <div
+                                            class="sendas-item"
+                                            onclick="selectSendAs(
+                                                '<?php echo htmlspecialchars($email); ?>',
+                                                '<?php echo htmlspecialchars($profile['name']); ?>',
+                                                '<?php echo htmlspecialchars($profile['designation']); ?>'
+                                            )"
+                                        >
+                                            <div class="sendas-item-avatar">
+                                                <?php echo strtoupper(substr($profile['name'], 0, 2)); ?>
+                                            </div>
+                                            <div class="sendas-item-info">
+                                                <div class="sendas-item-name"><?php echo htmlspecialchars($profile['name']); ?></div>
+                                                <div class="sendas-item-role"><?php echo htmlspecialchars($profile['designation']); ?></div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
+
+                            <input type="hidden" name="from_email" id="from_email_hidden">
+                            <input type="hidden" name="from_name" id="from_name_hidden">
                         </div>
                         
                         <!-- Smart Email Input -->
@@ -823,86 +798,38 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         items[newIndex].scrollIntoView({ block: 'nearest' });
     }
     
-    // Handle Send As select
-    function handleSendAsSelect() {
-        const select = document.getElementById('send_as_select');
-        const selectedValue = select.value;
-        const hiddenEmailInput = document.getElementById('from_email_hidden');
-        const hiddenNameInput = document.getElementById('from_name_hidden');
-        const validation = document.getElementById('send_as_validation');
-        const clearBtn = document.getElementById('send_as_clear_btn');
-        
-        if (selectedValue) {
-            const profile = sendAsProfiles[selectedValue];
-            hiddenEmailInput.value = selectedValue;
-            hiddenNameInput.value = profile.name;
-            
-            // Update selected display
-            updateSelectedSendAsDisplay(profile, selectedValue);
-            
-            // Set validation
-            validation.textContent = '✓ Profile selected';
-            validation.className = 'email-validation valid';
-            
-            // Show clear button
-            clearBtn.classList.add('visible');
-        } else {
-            hiddenEmailInput.value = '';
-            hiddenNameInput.value = 'Finance Doctor';
-            
-            hideSelectedSendAsDisplay();
-            
-            validation.className = 'email-validation';
-            
-            clearBtn.classList.remove('visible');
-        }
+    function toggleSendAsDropdown() {
+    document.getElementById('sendAsDropdown').classList.toggle('show');
+}
+
+function selectSendAs(email, name, role) {
+    document.getElementById('from_email_hidden').value = email;
+    document.getElementById('from_name_hidden').value = name;
+
+    document.getElementById('sendAsAvatar').textContent =
+        name.split(' ').map(n => n[0]).join('').slice(0,2);
+
+    document.getElementById('sendAsName').textContent = name;
+    document.getElementById('sendAsRole').textContent = role;
+
+    document.getElementById('sendAsDropdown').classList.remove('show');
+}
+
+function filterSendAs(query) {
+    query = query.toLowerCase();
+    document.querySelectorAll('.sendas-item').forEach(item => {
+        item.style.display = item.innerText.toLowerCase().includes(query)
+            ? 'flex'
+            : 'none';
+    });
+}
+
+// Close when clicking outside
+document.addEventListener('click', e => {
+    if (!document.getElementById('sendAsWrapper').contains(e.target)) {
+        document.getElementById('sendAsDropdown').classList.remove('show');
     }
-    
-    // Clear Send As select
-    function clearSendAsSelect() {
-        const select = document.getElementById('send_as_select');
-        select.value = '';
-        handleSendAsSelect();
-    }
-    
-    // Update selected Send As display
-    function updateSelectedSendAsDisplay(profile, email) {
-        const display = document.getElementById('selected_send_as_display');
-        const avatar = document.getElementById('selected_send_as_avatar');
-        const name = document.getElementById('selected_send_as_name');
-        
-        if (profile) {
-            avatar.textContent = getProfileInitials(profile.name);
-            name.textContent = `${profile.name} (${email})`;
-            display.classList.add('visible');
-            
-            // Animate avatar
-            avatar.classList.add('email-selected-pulse');
-            setTimeout(() => {
-                avatar.classList.remove('email-selected-pulse');
-            }, 300);
-        }
-    }
-    
-    function hideSelectedSendAsDisplay() {
-        const display = document.getElementById('selected_send_as_display');
-        display.classList.remove('visible');
-    }
-    
-    function removeSelectedSendAs() {
-        clearSendAsSelect();
-    }
-    
-    // Update Send As smart hint
-    function updateSendAsHint() {
-        const hint = document.getElementById('send_as_hint');
-        hint.textContent = 'Select a sender profile from the dropdown.';
-    }
-    
-    // Helper function for profile initials
-    function getProfileInitials(name) {
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
+});
     </script>
 </body>
 </html>

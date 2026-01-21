@@ -969,3 +969,154 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ==== MODERN SEND AS DROPDOWN ==== */
+
+.sendas-wrapper {
+    position: relative;
+}
+
+.sendas-input {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+
+.sendas-dropdown {
+    position: absolute;
+    width: 100%;
+    background: #fff;
+    border: 1px solid var(--border-gray);
+    border-radius: 12px;
+    margin-top: 8px;
+    max-height: 300px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    display: none;
+    z-index: 9999;
+}
+
+/* ✅ ADD THIS */
+.sendas-dropdown.show {
+    display: block;
+    animation: fadeIn 0.2s ease;
+}
+
+
+.sendas-input:hover {
+    border-color: #2563eb;
+    background: #f8fafc;
+}
+
+
+.sendas-avatar {
+    width: 40px;
+    height: 36px;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    border-radius: 50%;
+    color: white;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sendas-text {
+    flex: 1;
+}
+
+.sendas-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.sendas-role {
+    font-size: 12px;
+    color: var(--label-gray);
+}
+
+.sendas-arrow {
+    font-size: 16px;
+    color: #64748b;
+}
+
+
+.sendas-search {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    outline: none;
+    font-size: 14px;
+}
+
+.sendas-input.active {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.sendas-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.sendas-item:hover {
+    background: var(--hover-blue);
+}
+
+.sendas-item-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #e0e7ff;
+    color: #1e3a8a;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sendas-item-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.sendas-item-role {
+    font-size: 12px;
+    color: var(--label-gray);
+}
+
+.sendas-dropdown::-webkit-scrollbar {
+    width: 6px;           /* ⬅️ thinner scrollbar */
+}
+
+.sendas-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sendas-dropdown::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 8px;
+}
+
+.sendas-dropdown::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
