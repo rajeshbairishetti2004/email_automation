@@ -4,7 +4,7 @@ require_once 'db_config.php';
 
 $domainProfiles = require __DIR__ . '/organization_emails.php';
 $sendAsProfiles = $domainProfiles;
-$clientId = (int)($clientId ?? 0); 
+$clientId = (int)($clientId ?? 0);
 
 try {
     $allClientEmails = [];
@@ -16,7 +16,7 @@ try {
     $allClientEmails = [];
 }
 
-// Fixed list for CC section as requested in your previous logic
+// Fixed list for CC section
 $allEmails = [
     'contact@financedoctor.in',
     'tanmay.vyas@financedoctor.in',
@@ -25,329 +25,884 @@ $allEmails = [
     'vivek.sharma@financedoctor.in',
     'sailesh.mulleti@financedoctor.in'
 ];
-?>
 
-<style>
-/* --- ALIGNED ENTERPRISE STYLING --- */
-:root {
-    --primary-navy: #1e293b; 
-    --border-gray: #cbd5e1;
-    --bg-light-gray: #f8fafc;
-    --accent-blue: #2563eb;
-    --text-main: #334155;
-    --label-gray: #64748b;
-}
-
-.communication-box-style {
-    border: 1px solid var(--border-gray);
-    border-radius: 4px;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    padding: 25px;
-    font-family: "Inter", "Segoe UI", sans-serif;
-    color: var(--text-main);
-    margin-bottom: 24px;
-}
-
-.section-title {
-    font-size: 13px;
-    color: var(--primary-navy);
-    font-weight: 700;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    border-left: 4px solid var(--primary-navy);
-    padding-left: 12px;
-    display: block;
-}
-
-.email-fields-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-/* Row-based layout to match "All Reports" style */
-.form-row {
-    display: flex;
-    gap: 24px;
-    align-items: flex-end;
-}
-
-.email-field-group {
-    flex: 1;
-    min-width: 0;
-}
-
-.email-field-group label {
-    font-size: 11px;
-    color: var(--label-gray);
-    font-weight: 700;
-    margin-bottom: 6px;
-    display: block;
-    text-transform: uppercase;
-}
-
-.styled-input {
-    padding: 8px 12px;
-    font-size: 14px;
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid var(--border-gray);
-    border-radius: 3px;
-    background-color: #fff;
-    color: var(--text-main);
-    transition: border-color 0.2s;
-}
-
-.styled-input:focus {
-    border-color: var(--accent-blue);
-    outline: none;
-    box-shadow: 0 0 0 1px var(--accent-blue);
-}
-
-/* CC Panel Structured Grid */
-.cc-panel {
-    background: var(--bg-light-gray);
-    border: 1px solid var(--border-gray);
-    border-radius: 4px;
-    padding: 16px;
-    margin-top: 10px;
-}
-
-.cc-label-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.cc-hint {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 400;
-}
-
-.cc-checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    background: #fff;
-    border: 1px solid var(--border-gray);
-    padding: 12px;
-    max-height: 140px;
-    overflow-y: auto;
-    border-radius: 3px;
-}
-
-.cc-checkbox-item {
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 calc(33.33% - 10px); /* 3 Columns for horizontal alignment */
-    padding: 4px 0;
-    cursor: pointer;
-}
-
-.cc-summary {
-    margin-top: 10px;
-    font-size: 12px;
-    color: var(--accent-blue);
-    font-weight: 500;
-}
-
-.submit-button {
-    background: #16a34a; /* Professional Green */
-    color: #fff;
-    border: none;
-    padding: 12px 30px;
-    font-size: 13px;
-    font-weight: 700;
-    border-radius: 4px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    transition: background 0.2s;
-}
-
-.submit-button:hover {
-    background: #15803d;
-}
-
-@media (max-width: 768px) {
-    .form-row { flex-direction: column; gap: 15px; }
-    .cc-checkbox-item { flex: 0 0 100%; }
-}
-</style>
-
-<div class="email-send-container">
-    <form method="post" enctype="multipart/form-data" class="email-form">
-        <input type="hidden" name="send_email" value="1">
-        <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
-        <input type="hidden" name="from_name" id="from_name" value="Finance Doctor">
-        <input type="hidden" name="cc_emails" id="cc_emails">
+// If AJAX request for email search
+if (isset($_GET['search_emails']) && isset($_GET['query'])) {
+    header('Content-Type: application/json');
+    $query = strtolower(trim($_GET['query']));
+    $results = [];
+    
+    // Search from beginning of email (username part before @)
+    foreach ($allClientEmails as $email) {
+        // Get the username part (before @)
+        $username = strtolower(explode('@', $email)[0]);
         
-        <div class="communication-box-style">
-            <span class="section-title">Communication Center</span>
+        // Check if query matches from the beginning of username
+        if (strpos($username, $query) === 0) {
+            $results[] = $email;
+        }
+    }
+    
+    echo json_encode($results);
+    exit();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Communication Center</title>
+    <link rel="stylesheet" href="public/css/send_email.css">
+    <style>
+    /* Additional inline styles */
+    .email-data {
+        display: none;
+    }
+    
+    .typing-indicator {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 4px;
+        display: none;
+    }
+    
+    .typing-indicator.visible {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .email-validation {
+        font-size: 12px;
+        margin-top: 4px;
+        display: none;
+    }
+    
+    .email-validation.valid {
+        color: #10b981;
+        display: block;
+    }
+    
+    .email-validation.invalid {
+        color: #ef4444;
+        display: block;
+    }
+    
+    .smart-hint {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 6px;
+        font-style: italic;
+    }
+    
+    .loading-spinner-small {
+        width: 12px;
+        height: 12px;
+        border: 2px solid #e2e8f0;
+        border-top-color: var(--accent-blue);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    /* For keyboard navigation */
+    .email-result-item.active {
+        background-color: #eff6ff;
+        border-left: 3px solid var(--accent-blue);
+        padding-left: 15px;
+    }
+    
+    /* Style select to look like input */
+    select.modern-search-input {
+        width: 100%;
+        padding: 12px 40px 12px 40px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        background-color: #ffffff;
+        color: #374151;
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 16px;
+    }
+    
+    select.modern-search-input:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    </style>
+</head>
+<body>
+    <div class="email-send-container">
+        <form method="post" enctype="multipart/form-data" class="email-form">
+            <input type="hidden" name="send_email" value="1">
+            <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
+            <input type="hidden" name="from_name" id="from_name" value="Finance Doctor">
+            <input type="hidden" name="cc_emails" id="cc_emails">
             
-            <div class="email-fields-container">
-                <div class="form-row">
-                    <div class="email-field-group">
-                        <label for="from_email">Send As</label>
-                        <select name="from_email" id="from_email" required class="styled-input" onchange="updateSenderDetails(this)">
-                            <option value="" disabled>-- Select Sender --</option>
-                            <?php foreach ($sendAsProfiles as $email => $profile): ?>
-                                <option value="<?php echo htmlspecialchars($email); ?>" 
-                                        data-name="<?php echo htmlspecialchars($profile['name']); ?>"
-                                        data-mobile="<?php echo htmlspecialchars($profile['mobile']); ?>"
-                                        data-designation="<?php echo htmlspecialchars($profile['designation']); ?>"
-                                        <?php echo ($email === 'contact@financedoctor.in') ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($profile['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-
-                    <div class="email-field-group">
-                        <label for="recipient_email_search">Primary Recipient (To)</label>
-                        <div class="custom-dropdown" style="position:relative;">
-                            <input type="text" id="recipient_email_search" class="styled-input" placeholder="Search client directory..." autocomplete="off">
-                            <input type="hidden" name="recipient_email" id="recipient_email_hidden">
-                            <div id="recipient_email_list" class="dropdown-list" style="display:none;position:absolute;z-index:100;width:100%;background:#fff;border:1px solid var(--border-gray);box-shadow:0 4px 6px rgba(0,0,0,0.1);max-height:180px;overflow-y:auto;"></div>
+            <div class="communication-box-style">
+                <span class="section-title">Communication Center</span>
+                
+                <div class="email-fields-container">
+                    <div class="form-row">
+                        <!-- Send As Dropdown -->
+                        <div class="email-field-group">
+                            <label for="send_as_select">Send As</label>
+                            <div class="search-container">
+                                <div class="search-input-wrapper">
+                                    <span class="search-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="11" cy="11" r="8"></circle>
+                                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                        </svg>
+                                    </span>
+                                    <select id="send_as_select" class="modern-search-input" onchange="handleSendAsSelect()">
+                                        <option value="">Select sender profile...</option>
+                                        <?php foreach ($sendAsProfiles as $email => $profile): ?>
+                                            <option value="<?php echo htmlspecialchars($email); ?>" data-name="<?php echo htmlspecialchars($profile['name']); ?>">
+                                                <?php echo htmlspecialchars($profile['name'] . ' - ' . $profile['designation']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button type="button" class="search-clear-btn" id="send_as_clear_btn" onclick="clearSendAsSelect()">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <!-- Hidden inputs for form submission -->
+                                <input type="hidden" name="from_email" id="from_email_hidden">
+                                <input type="hidden" name="from_name" id="from_name_hidden" value="Finance Doctor">
+                                
+                                <!-- Validation message -->
+                                <div class="email-validation" id="send_as_validation"></div>
+                                
+                                <!-- Smart hint -->
+                                <div class="smart-hint" id="send_as_hint">
+                                    Select a sender profile from the dropdown.
+                                </div>
+                            </div>
+                            
+                            <!-- Selected Send As Display -->
+                            <div id="selected_send_as_display" class="selected-email-display">
+                                <div class="selected-email-header">
+                                    <span class="selected-email-label">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                        Selected Sender
+                                    </span>
+                                    <button type="button" class="remove-email-btn" onclick="removeSelectedSendAs()">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                        Remove
+                                    </button>
+                                </div>
+                                <div class="selected-email-content">
+                                    <div class="selected-email-avatar" id="selected_send_as_avatar">FD</div>
+                                    <div class="selected-email-info">
+                                        <div class="selected-email-address" id="selected_send_as_name"></div>
+                                        <div class="selected-email-status" id="selected_send_as_status">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                            <span id="send_as_source">Profile selected</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Smart Email Input -->
+                        <div class="email-field-group">
+                            <label for="recipient_email_search">Primary Recipient (To)</label>
+                            <div class="search-container">
+                                <div class="search-input-wrapper">
+                                    <span class="search-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="11" cy="11" r="8"></circle>
+                                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                        </svg>
+                                    </span>
+                                    <input type="email" 
+                                           id="recipient_email_search" 
+                                           class="modern-search-input" 
+                                           placeholder="Start typing email address..." 
+                                           autocomplete="off"
+                                           oninput="handleEmailInput()"
+                                           onblur="validateEmailOnBlur()">
+                                    <button type="button" class="search-clear-btn" id="search-clear-btn" onclick="clearEmailSearch()">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <!-- Hidden input for form submission -->
+                                <input type="hidden" name="recipient_email" id="recipient_email_hidden">
+                                
+                                <!-- Smart dropdown for suggestions -->
+                                <div id="recipient_email_list" class="modern-dropdown-list"></div>
+                                
+                                <!-- Typing indicator -->
+                                <div class="typing-indicator" id="typing-indicator">
+                                    <div class="loading-spinner-small"></div>
+                                    <span>Searching for matching emails...</span>
+                                </div>
+                                
+                                <!-- Email validation message -->
+                                <div class="email-validation" id="email-validation"></div>
+                                
+                                <!-- Smart hint -->
+                                <div class="smart-hint" id="smart-hint">
+                                    Start typing to search client directory. You can also enter any email address.
+                                </div>
+                            </div>
+                            
+                            <!-- Selected Email Display -->
+                            <div id="selected_email_display" class="selected-email-display">
+                                <div class="selected-email-header">
+                                    <span class="selected-email-label">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                        Selected Recipient
+                                    </span>
+                                    <button type="button" class="remove-email-btn" onclick="removeSelectedEmail()">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                        Remove
+                                    </button>
+                                </div>
+                                <div class="selected-email-content">
+                                    <div class="selected-email-avatar" id="selected-email-avatar">FD</div>
+                                    <div class="selected-email-info">
+                                        <div class="selected-email-address" id="selected-email-address"></div>
+                                        <div class="selected-email-status" id="selected-email-status">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                            <span id="email-source">From client directory</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-    <label style="display:flex; align-items:center; gap:8px; margin-top:5px;">
-        <input type="checkbox" id="use_custom_email" onchange="toggleCustomEmail()">
-        <span style="font-size:11px; color:#666;">Use custom email (not from directory)</span>
-    </label>
-</div>
-                </div>
 
-                <div class="email-field-group cc-panel">
-                    <div class="cc-label-row">
-                        <div>
-                            <label style="display:inline; margin-right:8px;">Carbon Copy (CC)</label>
-                            <span class="cc-hint">Select contacts to copy on this report</span>
-                        </div>
-                        <label style="font-size:11px; cursor:pointer; color: var(--label-gray);">
-                            <input type="checkbox" id="cc_select_all" onchange="toggleCcSelectAll()"> SELECT ALL
-                        </label>
-                    </div>
-
-                    <div class="cc-checkboxes" id="cc_checkbox_list">
-                        <?php foreach ($allEmails as $email): ?>
-                            <label class="cc-checkbox-item">
-                                <input type="checkbox" value="<?php echo htmlspecialchars($email); ?>" onchange="onCcCheckboxChange(event)">
-                                <span><?php echo htmlspecialchars($email); ?></span>
+                    <!-- CC Panel -->
+                    <div class="email-field-group cc-panel">
+                        <div class="cc-label-row">
+                            <div>
+                                <label style="display:inline; margin-right:8px; font-weight:700;">Carbon Copy (CC)</label>
+                                <span class="cc-hint">Select contacts to copy on this communication</span>
+                            </div>
+                            <label style="font-size:12px; cursor:pointer; color: var(--label-gray); font-weight:500;">
+                                <input type="checkbox" id="cc_select_all" onchange="toggleCcSelectAll()"> SELECT ALL
                             </label>
-                        <?php endforeach; ?>
-                    </div>
-                    <div class="cc-summary" id="cc_summary">Selected: none</div>
-                </div>
+                        </div>
 
-                <div style="margin-top: 10px;">
-                    <button type="submit" class="submit-button">Send Report via Email</button>
+                        <div class="cc-checkboxes" id="cc_checkbox_list">
+                            <?php foreach ($allEmails as $index => $email): ?>
+                                <label class="cc-checkbox-item">
+                                    <input type="checkbox" 
+                                           value="<?php echo htmlspecialchars($email); ?>" 
+                                           onchange="onCcCheckboxChange()"
+                                           <?php echo ($index === 0) ? 'checked' : ''; ?>>
+                                    <span><?php echo htmlspecialchars($email); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="cc-summary" id="cc_summary">Selected: 1 email</div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div style="margin-top: 24px; text-align: center;">
+                        <button type="submit" class="submit-button">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                            Send Communication
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </form>
-</div>
+        </form>
+    </div>
 
-<script>
-// JS LOGIC FOR AUTOCOMPLETE & CHECKBOX SYNC
-function onCcCheckboxChange(event) {
-    const checkboxList = document.getElementById('cc_checkbox_list');
-    const checked = Array.from(checkboxList.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
-    document.getElementById('cc_emails').value = checked.join(', ');
-    updateCcSummary(checked);
-}
-
-function updateCcSummary(selectedEmails) {
-    const summaryEl = document.getElementById('cc_summary');
-    if (!summaryEl) return;
-    summaryEl.textContent = selectedEmails.length ? `Selected (${selectedEmails.length}): ${selectedEmails.join(', ')}` : 'Selected: none';
-}
-
-function toggleCcSelectAll() {
-    const selectAll = document.getElementById('cc_select_all');
-    const checkboxList = document.getElementById('cc_checkbox_list');
-    const allCheckboxes = checkboxList.querySelectorAll('input[type="checkbox"]');
-    allCheckboxes.forEach(cb => { cb.checked = selectAll.checked; });
-    onCcCheckboxChange();
-}
-
-// Recipient Search Autocomplete
-document.addEventListener('DOMContentLoaded', function() {
-    var emails = <?php echo json_encode(array_values($allClientEmails)); ?>;
-    var searchInput = document.getElementById('recipient_email_search');
-    var listDiv = document.getElementById('recipient_email_list');
-    var hiddenInput = document.getElementById('recipient_email_hidden');
-    var useCustomEmail = document.getElementById('use_custom_email');
-    var autocompleteEnabled = true;
-
-    function autocompleteHandler() {
-        if (!autocompleteEnabled) return;
-        var filter = searchInput.value.toLowerCase();
-        var html = '';
-        emails.forEach(function(email) {
-            if (email.toLowerCase().includes(filter)) {
-                html += `<div class="dropdown-item" style="padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid #f1f5f9;" onclick="selectRecipient('${email}')">${email}</div>`;
+    <script>
+    // Email data from PHP (for client-side filtering as fallback)
+    const emailData = <?php echo json_encode($allClientEmails); ?>;
+    const ccEmailData = <?php echo json_encode($allEmails); ?>;
+    const sendAsProfiles = <?php echo json_encode($sendAsProfiles); ?>;
+    
+    // State variables
+    let emailSearchTimeout;
+    let currentSearchQuery = '';
+    let lastValidatedEmail = '';
+    
+    // Initialize CC summary on load
+    document.addEventListener('DOMContentLoaded', function() {
+        updateCcSummary();
+        
+        // Set initial hint
+        updateSmartHint('');
+        updateSendAsHint();
+        
+        // Focus management
+        const searchInput = document.getElementById('recipient_email_search');
+        searchInput.addEventListener('focus', function() {
+            // Only show dropdown if user has already typed something
+            if (this.value.length >= 2) {
+                handleEmailInput();
             }
         });
-        listDiv.innerHTML = html || '<div style="padding:8px; color:#999;">No matches</div>';
-        listDiv.style.display = 'block';
-    }
-
-    searchInput.addEventListener('input', autocompleteHandler);
-
-    window.selectRecipient = function(val) {
-        searchInput.value = val;
-        hiddenInput.value = val;
-        listDiv.style.display = 'none';
-    };
-
-    document.addEventListener('click', function(e) {
-        if (!searchInput.contains(e.target)) listDiv.style.display = 'none';
     });
-
-    // Custom email toggle logic
-    useCustomEmail.addEventListener('change', function() {
-        if (useCustomEmail.checked) {
-            autocompleteEnabled = false;
-            searchInput.placeholder = "Enter email address...";
-            listDiv.style.display = 'none';
-            hiddenInput.value = '';
-        } else {
-            autocompleteEnabled = true;
-            searchInput.placeholder = "Search client directory...";
-            // Optionally, trigger autocomplete if input is not empty
-            if (searchInput.value) autocompleteHandler();
-        }
-    });
-
-    // Keep hidden input in sync for custom email
-    searchInput.addEventListener('input', function() {
-        if (useCustomEmail.checked) {
-            hiddenInput.value = searchInput.value;
-        }
-    });
-});
-
-// JavaScript:
-function toggleCustomEmail() {
-    var customCheckbox = document.getElementById('use_custom_email');
-    var searchInput = document.getElementById('recipient_email_search');
-    var listDiv = document.getElementById('recipient_email_list');
     
-    if (customCheckbox.checked) {
-        searchInput.placeholder = "Enter email address...";
-        listDiv.style.display = 'none';
-        searchInput.removeEventListener('input', autocompleteHandler); // Remove autocomplete
-    } else {
-        searchInput.placeholder = "Search client directory...";
-        searchInput.addEventListener('input', autocompleteHandler); // Re-add autocomplete
+    // Handle email input with smart search
+    function handleEmailInput() {
+        const searchInput = document.getElementById('recipient_email_search');
+        const clearBtn = document.getElementById('search-clear-btn');
+        const dropdown = document.getElementById('recipient_email_list');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const validation = document.getElementById('email-validation');
+        const emailValue = searchInput.value.trim();
+        
+        // Clear previous timeout
+        clearTimeout(emailSearchTimeout);
+        
+        // Show/hide clear button
+        clearBtn.classList.toggle('visible', emailValue.length > 0);
+        
+        // Hide validation messages while typing
+        validation.className = 'email-validation';
+        
+        // Update smart hint
+        updateSmartHint(emailValue);
+        
+        // Clear dropdown if input is cleared
+        if (emailValue.length === 0) {
+            dropdown.classList.remove('visible');
+            typingIndicator.classList.remove('visible');
+            hideSelectedDisplay();
+            return;
+        }
+        
+        // If it looks like a complete email, validate it
+        if (isCompleteEmail(emailValue)) {
+            validateAndProcessEmail(emailValue);
+            dropdown.classList.remove('visible');
+            typingIndicator.classList.remove('visible');
+            return;
+        }
+        
+        // Only search after user types at least 2 characters
+        if (emailValue.length < 2) {
+            dropdown.classList.remove('visible');
+            typingIndicator.classList.remove('visible');
+            return;
+        }
+        
+        // Show typing indicator
+        typingIndicator.classList.add('visible');
+        dropdown.classList.remove('visible');
+        
+        // Debounce the search
+        emailSearchTimeout = setTimeout(() => {
+            // First try client-side search for immediate results
+            const clientSideResults = performClientSideSearch(emailValue);
+            
+            if (clientSideResults.length > 0) {
+                // Show client-side results immediately
+                renderEmailResults(clientSideResults);
+                dropdown.classList.add('visible');
+                typingIndicator.classList.remove('visible');
+            } else {
+                // If no client-side results, try AJAX search
+                performAjaxEmailSearch(emailValue);
+            }
+        }, 300);
     }
-}
-</script>
+    
+    // Client-side search (immediate, no AJAX)
+    function performClientSideSearch(query) {
+        const lowercaseQuery = query.toLowerCase();
+        
+        return emailData.filter(email => {
+            // Get the username part (before @)
+            const username = email.split('@')[0].toLowerCase();
+            
+            // Check if query matches from the beginning of username
+            return username.indexOf(lowercaseQuery) === 0;
+        }).slice(0, 10); // Limit to 10 results
+    }
+    
+    // AJAX search (fallback)
+    function performAjaxEmailSearch(query) {
+        const typingIndicator = document.getElementById('typing-indicator');
+        const dropdown = document.getElementById('recipient_email_list');
+        
+        // Store current query
+        currentSearchQuery = query;
+        
+        // Show loading in dropdown
+        dropdown.innerHTML = `
+            <div class="dropdown-loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Searching for "${query}"...</div>
+            </div>
+        `;
+        dropdown.classList.add('visible');
+        
+        // AJAX request to PHP backend
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `send_email.php?search_emails=1&query=${encodeURIComponent(query)}`, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        
+        xhr.onload = function() {
+            typingIndicator.classList.remove('visible');
+            
+            // Check if query hasn't changed during the request
+            if (query !== currentSearchQuery) {
+                return;
+            }
+            
+            if (xhr.status === 200) {
+                try {
+                    const emails = JSON.parse(xhr.responseText);
+                    if (emails.length === 0) {
+                        showNoResults(query);
+                    } else {
+                        renderEmailResults(emails);
+                    }
+                } catch (e) {
+                    console.error('JSON parse error:', e);
+                    // Fallback to client-side search
+                    const clientSideResults = performClientSideSearch(query);
+                    if (clientSideResults.length > 0) {
+                        renderEmailResults(clientSideResults);
+                    } else {
+                        showNoResults(query);
+                    }
+                }
+            } else {
+                // If AJAX fails, use client-side search
+                const clientSideResults = performClientSideSearch(query);
+                if (clientSideResults.length > 0) {
+                    renderEmailResults(clientSideResults);
+                } else {
+                    showNoResults(query);
+                }
+            }
+        };
+        
+        xhr.onerror = function() {
+            typingIndicator.classList.remove('visible');
+            // Fallback to client-side search
+            const clientSideResults = performClientSideSearch(query);
+            if (clientSideResults.length > 0) {
+                renderEmailResults(clientSideResults);
+            } else {
+                showNoResults(query);
+            }
+        };
+        
+        xhr.send();
+    }
+    
+    // Validate and process complete email
+    function validateAndProcessEmail(email) {
+        const searchInput = document.getElementById('recipient_email_search');
+        const hiddenInput = document.getElementById('recipient_email_hidden');
+        const validation = document.getElementById('email-validation');
+        const emailSource = document.getElementById('email-source');
+        
+        if (!validateEmailFormat(email)) {
+            validation.textContent = 'Please enter a valid email address';
+            validation.className = 'email-validation invalid';
+            hiddenInput.value = '';
+            hideSelectedDisplay();
+            return;
+        }
+        
+        // Check if email exists in database
+        const isInDatabase = emailData.includes(email);
+        
+        if (isInDatabase) {
+            validation.textContent = '✓ Email found in client directory';
+            validation.className = 'email-validation valid';
+            emailSource.textContent = 'From client directory';
+        } else {
+            validation.textContent = '✓ Custom email address (not in directory)';
+            validation.className = 'email-validation valid';
+            emailSource.textContent = 'Custom email address';
+        }
+        
+        // Set the value for form submission
+        hiddenInput.value = email;
+        lastValidatedEmail = email;
+        
+        // Update selected display
+        updateSelectedDisplay(email, !isInDatabase);
+    }
+    
+    // Validate email on blur
+    function validateEmailOnBlur() {
+        const searchInput = document.getElementById('recipient_email_search');
+        const emailValue = searchInput.value.trim();
+        
+        if (emailValue && isCompleteEmail(emailValue)) {
+            validateAndProcessEmail(emailValue);
+        }
+        
+        // Hide dropdown
+        document.getElementById('recipient_email_list').classList.remove('visible');
+        document.getElementById('typing-indicator').classList.remove('visible');
+    }
+    
+    // Render email search results
+    function renderEmailResults(emails) {
+        const dropdown = document.getElementById('recipient_email_list');
+        let html = '';
+        
+        // Limit results to 10 for better performance
+        const limitedResults = emails.slice(0, 10);
+        
+        limitedResults.forEach(email => {
+            const initials = getEmailInitials(email);
+            html += `
+                <div class="email-result-item" onclick="selectEmailFromResults('${escapeHtml(email)}')">
+                    <div class="email-avatar">${initials}</div>
+                    <div class="email-details">
+                        <span class="email-address">${email}</span>
+                        <span class="email-client-tag">Client</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        // Add "No exact match" option if user might want to enter custom email
+        if (limitedResults.length > 0) {
+            html += `
+                <div class="email-result-item" style="border-top: 1px dashed #e2e8f0; margin-top: 8px; padding-top: 12px; color: #64748b;">
+                    <div class="email-avatar" style="background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">?</div>
+                    <div class="email-details">
+                        <span class="email-address">Continue typing for custom email</span>
+                        <span class="email-client-tag">Other</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        dropdown.innerHTML = html;
+    }
+    
+    function showNoResults(query) {
+        const dropdown = document.getElementById('recipient_email_list');
+        dropdown.innerHTML = `
+            <div class="no-results">
+                <div class="no-results-icon">📭</div>
+                <div class="no-results-title">No matching emails</div>
+                <div class="no-results-subtitle">Continue typing to use as custom email</div>
+            </div>
+        `;
+    }
+    
+    // Select email from search results
+    function selectEmailFromResults(email) {
+        const searchInput = document.getElementById('recipient_email_search');
+        searchInput.value = email;
+        
+        // Trigger validation and processing
+        validateAndProcessEmail(email);
+        
+        // Close dropdown
+        document.getElementById('recipient_email_list').classList.remove('visible');
+    }
+    
+    // Clear email search
+    function clearEmailSearch() {
+        const searchInput = document.getElementById('recipient_email_search');
+        const hiddenInput = document.getElementById('recipient_email_hidden');
+        const clearBtn = document.getElementById('search-clear-btn');
+        const dropdown = document.getElementById('recipient_email_list');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const validation = document.getElementById('email-validation');
+        
+        searchInput.value = '';
+        hiddenInput.value = '';
+        clearBtn.classList.remove('visible');
+        dropdown.classList.remove('visible');
+        typingIndicator.classList.remove('visible');
+        validation.className = 'email-validation';
+        
+        hideSelectedDisplay();
+        updateSmartHint('');
+    }
+    
+    // Update selected email display
+    function updateSelectedDisplay(email, isCustom = false) {
+        const display = document.getElementById('selected_email_display');
+        const avatar = document.getElementById('selected-email-avatar');
+        const address = document.getElementById('selected-email-address');
+        
+        if (email) {
+            avatar.textContent = getEmailInitials(email);
+            address.textContent = email;
+            display.classList.add('visible');
+            
+            // Animate avatar
+            avatar.classList.add('email-selected-pulse');
+            setTimeout(() => {
+                avatar.classList.remove('email-selected-pulse');
+            }, 300);
+        }
+    }
+    
+    function hideSelectedDisplay() {
+        const display = document.getElementById('selected_email_display');
+        display.classList.remove('visible');
+    }
+    
+    function removeSelectedEmail() {
+        clearEmailSearch();
+    }
+    
+    // Update smart hint based on input
+    function updateSmartHint(input) {
+        const hint = document.getElementById('smart-hint');
+        
+        if (!input) {
+            hint.textContent = 'Start typing to search client directory. You can also enter any email address.';
+        } else if (input.length < 2) {
+            hint.textContent = 'Type at least 2 characters to search client directory...';
+        } else if (isCompleteEmail(input)) {
+            hint.textContent = 'Press Tab or click outside to validate email';
+        } else {
+            hint.textContent = 'Continue typing or select from suggestions above';
+        }
+    }
+    
+    // CC Management
+    function onCcCheckboxChange() {
+        updateCcSummary();
+    }
+    
+    function toggleCcSelectAll() {
+        const selectAll = document.getElementById('cc_select_all');
+        const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]');
+        const ccEmailsInput = document.getElementById('cc_emails');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+        
+        updateCcSummary();
+    }
+    
+    function updateCcSummary() {
+        const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]:checked');
+        const ccEmailsInput = document.getElementById('cc_emails');
+        const summary = document.getElementById('cc_summary');
+        
+        const selectedEmails = Array.from(checkboxes).map(cb => cb.value);
+        ccEmailsInput.value = selectedEmails.join(', ');
+        
+        if (selectedEmails.length === 0) {
+            summary.innerHTML = '<span style="color:#94a3b8;">No CC recipients selected</span>';
+        } else if (selectedEmails.length <= 3) {
+            summary.innerHTML = `<strong>${selectedEmails.length} recipient${selectedEmails.length > 1 ? 's' : ''}:</strong> ${selectedEmails.join(', ')}`;
+        } else {
+            summary.innerHTML = `<strong>${selectedEmails.length} recipients selected</strong>`;
+        }
+    }
+    
+    // Sender details update (removed - now handled in selectSendAsFromResults)
+    // function updateSenderDetails(select) {
+    //     const selectedOption = select.options[select.selectedIndex];
+    //     const fromNameInput = document.getElementById('from_name');
+    //     fromNameInput.value = selectedOption.getAttribute('data-name') || 'Finance Doctor';
+    // }
+    
+    // Helper functions
+    function getEmailInitials(email) {
+        const namePart = email.split('@')[0];
+        if (namePart.includes('.')) {
+            return namePart.split('.').map(p => p[0]).join('').toUpperCase().slice(0, 2);
+        }
+        return namePart.slice(0, 2).toUpperCase();
+    }
+    
+    function validateEmailFormat(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    }
+    
+    function isCompleteEmail(text) {
+        // Check if text looks like a complete email (contains @ and . after @)
+        return text.includes('@') && text.split('@')[1]?.includes('.');
+    }
+    
+    function escapeHtml(text) {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const searchInput = document.getElementById('recipient_email_search');
+        const dropdown = document.getElementById('recipient_email_list');
+        
+        if (!searchInput.contains(event.target) && !dropdown.contains(event.target)) {
+            dropdown.classList.remove('visible');
+            document.getElementById('typing-indicator').classList.remove('visible');
+        }
+    });
+    
+    // Keyboard navigation for email search
+    document.getElementById('recipient_email_search').addEventListener('keydown', function(e) {
+        const dropdown = document.getElementById('recipient_email_list');
+        const items = dropdown.querySelectorAll('.email-result-item');
+        
+        if (!dropdown.classList.contains('visible') || items.length === 0) return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                navigateDropdown(1, items);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                navigateDropdown(-1, items);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                const activeItem = dropdown.querySelector('.email-result-item.active');
+                if (activeItem) {
+                    activeItem.click();
+                }
+                break;
+            case 'Escape':
+                dropdown.classList.remove('visible');
+                break;
+        }
+    });
+    
+    function navigateDropdown(direction, items) {
+        let activeIndex = -1;
+        items.forEach((item, index) => {
+            if (item.classList.contains('active')) {
+                activeIndex = index;
+                item.classList.remove('active');
+            }
+        });
+        
+        let newIndex = activeIndex + direction;
+        if (newIndex < 0) newIndex = items.length - 1;
+        if (newIndex >= items.length) newIndex = 0;
+        
+        items[newIndex].classList.add('active');
+        items[newIndex].scrollIntoView({ block: 'nearest' });
+    }
+    
+    // Handle Send As select
+    function handleSendAsSelect() {
+        const select = document.getElementById('send_as_select');
+        const selectedValue = select.value;
+        const hiddenEmailInput = document.getElementById('from_email_hidden');
+        const hiddenNameInput = document.getElementById('from_name_hidden');
+        const validation = document.getElementById('send_as_validation');
+        const clearBtn = document.getElementById('send_as_clear_btn');
+        
+        if (selectedValue) {
+            const profile = sendAsProfiles[selectedValue];
+            hiddenEmailInput.value = selectedValue;
+            hiddenNameInput.value = profile.name;
+            
+            // Update selected display
+            updateSelectedSendAsDisplay(profile, selectedValue);
+            
+            // Set validation
+            validation.textContent = '✓ Profile selected';
+            validation.className = 'email-validation valid';
+            
+            // Show clear button
+            clearBtn.classList.add('visible');
+        } else {
+            hiddenEmailInput.value = '';
+            hiddenNameInput.value = 'Finance Doctor';
+            
+            hideSelectedSendAsDisplay();
+            
+            validation.className = 'email-validation';
+            
+            clearBtn.classList.remove('visible');
+        }
+    }
+    
+    // Clear Send As select
+    function clearSendAsSelect() {
+        const select = document.getElementById('send_as_select');
+        select.value = '';
+        handleSendAsSelect();
+    }
+    
+    // Update selected Send As display
+    function updateSelectedSendAsDisplay(profile, email) {
+        const display = document.getElementById('selected_send_as_display');
+        const avatar = document.getElementById('selected_send_as_avatar');
+        const name = document.getElementById('selected_send_as_name');
+        
+        if (profile) {
+            avatar.textContent = getProfileInitials(profile.name);
+            name.textContent = `${profile.name} (${email})`;
+            display.classList.add('visible');
+            
+            // Animate avatar
+            avatar.classList.add('email-selected-pulse');
+            setTimeout(() => {
+                avatar.classList.remove('email-selected-pulse');
+            }, 300);
+        }
+    }
+    
+    function hideSelectedSendAsDisplay() {
+        const display = document.getElementById('selected_send_as_display');
+        display.classList.remove('visible');
+    }
+    
+    function removeSelectedSendAs() {
+        clearSendAsSelect();
+    }
+    
+    // Update Send As smart hint
+    function updateSendAsHint() {
+        const hint = document.getElementById('send_as_hint');
+        hint.textContent = 'Select a sender profile from the dropdown.';
+    }
+    
+    // Helper function for profile initials
+    function getProfileInitials(name) {
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    </script>
+</body>
+</html>
