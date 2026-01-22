@@ -8,7 +8,7 @@ $clientId = (int)($clientId ?? 0);
 
 try {
     $allClientEmails = [];
-    $stmt = $pdo->query("SELECT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
+    $stmt = $pdo->query("SELECT DISTINCT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $allClientEmails[] = $row['email'];
     }
