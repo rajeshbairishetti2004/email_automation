@@ -478,6 +478,73 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         border-color: #ffeaa7;
         color: #856404;
     }
+
+/* Search box */
+#client-search {
+    width: 70%;
+    padding: 10px 14px;
+    font-size: 15px;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    outline: none;
+}
+
+#client-search:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* Dropdown container */
+#client-search-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 70%;
+    background: rgba(255, 255, 255, 0.96); /* slight transparency */
+    z-index: 1000;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    max-height: 200px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+}
+
+/* Dropdown items */
+#client-search-dropdown div {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #334155;
+    transition: background 0.2s ease;
+}
+
+#client-search-dropdown div:hover {
+    background: #f1f5f9;
+}
+
+/* Slim scrollbar */
+#client-search-dropdown::-webkit-scrollbar {
+    width: 6px; /* ↓ scrollbar width */
+}
+
+#client-search-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#client-search-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.6);
+    border-radius: 6px;
+}
+
+#client-search-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+}
+
+
     </style>
 </head>
 <body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
@@ -543,11 +610,36 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         </div>
     <?php endif; ?>
 
+
+
     <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-        <div style="position:relative; flex:1;">
-            <input type="text" name="q" id="client-search" placeholder="Search..." value="<?php echo htmlspecialchars($q); ?>" autocomplete="off">
-            <div id="client-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;z-index:1000;border:1px solid #e2e8f0;border-top:none;max-height:200px;overflow-y:auto;"></div>
-        </div>
+
+<div style="position:relative; flex:1; max-width:60%;">
+    <input type="text"
+           name="q"
+           id="client-search"
+           placeholder="Search..."
+           value="<?php echo htmlspecialchars($q); ?>"
+           autocomplete="off"
+           style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
+
+    <div id="client-search-dropdown"
+         style="display:none;
+                position:absolute;
+                top:100%;
+                left:0;
+                width:60%;
+                background:#fff;
+                z-index:1000;
+                border:1px solid #e2e8f0;
+                border-top:none;
+                max-height:200px;
+                overflow-y:auto;
+                box-sizing:border-box;">
+    </div>
+</div>
+
+
 
         <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
             <option value="">All Cycles</option>
@@ -1111,6 +1203,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000); // Show for 3 seconds
     }
 });
+
+function renderDropdown(names) {
+    const dropdown = document.getElementById("client-search-dropdown");
+    dropdown.innerHTML = "";
+
+    names.forEach(name => {
+        const firstLetter = name.charAt(0);
+
+        const item = document.createElement("div");
+        item.className = "search-item";
+
+        item.innerHTML = `
+            <div class="search-avatar">${firstLetter}</div>
+            <div class="search-name">${name}</div>
+        `;
+
+        item.onclick = () => {
+            document.getElementById("client-search").value = name;
+            dropdown.style.display = "none";
+        };
+
+        dropdown.appendChild(item);
+    });
+
+    dropdown.style.display = names.length ? "block" : "none";
+}
+
 </script>
 
 </body>
