@@ -214,25 +214,33 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
 
         <?php if (!empty($clients)): ?>
         <!-- Search Section -->
-        <div class="search-section">
-            <form method="get" class="search-box" id="searchForm">
-                <input type="hidden" name="id" value="<?php echo $allocationId; ?>">
+       <div class="search-section">
+    <form method="get" class="search-box" id="searchForm">
+        <input type="hidden" name="id" value="<?php echo $allocationId; ?>">
 
-                <div class="search-wrapper">
-                    <input type="text" name="q" id="client-search" placeholder="Search client name..." value="<?php echo htmlspecialchars($q); ?>" autocomplete="off">
-                    <div id="client-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;z-index:1000;border:1px solid #e2e8f0;border-top:none;max-height:200px;overflow-y:auto;"></div>
-                </div>
+        <div class="search-wrapper">
+            <input type="text"
+                   name="q"
+                   id="client-search"
+                   placeholder="Search client name..."
+                   value="<?php echo htmlspecialchars($q); ?>"
+                   autocomplete="off">
 
-                <button type="submit">
-                    <i class="fas fa-search"></i> Search
-                </button>
-                <?php if (!empty($q)): ?>
-                    <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>">
-                        <i class="fas fa-times"></i> Clear Search
-                    </a>
-                <?php endif; ?>
-            </form>
+            <div id="client-search-dropdown"></div>
         </div>
+
+        <button type="submit">
+            <i class="fas fa-search"></i> Search
+        </button>
+
+        <?php if (!empty($q)): ?>
+            <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>">
+                <i class="fas fa-times"></i> Clear Search
+            </a>
+        <?php endif; ?>
+    </form>
+</div>
+
 
         <div class="client-summary">
             <div class="summary-text">
