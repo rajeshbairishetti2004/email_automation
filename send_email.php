@@ -277,31 +277,61 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                     </div>
 
                     <!-- CC Panel -->
-                    <div class="email-field-group cc-panel">
-                        <div class="cc-label-row">
-                            <div>
-                                <label style="display:inline; margin-right:8px; font-weight:700;">Carbon Copy (CC)</label>
-                                <span class="cc-hint">Select contacts to copy on this communication</span>
-                            </div>
-                            <label style="font-size:12px; cursor:pointer; color: var(--label-gray); font-weight:500;">
-                                <input type="checkbox" id="cc_select_all" onchange="toggleCcSelectAll()"> SELECT ALL
-                            </label>
-                        </div>
+                    <!-- CC Panel -->
+<div class="email-field-group cc-panel">
+    <div class="cc-label-row">
+        <div class="cc-header">
+            <div class="cc-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM19.6 6L12 11L4.4 6H19.6ZM4 18V6.97L12 12L20 6.97V18H4Z" fill="currentColor"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="cc-title">Carbon Copy (CC)</h3>
+            </div>
+        </div>
+        <label class="select-all-toggle">
+            <input type="checkbox" id="cc_select_all" onchange="toggleCcSelectAll()">
+            <span class="select-all-text">Select All</span>
+        </label>
+    </div>
 
-                        <div class="cc-checkboxes" id="cc_checkbox_list">
-                            <?php foreach ($allEmails as $index => $email): ?>
-                                <label class="cc-checkbox-item">
-                                    <input type="checkbox" 
-                                           value="<?php echo htmlspecialchars($email); ?>" 
-                                           onchange="onCcCheckboxChange()"
-                                           <?php echo ($index === 0) ? 'checked' : ''; ?>>
-                                    <span><?php echo htmlspecialchars($email); ?></span>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                        <div class="cc-summary" id="cc_summary">Selected: 1 email</div>
-                    </div>
-
+    <div class="cc-checkboxes" id="cc_checkbox_list">
+    <?php foreach ($allEmails as $index => $email): ?>
+        <div class="cc-checkbox-item">
+            <input type="checkbox" 
+                   id="cc_<?php echo $index; ?>"
+                   value="<?php echo htmlspecialchars($email); ?>" 
+                   onchange="onCcCheckboxChange()"
+                   <?php echo ($index === 0) ? 'checked' : ''; ?>>
+            <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
+                <span class="cc-checkbox-custom"></span>
+                <span class="cc-email-text"><?php echo htmlspecialchars($email); ?></span>
+            </label>
+        </div>
+    <?php endforeach; ?>
+</div>
+    
+    <div class="cc-summary-container">
+        <div class="cc-summary-header">
+            <span class="cc-summary-title">Selected Recipients</span>
+            <span class="cc-count" id="cc_count">1</span>
+        </div>
+        <div class="selected-emails-list" id="selected_emails_list">
+            <?php if (isset($allEmails[0])): ?>
+                <div class="email-chip">
+                    <span><?php echo htmlspecialchars($allEmails[0]); ?></span>
+                    <button type="button" class="remove-email" onclick="removeEmail('<?php echo htmlspecialchars($allEmails[0]); ?>')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            <?php endif; ?>
+        </div>
+        <div class="cc-summary-hint" id="cc_summary_hint">Email will be sent to <?php echo isset($allEmails[0]) ? htmlspecialchars($allEmails[0]) : ''; ?> and copied to selected recipients</div>
+    </div>
+</div>
                     <!-- Submit Button -->
                     <div style="margin-top: 24px; text-align: center;">
                         <button type="submit" class="submit-button">
@@ -671,38 +701,83 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     }
     
     // CC Management
-    function onCcCheckboxChange() {
-        updateCcSummary();
+    // CC Management
+function onCcCheckboxChange() {
+    updateCcSummary();
+}
+
+function toggleCcSelectAll() {
+    const selectAll = document.getElementById('cc_select_all');
+    const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]');
+    const ccEmailsInput = document.getElementById('cc_emails');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateCcSummary();
+}
+
+function updateCcSummary() {
+    const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]:checked');
+    const ccEmailsInput = document.getElementById('cc_emails');
+    const ccCount = document.getElementById('cc_count');
+    const selectedList = document.getElementById('selected_emails_list');
+    const summaryHint = document.getElementById('cc_summary_hint');
+    
+    const selectedEmails = Array.from(checkboxes).map(cb => cb.value);
+    ccEmailsInput.value = selectedEmails.join(', ');
+    ccCount.textContent = selectedEmails.length;
+    
+    // Update selected emails list
+    selectedList.innerHTML = '';
+    
+    selectedEmails.forEach(email => {
+        const chip = document.createElement('div');
+        chip.className = 'email-chip';
+        chip.innerHTML = `
+            <span>${email}</span>
+            <button type="button" class="remove-email" onclick="removeEmail('${email}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
+        `;
+        selectedList.appendChild(chip);
+    });
+    
+    // Update hint message
+    if (selectedEmails.length === 0) {
+        summaryHint.textContent = 'No CC recipients selected';
+    } else if (selectedEmails.length === 1) {
+        summaryHint.textContent = `Email will be copied to ${selectedEmails[0]}`;
+    } else {
+        summaryHint.textContent = `Email will be copied to ${selectedEmails.length} recipients`;
     }
     
-    function toggleCcSelectAll() {
-        const selectAll = document.getElementById('cc_select_all');
-        const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]');
-        const ccEmailsInput = document.getElementById('cc_emails');
-        
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = selectAll.checked;
-        });
-        
-        updateCcSummary();
-    }
+    // Update select all checkbox state
+    const totalCheckboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]').length;
+    const checkedCount = selectedEmails.length;
     
-    function updateCcSummary() {
-        const checkboxes = document.querySelectorAll('#cc_checkbox_list input[type="checkbox"]:checked');
-        const ccEmailsInput = document.getElementById('cc_emails');
-        const summary = document.getElementById('cc_summary');
-        
-        const selectedEmails = Array.from(checkboxes).map(cb => cb.value);
-        ccEmailsInput.value = selectedEmails.join(', ');
-        
-        if (selectedEmails.length === 0) {
-            summary.innerHTML = '<span style="color:#94a3b8;">No CC recipients selected</span>';
-        } else if (selectedEmails.length <= 3) {
-            summary.innerHTML = `<strong>${selectedEmails.length} recipient${selectedEmails.length > 1 ? 's' : ''}:</strong> ${selectedEmails.join(', ')}`;
-        } else {
-            summary.innerHTML = `<strong>${selectedEmails.length} recipients selected</strong>`;
-        }
+    if (checkedCount === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+    } else if (checkedCount === totalCheckboxes) {
+        selectAll.checked = true;
+        selectAll.indeterminate = false;
+    } else {
+        selectAll.checked = false;
+        selectAll.indeterminate = true;
     }
+}
+
+function removeEmail(email) {
+    const checkbox = document.querySelector(`#cc_checkbox_list input[value="${email}"]`);
+    if (checkbox) {
+        checkbox.checked = false;
+        onCcCheckboxChange();
+    }
+}
     
     // Sender details update (removed - now handled in selectSendAsFromResults)
     // function updateSenderDetails(select) {
