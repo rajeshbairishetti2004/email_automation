@@ -12,10 +12,15 @@
         }
 
         .container {
-            max-width: 1400px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
+    max-width: 1400px;
+    margin: 16px auto;
+    padding: 0px;
+
+    /* ✅ REQUIRED FOR SCROLLING */
+    height: calc(100vh - 80px); /* navbar height */
+    overflow-y: auto;
+}
+
         
         .back-button {
             background: #6c757d;
@@ -676,3 +681,28 @@
 #client-search-dropdown::-webkit-scrollbar-thumb:hover {
     background: rgba(100, 116, 139, 0.8);
 }
+
+.container::-webkit-scrollbar {
+    width: 6px;                
+}
+
+.container::-webkit-scrollbar-track {
+    background: #f1f5f9;       /* solid background (less transparent) */
+    border-radius: 6px;
+}
+
+.container::-webkit-scrollbar-thumb {
+    background: #94a3b8;       /* darker = less transparency */
+    border-radius: 6px;
+}
+
+.container::-webkit-scrollbar-thumb:hover {
+    background: #64748b;       /* darker on hover */
+}
+
+/* Firefox */
+.container {
+    scrollbar-width: thin;     /* ↓ thinner */
+    scrollbar-color: #94a3b8 #f1f5f9;
+}
+
