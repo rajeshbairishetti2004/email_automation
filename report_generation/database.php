@@ -1,6 +1,5 @@
 <?php
 // report_generator/database.php
-session_start();
 
 // Include the root database configuration
 require_once __DIR__ . '/../db_config.php';

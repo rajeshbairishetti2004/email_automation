@@ -63,20 +63,31 @@ function attemptLogin(string $emailOrUsername, string $password): bool {
     // Check if the input is an email or username
     $field = filter_var($emailOrUsername, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
     
-    $stmt = $pdo->prepare("SELECT id, password_hash, status FROM users WHERE {$field} = :value");
+    // SELECT all needed fields for session - IMPORTANT: Get ALL user data
+    $stmt = $pdo->prepare("SELECT id, username, name, email, mobile, designation, password_hash, status FROM users WHERE {$field} = :value");
     $stmt->execute([':value' => $emailOrUsername]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user && $user['status'] === 'active' && password_verify($password, $user['password_hash'])) {
-        // Successful login: Set the user ID in the session
+        // Successful login: Set ALL user data in session
         $_SESSION['user_id'] = $user['id'];
+        $_SESSION['username'] = $user['username'];
+        $_SESSION['user_name'] = $user['name']; // For compatibility
+        $_SESSION['designation'] = $user['designation'] ?? '';
+        $_SESSION['email'] = $user['email'] ?? '';
+        $_SESSION['mobile'] = $user['mobile'] ?? '';
+        
+        // Also set these for navbar compatibility
+        $_SESSION['name'] = $user['name'] ?? $user['username'];
+        
+        // Debug - log success
+        error_log("Login successful for user: " . $user['username']);
+        
         return true;
     }
     
     return false;
-}
-
-/**
+}/**
  * Registers a new user.
  * UPDATED: Added $designation parameter.
  * @return bool|string User ID on success, error message string otherwise.

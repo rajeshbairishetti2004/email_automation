@@ -1,5 +1,9 @@
 <?php
 // report_generator/index.php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once 'database.php';
 
 $current_page = isset($_GET['page']) ? max(1, min(23, intval($_GET['page']))) : 1;
@@ -14,7 +18,9 @@ $client_name = isset($clientInfo['client_name']) && $clientInfo['client_name'] !
 $risk_profile = isset($clientInfo['risk_profile']) && $clientInfo['risk_profile'] !== null ? $clientInfo['risk_profile'] : '';
 $investment_horizon = isset($clientInfo['investment_horizon']) && $clientInfo['investment_horizon'] !== null ? $clientInfo['investment_horizon'] : '';
 $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfolio_value'] !== null ? $clientInfo['portfolio_value'] : '';
+
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,6 +28,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editable Portfolio Slides - <?php echo htmlspecialchars($client_name); ?></title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.ckeditor.com/ckeditor5/41.0.0/classic/ckeditor.js"></script>
     <!-- CSS moved to style.css -->

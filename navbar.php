@@ -1,196 +1,99 @@
 <?php
-// navbar.php - Include this file in all your pages
-
+// navbar.php - enhanced version
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Debug mode - set to true to see session data
+$debug_navbar = false;
+if ($debug_navbar) {
+    echo "<!-- NAVBAR SESSION DEBUG START -->\n";
+    echo "<!-- Session ID: " . session_id() . " -->\n";
+    echo "<!-- Session Data: " . json_encode($_SESSION) . " -->\n";
+    echo "<!-- NAVBAR SESSION DEBUG END -->\n";
+}
+
 $currentPage = basename($_SERVER['PHP_SELF']);
+$currentPath = $_SERVER['REQUEST_URI'];
 
-// Debug session variables
-// echo "<!-- DEBUG SESSION: ";
-// print_r($_SESSION);
-// echo " -->";
+// Detect if we're in report_generation folder
+$isReportGeneration = strpos($currentPath, 'report_generation') !== false;
 
-// Try multiple sources for username
-$navUser = $_SESSION['username'] ?? 
-           $_SESSION['user_name'] ?? 
-           ($currentUser['username'] ?? 
-           ($currentUser['name'] ?? 
-           'User'));
+// Check if we're in a subdirectory (report_generation folder)
+$scriptPath = $_SERVER['SCRIPT_NAME'];
+$isInReportGenFolder = strpos($scriptPath, 'report_generation/') !== false;
 
-$userDesignation = $_SESSION['designation'] ?? 
-                   ($currentUser['designation'] ?? 
-                   '');
+// Function to get correct path based on current location
+function getNavLink($file) {
+    global $isInReportGenFolder;
+    return $isInReportGenFolder ? '../' . $file : $file;
+}
+
+// Try multiple sources for username with better debugging
+$navUser = 'User'; // Default
+
+// Check session variables in order of preference
+if (!empty($_SESSION['username'])) {
+    $navUser = $_SESSION['username'];
+} elseif (!empty($_SESSION['user_name'])) {
+    $navUser = $_SESSION['user_name'];
+} elseif (!empty($_SESSION['name'])) {
+    $navUser = $_SESSION['name'];
+}
+
+// For designation
+$userDesignation = $_SESSION['designation'] ?? '';
 ?>
-
-<style>
-/* Navbar Styles Only */
-.navbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: #f5f8f946;
-    backdrop-filter: blur(12px);
-    border-bottom: 2px solid #e2e8f0;
-    padding: 25px 25px 25px 25px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    margin: 0;
-    border-bottom: 0.5px solid #19bdf9;
-}
-
-.nav-left {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-}
-
-.top-bar {
-    display: flex;
-    align-items: center;
-    padding: 12px 28px;
-    background: rgba(148, 227, 241, 0.319);
-    margin-bottom: 18px;
-    margin-right: 470px;
-}
-
-.top-bar img {
-    height: 40px;
-    vertical-align: middle;
-    margin-right: 10px;
-}
-
-.nav-brand {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #0f172a;
-    letter-spacing: 0.01em;
-    text-decoration: none;
-    border-bottom: none;
-}
-
-.nav-links {
-    display: flex;
-    gap: 24px;
-    align-items: center;
-}
-
-.nav-links a {
-    text-decoration: none;
-    color: #64748b;
-    font-weight: 600;
-    font-size: 14px;
-    padding: 8px 0;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s ease;
-}
-
-.nav-links a:hover {
-    color: #0288D1;
-}
-
-.nav-links a.active {
-    color: #0288D1;
-    border-bottom: 2px solid #0288D1;
-}
-
-.nav-user {
-    color: #0288D1 !important;
-    font-weight: 600;
-    font-size: 1rem;
-    padding: 0 24px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    transition: color 0.2s, background 0.2s, box-shadow 0.2s;
-    background: #e3f2fd;
-    border-radius: 24px;
-    box-shadow: 0 2px 8px rgba(41, 182, 246, 0.10);
-    position: relative;
-    min-height: 40px;
-    border: 2px solid #b3e5fc;
-}
-
-.nav-user:hover {
-    color: #fff !important;
-    background: #4FC3F7;
-    box-shadow: 0 4px 16px rgba(41, 182, 246, 0.18);
-    border-color: #4FC3F7;
-}
-
-.profile-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 36px;
-    background: #fff;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    min-width: 180px;
-    z-index: 100;
-}
-
-.profile-dropdown div {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 5px;
-    border-bottom: 1px solid #eee;
-    padding: 8px 12px 5px;
-}
-
-.profile-dropdown a {
-    display: block;
-    padding: 8px 12px;
-    text-align: right;
-    color: #0288D1;
-    font-weight: 600;
-    text-decoration: none;
-    border-bottom: none;
-}
-
-.profile-dropdown a.logout-link {
-    color: #e53935 !important;
-    font-weight: 700;
-    background: none;
-    transition: background 0.2s, color 0.2s;
-}
-
-.profile-dropdown a.logout-link:hover {
-    background: #ffebee;
-    color: #b71c1c !important;
-}
-</style>
 
 <nav class="navbar">
     <div class="nav-left">
         <div class="top-bar">
-            <img src="image.png" alt="Logo">
-            <a href="upload.php" class="nav-brand">Finance Doctor</a>
+            <!-- Correct image path based on location -->
+            <img src="<?php echo $isInReportGenFolder ? '../image.png' : 'image.png'; ?>" alt="Logo">
+            <!-- Correct home link based on location -->
+            <a href="<?php echo $isInReportGenFolder ? '../upload.php' : 'upload.php'; ?>" class="nav-brand">Finance Doctor</a>
         </div>
         <div class="nav-links">
-            <a href="upload.php" class="<?= ($currentPage === 'upload.php') ? 'active' : '' ?>">Dashboard</a>
-            <a href="view_saved_reports.php" class="<?= ($currentPage === 'view_saved_reports.php') ? 'active' : '' ?>">All Reports</a>
-            <a href="bulk_import.php" class="<?= ($currentPage === 'bulk_import.php') ? 'active' : '' ?>">Bulk Allocate</a>
-            <a href="allocation_log.php" class="<?= ($currentPage === 'allocation_log.php') ? 'active' : '' ?>">Allocation Log</a>
-            <a href="report_generation/index.php" class="<?= ($currentPage === 'report_generation/index.php') ? 'active' : '' ?>">Report Generation</a>
-    
-    
+            <!-- Use getNavLink() function for proper paths -->
+            <a href="<?php echo getNavLink('upload.php'); ?>" 
+               class="<?= ($currentPage === 'upload.php') ? 'active' : '' ?>">
+                Dashboard
+            </a>
+            <a href="<?php echo getNavLink('view_saved_reports.php'); ?>" 
+               class="<?= ($currentPage === 'view_saved_reports.php') ? 'active' : '' ?>">
+                All Reports
+            </a>
+            <a href="<?php echo getNavLink('bulk_import.php'); ?>" 
+               class="<?= ($currentPage === 'bulk_import.php') ? 'active' : '' ?>">
+                Bulk Allocate
+            </a>
+            <a href="<?php echo getNavLink('allocation_log.php'); ?>" 
+               class="<?= ($currentPage === 'allocation_log.php') ? 'active' : '' ?>">
+                Allocation Log
+            </a>
+            <!-- Report Generation link: if we're already in report_generation folder, link to index.php, otherwise link to report_generation/index.php -->
+            <a href="<?php echo $isInReportGenFolder ? 'index.php' : 'report_generation/index.php'; ?>" 
+               class="<?= $isReportGeneration ? 'active' : '' ?>">
+                Report Generation
+            </a>
         </div>
     </div>
     <div class="nav-user" style="position:relative;">
         <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-        <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:36px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:100;">
+        <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:45px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:1001;">
             <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
                 <?= htmlspecialchars($userDesignation) ?>
             </div>
-            <a href="profile.php" style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">My Profile</a>
-            <a href="logout.php" class="logout-link" style="display:block; padding:8px 12px; text-align:right;">Logout</a>
+            <a href="<?php echo getNavLink('profile.php'); ?>" 
+               style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">
+                My Profile
+            </a>
+            <a href="<?php echo getNavLink('logout.php'); ?>" 
+               class="logout-link" 
+               style="display:block; padding:8px 12px; text-align:right;">
+                Logout
+            </a>
         </div>
     </div>
     <script>
