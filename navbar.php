@@ -77,6 +77,13 @@ $userDesignation = $_SESSION['designation'] ?? '';
                class="<?= $isReportGeneration ? 'active' : '' ?>">
                 Report Generation
             </a>
+
+            <a href="<?php echo getNavLink('schemes.php'); ?>" 
+               class="<?= ($currentPage === 'schemes.php') ? 'active' : '' ?>">
+                Manage Schemes
+            </a>
+
+            
         </div>
     </div>
     <div class="nav-user" style="position:relative;">

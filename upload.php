@@ -677,12 +677,6 @@ $userDesignation = $currentUser['designation'] ?? '';
             </script>
         </div> <!-- end .wrap main content -->
 
-    <div class="section">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>Scheme Overview</h3>
-            <a href="schemes.php" class="btn-primary" style="font-size:12px; padding:6px 12px;">Manage Schemes</a>
-        </div>
-    </div>
     </div> <!-- end .wrap -->
 </body>
 </html>
