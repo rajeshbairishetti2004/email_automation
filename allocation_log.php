@@ -71,23 +71,39 @@ $months = $monthStmt->fetchAll(PDO::FETCH_COLUMN);
 $fromDate = $_GET['from_date'] ?? date('Y-m-01');
 $toDate = $_GET['to_date'] ?? date('Y-m-t');
 $selectedMonth = $_GET['month'] ?? '';
+$q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
 // Build query for allocation logs with date range
 $whereClauses = [];
 $params = [];
-$paramTypes = [];
 
 if (!empty($selectedMonth)) {
-    $whereClauses[] = "al.month_year = :month";
-    $params[':month'] = $selectedMonth;
-    $paramTypes[':month'] = PDO::PARAM_STR;
+    $whereClauses[] = "al.month_year = ?";
+    $params[] = $selectedMonth;
 } else {
     // Use date range
-    $whereClauses[] = "DATE(al.created_at) BETWEEN :from_date AND :to_date";
-    $params[':from_date'] = $fromDate;
-    $params[':to_date'] = $toDate;
-    $paramTypes[':from_date'] = PDO::PARAM_STR;
-    $paramTypes[':to_date'] = PDO::PARAM_STR;
+    $whereClauses[] = "DATE(al.created_at) BETWEEN ? AND ?";
+    $params[] = $fromDate;
+    $params[] = $toDate;
+}
+
+// Search filter for all columns
+if (!empty($q)) {
+    $whereClauses[] = '('
+        . "DATE(al.created_at) LIKE ? "
+        . "OR u.name LIKE ? "
+        . "OR u.username LIKE ? "
+        . "OR al.month_year LIKE ? "
+        . "OR al.target_tag LIKE ? "
+        . "OR al.clients_count LIKE ? "
+        . "OR al.assigned_count LIKE ? "
+        . "OR al.inserted_count LIKE ? "
+        . "OR al.updated_count LIKE ? "
+        . "OR al.file_name LIKE ? "
+    . ')';
+    for ($i = 0; $i < 10; $i++) {
+        $params[] = "%$q%";
+    }
 }
 
 $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
@@ -100,11 +116,18 @@ $query = "SELECT al.*, u.name as user_name, u.username
           ORDER BY al.created_at DESC";
 
 $stmt = $pdo->prepare($query);
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value, $paramTypes[$key] ?? PDO::PARAM_STR);
+
+// FIXED LINE 125: Execute with parameters directly
+try {
+    $stmt->execute($params);
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Query error: " . $e->getMessage());
+    error_log("Query: " . $query);
+    error_log("Params: " . print_r($params, true));
+    $logs = [];
+    $errorMessage = "Error loading allocation logs: " . $e->getMessage();
 }
-$stmt->execute();
-$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get detailed statistics for the period
 function getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth = '') {
@@ -123,76 +146,68 @@ function getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth = '') {
     $params = [];
     
     if (!empty($selectedMonth)) {
-        $whereClauses[] = "month_year = :month";
-        $params[':month'] = $selectedMonth;
+        $whereClauses[] = "month_year = ?";
+        $params[] = $selectedMonth;
     } else {
-        $whereClauses[] = "DATE(created_at) BETWEEN :from_date AND :to_date";
-        $params[':from_date'] = $fromDate;
-        $params[':to_date'] = $toDate;
+        $whereClauses[] = "DATE(created_at) BETWEEN ? AND ?";
+        $params[] = $fromDate;
+        $params[] = $toDate;
     }
     
     $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
     
-    // Basic stats
-    $countStmt = $pdo->prepare("SELECT COUNT(*) as count FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $countStmt->bindValue($key, $value);
-    }
-    $countStmt->execute();
-    $stats['total_allocations'] = $countStmt->fetchColumn();
-    
-    // Sum of all clients processed
-    $sumStmt = $pdo->prepare("SELECT 
-        SUM(clients_count) as total_clients,
-        SUM(assigned_count) as total_assigned,
-        SUM(inserted_count) as total_inserted,
-        SUM(updated_count) as total_updated
-        FROM allocation_log $whereSQL");
-    
-    foreach ($params as $key => $value) {
-        $sumStmt->bindValue($key, $value);
-    }
-    $sumStmt->execute();
-    $sums = $sumStmt->fetch(PDO::FETCH_ASSOC);
-    
-    $stats['total_clients_processed'] = $sums['total_clients'] ?? 0;
-    $stats['total_clients_assigned'] = $sums['total_assigned'] ?? 0;
-    $stats['total_clients_inserted'] = $sums['total_inserted'] ?? 0;
-    $stats['total_clients_updated'] = $sums['total_updated'] ?? 0;
-    
-    // Unique importers
-    $userStmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $userStmt->bindValue($key, $value);
-    }
-    $userStmt->execute();
-    $stats['unique_importers'] = $userStmt->fetchColumn();
-    
-    // Unique tags
-    $tagStmt = $pdo->prepare("SELECT COUNT(DISTINCT target_tag) FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $tagStmt->bindValue($key, $value);
-    }
-    $tagStmt->execute();
-    $stats['unique_tags'] = $tagStmt->fetchColumn();
-    
-    // Monthly breakdown
-    if (empty($selectedMonth)) {
-        $monthlyStmt = $pdo->prepare("
-            SELECT 
-                month_year,
-                COUNT(*) as allocation_count,
-                SUM(clients_count) as total_clients,
-                SUM(assigned_count) as assigned_clients,
-                SUM(inserted_count) as inserted_clients,
-                SUM(updated_count) as updated_clients
-            FROM allocation_log 
-            WHERE DATE(created_at) BETWEEN :from_date AND :to_date
-            GROUP BY month_year 
-            ORDER BY month_year DESC
-        ");
-        $monthlyStmt->execute([':from_date' => $fromDate, ':to_date' => $toDate]);
-        $stats['monthly_breakdown'] = $monthlyStmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        // Basic stats
+        $countStmt = $pdo->prepare("SELECT COUNT(*) as count FROM allocation_log $whereSQL");
+        $countStmt->execute($params);
+        $stats['total_allocations'] = $countStmt->fetchColumn();
+        
+        // Sum of all clients processed
+        $sumStmt = $pdo->prepare("SELECT 
+            SUM(clients_count) as total_clients,
+            SUM(assigned_count) as total_assigned,
+            SUM(inserted_count) as total_inserted,
+            SUM(updated_count) as total_updated
+            FROM allocation_log $whereSQL");
+        
+        $sumStmt->execute($params);
+        $sums = $sumStmt->fetch(PDO::FETCH_ASSOC);
+        
+        $stats['total_clients_processed'] = $sums['total_clients'] ?? 0;
+        $stats['total_clients_assigned'] = $sums['total_assigned'] ?? 0;
+        $stats['total_clients_inserted'] = $sums['total_inserted'] ?? 0;
+        $stats['total_clients_updated'] = $sums['total_updated'] ?? 0;
+        
+        // Unique importers
+        $userStmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM allocation_log $whereSQL");
+        $userStmt->execute($params);
+        $stats['unique_importers'] = $userStmt->fetchColumn();
+        
+        // Unique tags
+        $tagStmt = $pdo->prepare("SELECT COUNT(DISTINCT target_tag) FROM allocation_log $whereSQL");
+        $tagStmt->execute($params);
+        $stats['unique_tags'] = $tagStmt->fetchColumn();
+        
+        // Monthly breakdown
+        if (empty($selectedMonth)) {
+            $monthlyStmt = $pdo->prepare("
+                SELECT 
+                    month_year,
+                    COUNT(*) as allocation_count,
+                    SUM(clients_count) as total_clients,
+                    SUM(assigned_count) as assigned_clients,
+                    SUM(inserted_count) as inserted_clients,
+                    SUM(updated_count) as updated_clients
+                FROM allocation_log 
+                WHERE DATE(created_at) BETWEEN ? AND ?
+                GROUP BY month_year 
+                ORDER BY month_year DESC
+            ");
+            $monthlyStmt->execute([$fromDate, $toDate]);
+            $stats['monthly_breakdown'] = $monthlyStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        error_log("Statistics error: " . $e->getMessage());
     }
     
     return $stats;
@@ -207,540 +222,17 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #f5f7fa;
-            color: #333;
-        }
-        
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 30px;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            border-bottom: 1px solid #eaeaea;
-        }
-        
-        .nav-left {
-            display: flex;
-            align-items: center;
-            gap: 30px;
-        }
-        
-        .top-bar {
-            display: flex;
-            align-items: center;
-            padding: 12px 28px;
-            background:rgba(148, 227, 241, 0.319);
-            margin-bottom: 18px;
-        }
-        .top-bar img {
-            height: 40px;
-            vertical-align: middle;
-            margin-right: 10px;
-        }
-
-        .brand-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: #e3f2fd;
-            border-radius: 8px;
-            padding: 10px 24px 10px 14px;
-        }
-        .brand-wrapper img {
-            height: 38px;
-            width: auto;
-        }
-        
-        .nav-brand {
-            font-size: 1.18rem;
-            font-weight: 600;
-            color: #0f172a;
-            font-family: 'Poppins', sans-serif;
-            text-decoration: none;
-            white-space: nowrap;
-            margin-left: 6px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 32px;
-            margin-left: 32px;
-        }
-        
-        .nav-links a {
-            text-decoration: none;
-            font-weight: 600;
-            color: #64748b;
-            padding: 10px 0;
-            border-bottom: 2.5px solid transparent;
-            font-size: 1.08rem;
-            transition: color 0.18s, border-color 0.18s;
-        }
-        
-        .nav-links a.active {
-            color: #2563eb;
-            border-bottom: 2.5px solid #2563eb;
-        }
-        
-        .nav-links a:hover {
-            color: #2563eb;
-            border-bottom: 2.5px solid #2563eb;
-        }
-        
-        .nav-user {
-            color: #2563eb;
-            font-weight: 600;
-            padding: 8px 22px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            background: #e3f2fd;
-            border-radius: 50px;
-            border: 1.5px solid #b3e5fc;
-            position: relative;
-            transition: 0.2s;
-            font-size: 1.08rem;
-            box-shadow: 0 2px 8px rgba(41, 182, 246, 0.10);
-        }
-        
-        .nav-user:hover {
-            background: #2563eb;
-            color: #fff;
-        }
-        .profile-dropdown {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 36px;
-            background: #fff;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-            min-width: 180px;
-            z-index: 100;
-            margin-right: 20px;
-        }
-        
-        .profile-dropdown div {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 5px;
-            border-bottom: 1px solid #eee;
-            padding: 8px 12px 5px;
-        }
-        
-        .profile-dropdown a {
-            display: block;
-            padding: 8px 12px;
-            text-align: right;
-            color: #0288D1;
-            font-weight: 600;
-            text-decoration: none;
-        }
-        
-        .profile-dropdown a.logout-link {
-            color: #e53935 !important;
-            font-weight: 700;
-            background: none;
-            transition: background 0.2s, color 0.2s;
-        }
-        
-        .profile-dropdown a.logout-link:hover {
-            background: #ffebee;
-            color: #b71c1c !important;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 30px auto;
-            padding: 0 20px;
-        }
-        
-        .page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-        }
-        
-        h2 {
-            color: #2c3e50;
-            font-size: 28px;
-        }
-        
-        .filters {
+    <link rel="stylesheet" href="public/css/allocation_log.css">
+ <style>
+            .filters {
             background: white;
             padding: 20px;
             border-radius: 8px;
             margin-bottom: 25px;
             box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            display: <?php echo !$deleteMode ? 'block' : 'none'; ?>;
         }
-        
-        .filter-row {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-group {
-            flex: 1;
-            min-width: 200px;
-        }
-        
-        .filter-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #555;
-            font-size: 14px;
-        }
-        
-        .filter-group select,
-        .filter-group input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        
-        .filter-group input:focus,
-        .filter-group select:focus {
-            outline: none;
-            border-color: #0288D1;
-            box-shadow: 0 0 0 3px rgba(2, 136, 209, 0.1);
-        }
-        
-        .btn-apply {
-            background: #0288D1;
-            color: white;
-            border: none;
-            padding: 10px 25px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            align-self: flex-end;
-        }
-        
-        .btn-apply:hover {
-            background: #0277bd;
-        }
-        
-        .btn-reset {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-            align-self: flex-end;
-        }
-        
-        .btn-reset:hover {
-            background: #5a6268;
-        }
-        
-        /* Add additional styles for date range picker */
-        .date-range-picker {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        .date-input {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        
-        .table-container {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
-            margin-top: 20px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        thead {
-            background: #f8f9fa;
-        }
-        
-        th {
-            padding: 16px 15px;
-            text-align: left;
-            font-weight: 600;
-            color: #495057;
-            border-bottom: 2px solid #e9ecef;
-            font-size: 14px;
-        }
-        
-        td {
-            padding: 15px;
-            border-bottom: 1px solid #e9ecef;
-            color: #666;
-            font-size: 14px;
-        }
-        
-        tbody tr:hover {
-            background: #f8f9fa;
-        }
-        
-        .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .badge-success {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .badge-info {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        .badge-warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 50px 20px;
-            color: #999;
-        }
-        
-        .empty-state i {
-            font-size: 48px;
-            margin-bottom: 15px;
-            color: #ddd;
-        }
-        
-        .timestamp {
-            font-size: 12px;
-            color: #999;
-        }
-        
-        /* Clickable rows */
-        .clickable-row {
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        
-        .clickable-row:hover {
-            background-color: #e3f2fd !important;
-        }
-        
-        .btn-view {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .btn-view:hover {
-            background: #218838;
-        }
-        
-        .btn-delete {
-            background: #e53935;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            margin-left: 5px;
-        }
-        
-        .btn-delete:hover {
-            background: #c62828;
-        }
-        
-        /* Delete Mode Styles */
-        .delete-mode-active { 
-            background-color: #fff5f5 !important; 
-        }
-        
-        .delete-mode-btn { 
-            background-color: #ffebee; 
-            color: #e53935; 
-            border: 2px solid #e53935; 
-            padding: 8px 16px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-weight: 600; 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 6px; 
-            margin-left: 10px; 
-            transition: all 0.2s; 
-            text-decoration: none;
-        }
-        
-        .delete-mode-btn:hover { 
-            background-color: #e53935; 
-            color: white; 
-        }
-        
-        .cancel-delete-btn { 
-            background-color: #6c757d; 
-            color: white; 
-            border: none; 
-            padding: 8px 16px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-weight: 600; 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 6px; 
-            margin-left: 10px; 
-            text-decoration: none;
-        }
-        
-        .cancel-delete-btn:hover { 
-            background-color: #5a6268; 
-        }
-        
-        .delete-confirm-modal { 
-            display: none; 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            z-index: 10000; 
-            justify-content: center; 
-            align-items: center; 
-        }
-        
-        .delete-confirm-content { 
-            background: white; 
-            padding: 30px; 
-            border-radius: 12px; 
-            width: 500px; 
-            max-width: 90%; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
-        }
-        
-        .warning-icon { 
-            color: #e53935; 
-            font-size: 48px; 
-            text-align: center; 
-            margin-bottom: 20px; 
-        }
-        
-        .client-checkbox { 
-            width: 18px; 
-            height: 18px; 
-            cursor: pointer; 
-        }
-        
-        .select-all-cell { 
-            position: relative; 
-        }
-        
-        .select-all-label { 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            font-size: 11px; 
-            color: #666; 
-            pointer-events: none; 
-        }
-        
-        .bulk-actions-bar {
-            background: #f8f9fa;
-            padding: 12px 16px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border: 1px solid #e9ecef;
-        }
-        
-        .bulk-selection-info {
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        .bulk-actions-bar button {
-            padding: 6px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        
-        .alert {
-            padding: 12px 16px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-            border: 1px solid transparent;
-        }
-        
-        .alert-success {
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
-        
-        .alert-error {
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-        
-        .alert-warning {
-            background-color: #fff3cd;
-            border-color: #ffeaa7;
-            color: #856404;
-        }
-        
-        /* Action buttons container */
-        .action-buttons {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-        }
-    </style>
+</style>
 </head>
 <body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
     <?php include 'navbar.php'; ?>
@@ -809,12 +301,55 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             </div>
         <?php endif; ?>
 
+        
+        
+        <!-- Filters Section -->
         <div class="filters">
-            <form method="GET" action="">
-                <input type="hidden" name="delete_mode" value="<?php echo $deleteMode ? '1' : '0'; ?>">
+            <form method="get" id="filterForm">
+                <?php if ($deleteMode): ?>
+                    <input type="hidden" name="delete_mode" value="1">
+                <?php endif; ?>
+                <?php if (!empty($q)): ?>
+                    <input type="hidden" name="q" value="<?php echo htmlspecialchars($q); ?>">
+                <?php endif; ?>
                 
-                
-                
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="month">Filter by Month:</label>
+                        <select name="month" id="month" onchange="this.form.submit()">
+                            <option value="">-- Select Month --</option>
+                            <?php foreach ($months as $month): ?>
+                                <option value="<?php echo htmlspecialchars($month); ?>" <?php echo $selectedMonth == $month ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($month); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label>Date Range (if month not selected):</label>
+                        <div class="date-range-picker">
+                            <input type="text" name="from_date" class="datepicker date-input" 
+                                   value="<?php echo htmlspecialchars($fromDate); ?>" 
+                                   placeholder="From Date" 
+                                   onchange="document.getElementById('month').value='';">
+                            <span>to</span>
+                            <input type="text" name="to_date" class="datepicker date-input" 
+                                   value="<?php echo htmlspecialchars($toDate); ?>" 
+                                   placeholder="To Date"
+                                   onchange="document.getElementById('month').value='';">
+                        </div>
+                    </div>
+                    
+                    <div class="filter-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                        <button type="submit" class="btn-apply">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <a href="allocation_log.php<?php echo $deleteMode ? '?delete_mode=1' : ''; ?>" class="btn-reset">
+                            <i class="fas fa-redo"></i> Reset
+                        </a>
+                    </div>
+                </div>
             </form>
         </div>
         
@@ -834,7 +369,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         <!-- Allocation Log Table -->
         <?php if (!empty($logs)): ?>
         <div class="table-container">
-            <h4 style="padding: 20px 20px 0;"><i class="fas fa-history"></i> Allocation Log Details</h4>
             <table>
                 <thead>
                     <tr>
@@ -957,25 +491,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             allowInput: true
         });
         
-        // Auto-submit when month is selected
-        document.querySelector('select[name="month"]').addEventListener('change', function() {
-            if (this.value) {
-                // Clear date range when month is selected
-                document.querySelector('input[name="from_date"]').value = '';
-                document.querySelector('input[name="to_date"]').value = '';
-                this.form.submit();
-            }
-        });
-        
-        // Clear month selection when date range is used
-        document.querySelectorAll('.date-input').forEach(input => {
-            input.addEventListener('change', function() {
-                if (this.value) {
-                    document.querySelector('select[name="month"]').value = '';
-                }
-            });
-        });
-        
         // View allocation details
         function viewAllocationDetails(allocationId) {
             window.open(`view_allocation_clients.php?id=${allocationId}`, '_blank');
@@ -994,7 +509,10 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         function updateSelectedCount() {
             const checkboxes = document.querySelectorAll('.delete-checkbox');
             const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            document.getElementById('selectedCount').textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+            const selectedCountElement = document.getElementById('selectedCount');
+            if (selectedCountElement) {
+                selectedCountElement.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+            }
             
             // Update select all checkbox state
             const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -1063,7 +581,7 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
                         successMessage.style.display = 'none';
                     }, 500);
                 }, 3000);
-            }
+            }   
         });
     </script>
 </body>

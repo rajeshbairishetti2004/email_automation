@@ -214,7 +214,7 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
 
         <?php if (!empty($clients)): ?>
         <!-- Search Section -->
-       <div class="search-section">
+ <div class="search-section">
     <form method="get" class="search-box" id="searchForm">
         <input type="hidden" name="id" value="<?php echo $allocationId; ?>">
 
