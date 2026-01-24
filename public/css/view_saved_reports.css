@@ -103,7 +103,13 @@
     border-radius: 12px;
     box-shadow: var(--shadow);
     padding: 24px 32px;
+
+    /* ✅ scrollbar only below navbar */
+    height: calc(100vh - 80px); /* navbar height */
+    overflow-y: auto;
+    margin-top: 16px;
 }
+
 
 .meet-select {
         padding: 6px 10px;
@@ -373,4 +379,28 @@
 
 #client-search-dropdown::-webkit-scrollbar-thumb:hover {
     background: rgba(100, 116, 139, 0.8);
+}
+
+.container::-webkit-scrollbar {
+    width: 6px;       
+}
+
+.container::-webkit-scrollbar-track {
+    background: #f1f5f9;  
+    border-radius: 6px;
+}
+
+.container::-webkit-scrollbar-thumb {
+    background: #94a3b8;  
+    border-radius: 6px;
+}
+
+.container::-webkit-scrollbar-thumb:hover {
+    background: #64748b;  
+}
+
+
+.container {
+    scrollbar-width: thin;    
+    scrollbar-color: #94a3b8 #f1f5f9;
 }

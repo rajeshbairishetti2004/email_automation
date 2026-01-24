@@ -211,3 +211,9 @@ body {
         margin-left: 0;
     }
 }
+
+/* 🔒 Lock full-page scrolling (ADD THIS) */
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
