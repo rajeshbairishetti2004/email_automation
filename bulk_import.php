@@ -79,14 +79,14 @@ $summary = [
 // NEW: Store allocation_id for this import
 $allocationId = 0;
 
-// Handle AJAX requests for client list and delete
+// Handle AJAX requests for client list (delete functionality removed)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     header('Content-Type: application/json');
 
     if ($_POST['ajax_action'] === 'get_clients_list') {
         $search = $_POST['search'] ?? '';
         try {
-           $sql = "SELECT id, name, email, assigned_to, updated_at FROM clients WHERE 1=1";
+            $sql = "SELECT id, name, email, assigned_to, updated_at FROM clients WHERE 1=1";
             $params = [];
             if (!empty($search)) {
                 $sql .= " AND (name LIKE :search OR email LIKE :search)";
@@ -111,71 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             echo json_encode([
                 'success' => false,
                 'error' => $e->getMessage()
-            ]);
-        }
-        exit;
-    }
-
-    // Get all client IDs (for select all)
-    if ($_POST['ajax_action'] === 'get_all_client_ids') {
-        $search = $_POST['search'] ?? '';
-        try {
-            $sql = "SELECT id FROM clients WHERE 1=1";
-            $params = [];
-            if (!empty($search)) {
-                $sql .= " AND (name LIKE :search OR email LIKE :search)";
-                $params[':search'] = '%' . $search . '%';
-            }
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
-            $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            echo json_encode([
-                'success' => true,
-                'ids' => $ids
-            ]);
-        } catch (Exception $e) {
-            echo json_encode([
-                'success' => false,
-                'error' => $e->getMessage()
-            ]);
-        }
-        exit;
-    }
-
-    if ($_POST['ajax_action'] === 'delete_clients') {
-        $clientIds = $_POST['client_ids'] ?? [];
-        if (!is_array($clientIds)) {
-            $clientIds = [$clientIds];
-        }
-        if (empty($clientIds)) {
-            echo json_encode(['success' => false, 'error' => 'No clients selected']);
-            exit;
-        }
-        try {
-            $pdo->beginTransaction();
-            $placeholders = implode(',', array_fill(0, count($clientIds), '?'));
-            $stmt = $pdo->prepare("DELETE FROM clients WHERE id IN ($placeholders)");
-            $stmt->execute($clientIds);
-            $placeholdersGoals = implode(',', array_fill(0, count($clientIds), '?'));
-            $stmtGoals = $pdo->prepare("DELETE FROM client_goals WHERE client_id IN ($placeholdersGoals)");
-            $stmtGoals->execute($clientIds);
-            $placeholdersSchemes = implode(',', array_fill(0, count($clientIds), '?'));
-            $stmtSchemes = $pdo->prepare("DELETE FROM client_schemes WHERE client_id IN ($placeholdersSchemes)");
-            $stmtSchemes->execute($clientIds);
-            $placeholdersAnnex = implode(',', array_fill(0, count($clientIds), '?'));
-            $stmtAnnex = $pdo->prepare("DELETE FROM client_annexures WHERE client_id IN ($placeholdersAnnex)");
-            $stmtAnnex->execute($clientIds);
-            $pdo->commit();
-            echo json_encode([
-                'success' => true,
-                'message' => 'Selected clients deleted successfully',
-                'deleted_count' => count($clientIds)
-            ]);
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            echo json_encode([
-                'success' => false,
-                'error' => 'Deletion failed: ' . $e->getMessage()
             ]);
         }
         exit;
@@ -421,9 +356,6 @@ $updateAllocStmt->execute([
         <div class="page-header">
             <h2>Bulk Client Allocation</h2>
             <?php if (isRelationshipManager($userDesignation)): ?>
-            <button type="button" class="delete-toggle-btn" onclick="openDeleteModal()">
-                <i class="fas fa-trash-alt"></i> Delete Clients
-            </button>
             <?php endif; ?>
         </div>
         
@@ -490,87 +422,17 @@ $updateAllocStmt->execute([
         <div id="errorMessage" class="error-message"></div>
     </div>
 
-    <!-- Delete Modal -->
-    <?php if (isRelationshipManager($userDesignation)): ?>
-    <div id="deleteModal" class="delete-modal-overlay">
-        <div class="delete-modal">
-            <div class="delete-modal-header">
-                <h3><i class="fas fa-trash-alt"></i> Delete Clients</h3>
-                <button type="button" class="close-modal" onclick="closeDeleteModal()">×</button>
-            </div>
-            <div class="delete-modal-body">
-                <div class="search-section">
-                    <div class="search-input-wrapper">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" 
-                               id="clientSearch" 
-                               class="search-input" 
-                               placeholder="Search clients by name or email...">
-                    </div>
-                </div>
-                <!-- Select All Row -->
-                <div class="select-all-row" id="selectAllRow" style="display:none;">
-                    <input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onchange="toggleSelectAll(this)">
-                    <label for="selectAllCheckbox" style="cursor:pointer;">Select All (visible)</label>
-                    <span id="selectAllAll" class="select-all-all-label" style="display:none;" onclick="selectAllClientsFromServer()">Select All (<span id="totalClientsCount"></span> clients)</span>
-                </div>
-                <div class="clients-list-container" id="clientsList">
-                    <!-- Client list will be loaded here -->
-                    <div class="no-clients">Start typing to search for clients...</div>
-                </div>
-                
-                <div class="delete-actions">
-                    <div class="selection-count">
-                        Selected: <span id="selectedCount">0</span> clients
-                    </div>
-                    <div class="delete-actions-buttons">
-                        <button type="button" class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
-                        <button type="button" class="btn-delete" id="deleteBtn" onclick="confirmDelete()" disabled>
-                            <i class="fas fa-trash-alt"></i> Delete Selected
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Confirmation Modal -->
-    <div id="confirmationModal" class="delete-modal-overlay" style="display:none;">
-        <div class="confirmation-modal">
-            <div class="confirmation-icon">
-                <i class="fas fa-exclamation-triangle"></i>
-            </div>
-            <div class="confirmation-text" id="confirmationText">
-                Are you sure you want to delete <span id="deleteCount">0</span> client(s)?<br>
-                <small style="color:#dc3545;">This action cannot be undone!</small>
-            </div>
-            <div class="confirmation-buttons">
-                <button type="button" class="btn-no" onclick="closeConfirmationModal()">No, Cancel</button>
-                <button type="button" class="btn-yes" onclick="deleteSelectedClients()">Yes, Delete</button>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
+   
 
     <script>
-        // Delete functionality
+
         let allClients = [];
         let selectedClients = new Set();
         let searchTimeout = null;
         let totalClientsCount = 0;
         let allClientIdsFetched = false;
 
-        function openDeleteModal() {
-            document.getElementById('deleteModal').style.display = 'flex';
-            document.getElementById('clientSearch').focus();
-            loadClients('');
-        }
-        
-        function closeDeleteModal() {
-            document.getElementById('deleteModal').style.display = 'none';
-            document.getElementById('clientSearch').value = '';
-            selectedClients.clear();
-            updateSelectedCount();
-        }
+
         
         function loadClients(searchTerm = '') {
             fetch('bulk_import.php', {
@@ -595,58 +457,6 @@ $updateAllocStmt->execute([
                     renderClientList(data.clients);
                 } else {
                     showError(data.error || 'Failed to load clients');
-                }
-            })
-            .catch(error => {
-                showError('Network error: ' + error.message);
-            });
-        }
-
-        // Select All logic (visible)
-        function toggleSelectAll(checkbox) {
-            const checkboxes = document.querySelectorAll('.client-checkbox');
-            if (checkbox.checked) {
-                checkboxes.forEach(cb => {
-                    cb.checked = true;
-                    selectedClients.add(parseInt(cb.value));
-                });
-            } else {
-                checkboxes.forEach(cb => {
-                    cb.checked = false;
-                    selectedClients.delete(parseInt(cb.value));
-                });
-            }
-            updateSelectedCount();
-        }
-
-        // Select All (all clients in DB)
-        function selectAllClientsFromServer() {
-            const searchTerm = document.getElementById('clientSearch').value;
-            fetch('bulk_import.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    ajax_action: 'get_all_client_ids',
-                    search: searchTerm
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Use string IDs for consistency with backend
-                    selectedClients = new Set(data.ids.map(id => parseInt(id)));
-                    allClientIdsFetched = true;
-                    // Check all visible checkboxes
-                    const checkboxes = document.querySelectorAll('.client-checkbox');
-                    checkboxes.forEach(cb => {
-                        cb.checked = true;
-                    });
-                    document.getElementById('selectAllCheckbox').checked = true;
-                    updateSelectedCount();
-                } else {
-                    showError(data.error || 'Failed to select all clients');
                 }
             })
             .catch(error => {
@@ -700,77 +510,12 @@ html += `
             container.innerHTML = html;
         }
 
-        function toggleClientSelection(clientId) {
-            if (selectedClients.has(clientId)) {
-                selectedClients.delete(clientId);
-            } else {
-                selectedClients.add(clientId);
-            }
-            // Update select all checkbox state
-            const checkboxes = document.querySelectorAll('.client-checkbox');
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-            document.getElementById('selectAllCheckbox').checked = allChecked;
-            updateSelectedCount();
-        }
+
+
         
-        function updateSelectedCount() {
-            const count = selectedClients.size;
-            document.getElementById('selectedCount').textContent = count;
-            document.getElementById('deleteBtn').disabled = count === 0;
-        }
+       
         
-        function confirmDelete() {
-            const count = selectedClients.size;
-            document.getElementById('deleteCount').textContent = count;
-            document.getElementById('confirmationModal').style.display = 'flex';
-        }
-        
-        function closeConfirmationModal() {
-            document.getElementById('confirmationModal').style.display = 'none';
-        }
-        
-        function deleteSelectedClients() {
-            const clientIds = Array.from(selectedClients);
-            if (clientIds.length === 0) {
-                showError('No clients selected');
-                return;
-            }
-            const params = new URLSearchParams();
-            params.append('ajax_action', 'delete_clients');
-            clientIds.forEach(id => params.append('client_ids[]', id));
-            fetch('bulk_import.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: params
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showSuccess(`Successfully deleted ${data.deleted_count} client(s)`);
-                    closeConfirmationModal();
-                    // After deletion, reload the client list and keep modal open if there are still clients
-                    const currentSearch = document.getElementById('clientSearch').value;
-                    loadClients(currentSearch);
-                    selectedClients.clear();
-                    updateSelectedCount();
-                    // If all clients are deleted, close the modal
-                    setTimeout(() => {
-                        if (totalClientsCount === data.deleted_count) {
-                            closeDeleteModal();
-                        }
-                    }, 500);
-                } else {
-                    showError(data.error || 'Failed to delete clients');
-                    closeConfirmationModal();
-                }
-            })
-            .catch(error => {
-                showError('Network error: ' + error.message);
-                closeConfirmationModal();
-            });
-        }
+       
         
         function showSuccess(message) {
             const successDiv = document.getElementById('successMessage');
@@ -808,30 +553,7 @@ html += `
             }, 300);
         });
         
-        // Close modals when clicking outside
-        document.addEventListener('click', function(e) {
-            const deleteModal = document.getElementById('deleteModal');
-            const confirmationModal = document.getElementById('confirmationModal');
-            
-            if (deleteModal.style.display === 'flex' && e.target === deleteModal) {
-                closeDeleteModal();
-            }
-            
-            if (confirmationModal.style.display === 'flex' && e.target === confirmationModal) {
-                closeConfirmationModal();
-            }
-        });
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                if (document.getElementById('confirmationModal').style.display === 'flex') {
-                    closeConfirmationModal();
-                } else if (document.getElementById('deleteModal').style.display === 'flex') {
-                    closeDeleteModal();
-                }
-            }
-        });
+
         
         function formatDate(dateString) {
             if (!dateString) return 'Never';
