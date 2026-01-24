@@ -165,7 +165,7 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
 </head>
 <body>
     <?php include 'navbar.php'; ?>
-
+<div class="page-scroll">
     <div class="container">
         <button class="back-button" onclick="window.location.href='allocation_log.php'">
             <i class="fas fa-arrow-left"></i> Back to Allocation Log
@@ -220,20 +220,21 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
     <form method="get" class="search-box" id="searchForm">
         <input type="hidden" name="id" value="<?php echo $allocationId; ?>">
 
-        <div class="search-wrapper">
-            <input type="text"
-                   name="q"
-                   id="client-search"
-                   placeholder="Search client name..."
-                   value="<?php echo htmlspecialchars($q); ?>"
-                   autocomplete="off">
+<div class="search-wrapper">
+    <i class="fas fa-search search-icon"></i>
+    <input type="text"
+           name="q"
+           id="client-search"
+           placeholder="Search client name..."
+           value="<?php echo htmlspecialchars($q); ?>"
+           autocomplete="off">
+    <div id="client-search-dropdown"></div>
+</div>
 
-            <div id="client-search-dropdown"></div>
-        </div>
 
-        <button type="submit">
+        <!-- <button type="submit">
             <i class="fas fa-search"></i> Search
-        </button>
+        </button> -->
 
         <?php if (!empty($q)): ?>
             <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>">
@@ -242,6 +243,7 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
         <?php endif; ?>
     </form>
 </div>
+
 
 
         <div class="client-summary">
@@ -343,6 +345,7 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
             </div>
         </div>
     </div>
+</div>
 <script>
     function exportToCSV() {
         const table = document.querySelector('.client-table');
@@ -746,6 +749,34 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
         // Submit the form immediately when a name is selected
         document.getElementById('searchForm').submit();
     }
+
+    function highlightMatch(text, query) {
+    const regex = new RegExp(`(${query})`, 'ig');
+    return text.replace(regex, `<span class="highlight">$1</span>`);
+}
+
+function renderDropdown(names, query) {
+    dropdown.innerHTML = '';
+
+    if (names.length === 0) {
+        dropdown.innerHTML = `<div class="no-result">No clients found</div>`;
+        dropdown.style.display = 'block';
+        return;
+    }
+
+    const uniqueNames = [...new Set(names)].sort((a, b) => a.localeCompare(b));
+
+    uniqueNames.forEach(name => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.innerHTML = highlightMatch(name, query);
+        div.onclick = () => selectClientName(name);
+        dropdown.appendChild(div);
+    });
+
+    dropdown.style.display = 'block';
+}
+
 </script>
 </body>
 </html>
