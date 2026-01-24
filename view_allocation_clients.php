@@ -160,6 +160,8 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="public/css/view_allocation_clients.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="public/css/navbar.css?v=<?php echo time(); ?>"> 
+    
 </head>
 <body>
     <?php include 'navbar.php'; ?>
@@ -214,7 +216,7 @@ function getClientNamesForAutocomplete($pdo, $allocationId, $searchTerm) {
 
         <?php if (!empty($clients)): ?>
         <!-- Search Section -->
-       <div class="search-section">
+ <div class="search-section">
     <form method="get" class="search-box" id="searchForm">
         <input type="hidden" name="id" value="<?php echo $allocationId; ?>">
 

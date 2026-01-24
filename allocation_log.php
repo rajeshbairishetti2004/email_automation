@@ -71,23 +71,39 @@ $months = $monthStmt->fetchAll(PDO::FETCH_COLUMN);
 $fromDate = $_GET['from_date'] ?? date('Y-m-01');
 $toDate = $_GET['to_date'] ?? date('Y-m-t');
 $selectedMonth = $_GET['month'] ?? '';
+$q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
 // Build query for allocation logs with date range
 $whereClauses = [];
 $params = [];
-$paramTypes = [];
 
 if (!empty($selectedMonth)) {
-    $whereClauses[] = "al.month_year = :month";
-    $params[':month'] = $selectedMonth;
-    $paramTypes[':month'] = PDO::PARAM_STR;
+    $whereClauses[] = "al.month_year = ?";
+    $params[] = $selectedMonth;
 } else {
     // Use date range
-    $whereClauses[] = "DATE(al.created_at) BETWEEN :from_date AND :to_date";
-    $params[':from_date'] = $fromDate;
-    $params[':to_date'] = $toDate;
-    $paramTypes[':from_date'] = PDO::PARAM_STR;
-    $paramTypes[':to_date'] = PDO::PARAM_STR;
+    $whereClauses[] = "DATE(al.created_at) BETWEEN ? AND ?";
+    $params[] = $fromDate;
+    $params[] = $toDate;
+}
+
+// Search filter for all columns
+if (!empty($q)) {
+    $whereClauses[] = '('
+        . "DATE(al.created_at) LIKE ? "
+        . "OR u.name LIKE ? "
+        . "OR u.username LIKE ? "
+        . "OR al.month_year LIKE ? "
+        . "OR al.target_tag LIKE ? "
+        . "OR al.clients_count LIKE ? "
+        . "OR al.assigned_count LIKE ? "
+        . "OR al.inserted_count LIKE ? "
+        . "OR al.updated_count LIKE ? "
+        . "OR al.file_name LIKE ? "
+    . ')';
+    for ($i = 0; $i < 10; $i++) {
+        $params[] = "%$q%";
+    }
 }
 
 $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
@@ -100,11 +116,18 @@ $query = "SELECT al.*, u.name as user_name, u.username
           ORDER BY al.created_at DESC";
 
 $stmt = $pdo->prepare($query);
-foreach ($params as $key => $value) {
-    $stmt->bindValue($key, $value, $paramTypes[$key] ?? PDO::PARAM_STR);
+
+// FIXED LINE 125: Execute with parameters directly
+try {
+    $stmt->execute($params);
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Query error: " . $e->getMessage());
+    error_log("Query: " . $query);
+    error_log("Params: " . print_r($params, true));
+    $logs = [];
+    $errorMessage = "Error loading allocation logs: " . $e->getMessage();
 }
-$stmt->execute();
-$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get detailed statistics for the period
 function getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth = '') {
@@ -123,76 +146,68 @@ function getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth = '') {
     $params = [];
     
     if (!empty($selectedMonth)) {
-        $whereClauses[] = "month_year = :month";
-        $params[':month'] = $selectedMonth;
+        $whereClauses[] = "month_year = ?";
+        $params[] = $selectedMonth;
     } else {
-        $whereClauses[] = "DATE(created_at) BETWEEN :from_date AND :to_date";
-        $params[':from_date'] = $fromDate;
-        $params[':to_date'] = $toDate;
+        $whereClauses[] = "DATE(created_at) BETWEEN ? AND ?";
+        $params[] = $fromDate;
+        $params[] = $toDate;
     }
     
     $whereSQL = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
     
-    // Basic stats
-    $countStmt = $pdo->prepare("SELECT COUNT(*) as count FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $countStmt->bindValue($key, $value);
-    }
-    $countStmt->execute();
-    $stats['total_allocations'] = $countStmt->fetchColumn();
-    
-    // Sum of all clients processed
-    $sumStmt = $pdo->prepare("SELECT 
-        SUM(clients_count) as total_clients,
-        SUM(assigned_count) as total_assigned,
-        SUM(inserted_count) as total_inserted,
-        SUM(updated_count) as total_updated
-        FROM allocation_log $whereSQL");
-    
-    foreach ($params as $key => $value) {
-        $sumStmt->bindValue($key, $value);
-    }
-    $sumStmt->execute();
-    $sums = $sumStmt->fetch(PDO::FETCH_ASSOC);
-    
-    $stats['total_clients_processed'] = $sums['total_clients'] ?? 0;
-    $stats['total_clients_assigned'] = $sums['total_assigned'] ?? 0;
-    $stats['total_clients_inserted'] = $sums['total_inserted'] ?? 0;
-    $stats['total_clients_updated'] = $sums['total_updated'] ?? 0;
-    
-    // Unique importers
-    $userStmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $userStmt->bindValue($key, $value);
-    }
-    $userStmt->execute();
-    $stats['unique_importers'] = $userStmt->fetchColumn();
-    
-    // Unique tags
-    $tagStmt = $pdo->prepare("SELECT COUNT(DISTINCT target_tag) FROM allocation_log $whereSQL");
-    foreach ($params as $key => $value) {
-        $tagStmt->bindValue($key, $value);
-    }
-    $tagStmt->execute();
-    $stats['unique_tags'] = $tagStmt->fetchColumn();
-    
-    // Monthly breakdown
-    if (empty($selectedMonth)) {
-        $monthlyStmt = $pdo->prepare("
-            SELECT 
-                month_year,
-                COUNT(*) as allocation_count,
-                SUM(clients_count) as total_clients,
-                SUM(assigned_count) as assigned_clients,
-                SUM(inserted_count) as inserted_clients,
-                SUM(updated_count) as updated_clients
-            FROM allocation_log 
-            WHERE DATE(created_at) BETWEEN :from_date AND :to_date
-            GROUP BY month_year 
-            ORDER BY month_year DESC
-        ");
-        $monthlyStmt->execute([':from_date' => $fromDate, ':to_date' => $toDate]);
-        $stats['monthly_breakdown'] = $monthlyStmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        // Basic stats
+        $countStmt = $pdo->prepare("SELECT COUNT(*) as count FROM allocation_log $whereSQL");
+        $countStmt->execute($params);
+        $stats['total_allocations'] = $countStmt->fetchColumn();
+        
+        // Sum of all clients processed
+        $sumStmt = $pdo->prepare("SELECT 
+            SUM(clients_count) as total_clients,
+            SUM(assigned_count) as total_assigned,
+            SUM(inserted_count) as total_inserted,
+            SUM(updated_count) as total_updated
+            FROM allocation_log $whereSQL");
+        
+        $sumStmt->execute($params);
+        $sums = $sumStmt->fetch(PDO::FETCH_ASSOC);
+        
+        $stats['total_clients_processed'] = $sums['total_clients'] ?? 0;
+        $stats['total_clients_assigned'] = $sums['total_assigned'] ?? 0;
+        $stats['total_clients_inserted'] = $sums['total_inserted'] ?? 0;
+        $stats['total_clients_updated'] = $sums['total_updated'] ?? 0;
+        
+        // Unique importers
+        $userStmt = $pdo->prepare("SELECT COUNT(DISTINCT user_id) FROM allocation_log $whereSQL");
+        $userStmt->execute($params);
+        $stats['unique_importers'] = $userStmt->fetchColumn();
+        
+        // Unique tags
+        $tagStmt = $pdo->prepare("SELECT COUNT(DISTINCT target_tag) FROM allocation_log $whereSQL");
+        $tagStmt->execute($params);
+        $stats['unique_tags'] = $tagStmt->fetchColumn();
+        
+        // Monthly breakdown
+        if (empty($selectedMonth)) {
+            $monthlyStmt = $pdo->prepare("
+                SELECT 
+                    month_year,
+                    COUNT(*) as allocation_count,
+                    SUM(clients_count) as total_clients,
+                    SUM(assigned_count) as assigned_clients,
+                    SUM(inserted_count) as inserted_clients,
+                    SUM(updated_count) as updated_clients
+                FROM allocation_log 
+                WHERE DATE(created_at) BETWEEN ? AND ?
+                GROUP BY month_year 
+                ORDER BY month_year DESC
+            ");
+            $monthlyStmt->execute([$fromDate, $toDate]);
+            $stats['monthly_breakdown'] = $monthlyStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        error_log("Statistics error: " . $e->getMessage());
     }
     
     return $stats;
@@ -209,6 +224,16 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="public/css/allocation_log.css">
     <link rel="stylesheet" href="public/css/navbar.css">
+ <style>
+            .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            display: <?php echo !$deleteMode ? 'block' : 'none'; ?>;
+        }
+</style>
 </head>
 <body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
     <?php include 'navbar.php'; ?>
@@ -277,12 +302,55 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             </div>
         <?php endif; ?>
 
+        
+        
+        <!-- Filters Section -->
         <div class="filters">
-            <form method="GET" action="">
-                <input type="hidden" name="delete_mode" value="<?php echo $deleteMode ? '1' : '0'; ?>">
+            <form method="get" id="filterForm">
+                <?php if ($deleteMode): ?>
+                    <input type="hidden" name="delete_mode" value="1">
+                <?php endif; ?>
+                <?php if (!empty($q)): ?>
+                    <input type="hidden" name="q" value="<?php echo htmlspecialchars($q); ?>">
+                <?php endif; ?>
                 
-                
-                
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="month">Filter by Month:</label>
+                        <select name="month" id="month" onchange="this.form.submit()">
+                            <option value="">-- Select Month --</option>
+                            <?php foreach ($months as $month): ?>
+                                <option value="<?php echo htmlspecialchars($month); ?>" <?php echo $selectedMonth == $month ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($month); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label>Date Range (if month not selected):</label>
+                        <div class="date-range-picker">
+                            <input type="text" name="from_date" class="datepicker date-input" 
+                                   value="<?php echo htmlspecialchars($fromDate); ?>" 
+                                   placeholder="From Date" 
+                                   onchange="document.getElementById('month').value='';">
+                            <span>to</span>
+                            <input type="text" name="to_date" class="datepicker date-input" 
+                                   value="<?php echo htmlspecialchars($toDate); ?>" 
+                                   placeholder="To Date"
+                                   onchange="document.getElementById('month').value='';">
+                        </div>
+                    </div>
+                    
+                    <div class="filter-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                        <button type="submit" class="btn-apply">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <a href="allocation_log.php<?php echo $deleteMode ? '?delete_mode=1' : ''; ?>" class="btn-reset">
+                            <i class="fas fa-redo"></i> Reset
+                        </a>
+                    </div>
+                </div>
             </form>
         </div>
         
@@ -302,7 +370,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         <!-- Allocation Log Table -->
         <?php if (!empty($logs)): ?>
         <div class="table-container">
-            <h4 style="padding: 20px 20px 0;"><i class="fas fa-history"></i> Allocation Log Details</h4>
             <table>
                 <thead>
                     <tr>
@@ -425,25 +492,6 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
             allowInput: true
         });
         
-        // Auto-submit when month is selected
-        document.querySelector('select[name="month"]').addEventListener('change', function() {
-            if (this.value) {
-                // Clear date range when month is selected
-                document.querySelector('input[name="from_date"]').value = '';
-                document.querySelector('input[name="to_date"]').value = '';
-                this.form.submit();
-            }
-        });
-        
-        // Clear month selection when date range is used
-        document.querySelectorAll('.date-input').forEach(input => {
-            input.addEventListener('change', function() {
-                if (this.value) {
-                    document.querySelector('select[name="month"]').value = '';
-                }
-            });
-        });
-        
         // View allocation details
         function viewAllocationDetails(allocationId) {
             window.open(`view_allocation_clients.php?id=${allocationId}`, '_blank');
@@ -462,7 +510,10 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
         function updateSelectedCount() {
             const checkboxes = document.querySelectorAll('.delete-checkbox');
             const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            document.getElementById('selectedCount').textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+            const selectedCountElement = document.getElementById('selectedCount');
+            if (selectedCountElement) {
+                selectedCountElement.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+            }
             
             // Update select all checkbox state
             const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -531,7 +582,7 @@ $periodStats = getPeriodStatistics($pdo, $fromDate, $toDate, $selectedMonth);
                         successMessage.style.display = 'none';
                     }, 500);
                 }, 3000);
-            }
+            }   
         });
     </script>
 </body>
