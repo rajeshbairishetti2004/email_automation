@@ -6,7 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once 'database.php';
 
-$current_page = isset($_GET['page']) ? max(1, min(23, intval($_GET['page']))) : 1;
+$current_page = isset($_GET['page']) ? max(1, min(24, intval($_GET['page']))) : 1;
 $client_id = 'MS_MUKTA_DUTTA';
 
 // Get pages and client info using functions from database.php
@@ -53,24 +53,26 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
             </div>
             
             <div class="slide-thumbnails-container" id="slideThumbnails">
-                <?php for($i = 1; $i <= 23; $i++): ?>
+                <?php for($i = 1; $i <= 24; $i++): ?>
                     <div class="slide-thumbnail <?php if($i == $current_page) echo 'active'; ?>" 
-                         onclick="goToSlide(<?php echo $i; ?>)">
+                         onclick="window.location.href='?page=<?php echo $i; ?>'">
                         <div class="slide-number"><?php echo $i; ?></div>
                         <div class="slide-preview-content">
-                            <?php if (isset($pages[$i])): ?>
-                                <?php 
-                                $content = strip_tags(html_entity_decode($pages[$i]['content']));
-                                $preview = strlen($content) > 100 ? substr($content, 0, 100) . '...' : $content;
+                            <div class="slide-preview-title">Slide <?php echo $i; ?></div>
+                            <div class="slide-preview-text">
+                                <?php
+                                $pageFile = "page{$i}.php";
+                                if (file_exists($pageFile)) {
+                                    $content = strip_tags(file_get_contents($pageFile));
+                                    $preview = strlen($content) > 100 ? substr($content, 0, 100) . '...' : $content;
+                                    echo htmlspecialchars($preview);
+                                } else {
+                                    echo "No content";
+                                }
                                 ?>
-                                <div class="slide-preview-title">Slide <?php echo $i; ?></div>
-                                <div class="slide-preview-text"><?php echo htmlspecialchars($preview); ?></div>
-                            <?php else: ?>
-                                <div class="slide-preview-title">Slide <?php echo $i; ?></div>
-                                <div class="slide-preview-text">Click to edit this slide...</div>
-                            <?php endif; ?>
+                            </div>
                         </div>
-                        <?php if (isset($pages[$i])): ?>
+                        <?php if (file_exists($pageFile)): ?>
                             <div class="slide-status" title="Saved">
                                 <i class="fas fa-check-circle"></i>
                             </div>
@@ -80,7 +82,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
             </div>
         </div>
         
-        <!-- CENTER: Main slide editing area -->
+        <!-- CENTER: Main slide area with iframe -->
         <div class="powerpoint-main">
             <!-- PowerPoint Style Toolbar -->
             <div class="ppt-toolbar" id="toolbar" style="display: none;">
@@ -139,90 +141,28 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 </div>
             </div>
             
-            <!-- Slide Area -->
             <div class="ppt-slide-area">
                 <div class="slide-frame">
                     <div class="slide-header">
                         <h1>Slide <?php echo $current_page; ?></h1>
                         <div class="slide-header-controls">
-                            <button class="slide-header-btn" onclick="prevSlide()" 
-                                    <?php if($current_page == 1) echo 'disabled'; ?>>
+                            <button class="slide-header-btn" onclick="goToSlide(<?php echo max(1, $current_page-1); ?>)" <?php if($current_page == 1) echo 'disabled'; ?>>
                                 <i class="fas fa-chevron-left"></i>
                             </button>
-                            <button class="slide-header-btn" onclick="nextSlide()" 
-                                    <?php if($current_page == 23) echo 'disabled'; ?>>
+                            <button class="slide-header-btn" onclick="goToSlide(<?php echo min(24, $current_page+1); ?>)" <?php if($current_page == 24) echo 'disabled'; ?>>
                                 <i class="fas fa-chevron-right"></i>
                             </button>
                         </div>
                     </div>
-                    
-                    <div class="slide-content-container">
-                        <div class="slide-editable-content" id="editableContent" contenteditable="false">
-                            <?php if (isset($pages[$current_page])): ?>
-                                <?php 
-                                $content = htmlspecialchars_decode($pages[$current_page]['content']);
-                                // Remove any existing image containers from content
-                                $content = preg_replace('/<div class="slide-image-container"[^>]*>.*?<\/div>/s', '', $content);
-                                echo $content;
-                                ?>
-                                
-                                <!-- Slide Images -->
-                                <?php if (!empty($pages[$current_page]['images'])): ?>
-                                    <?php $images = json_decode($pages[$current_page]['images'], true); ?>
-                                    <?php foreach ($images as $index => $image): 
-                                        $position = isset($image['position']) ? json_decode($image['position'], true) : ['top' => ($index * 20 + 20) . 'px', 'left' => ($index * 20 + 20) . 'px'];
-                                        $zIndex = isset($image['zIndex']) ? $image['zIndex'] : 100 + $index;
-                                        $width = isset($image['saved_width']) ? $image['saved_width'] . 'px' : ($image['width'] ?? '300px');
-                                        $height = isset($image['saved_height']) ? $image['saved_height'] . 'px' : ($image['height'] ?? 'auto');
-                                    ?>
-                                        <div class="slide-image-container" 
-                                             data-image-id="<?php echo $image['id']; ?>"
-                                             style="position: absolute; 
-                                                    top: <?php echo $position['top'] ?? '20px'; ?>; 
-                                                    left: <?php echo $position['left'] ?? '20px'; ?>; 
-                                                    z-index: <?php echo $zIndex; ?>;
-                                                    width: <?php echo $width; ?>;">
-                                            <img src="uploads/<?php echo $image['filename']; ?>" 
-                                                 alt="<?php echo $image['alt']; ?>"
-                                                 style="width: 100%; height: auto;">
-                                            <div class="image-controls">
-                                                <button class="image-control-btn" onclick="adjustImageSize(<?php echo $image['id']; ?>, 'increase', event)">
-                                                    <i class="fas fa-search-plus"></i>
-                                                </button>
-                                                <button class="image-control-btn" onclick="adjustImageSize(<?php echo $image['id']; ?>, 'decrease', event)">
-                                                    <i class="fas fa-search-minus"></i>
-                                                </button>
-                                                <button class="image-control-btn" onclick="deleteImage(<?php echo $image['id']; ?>, event)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            <?php else: ?>
-                                <div style="padding: 40px; text-align: center; color: #666;">
-                                    <h2>Slide <?php echo $current_page; ?></h2>
-                                    <p style="margin-top: 20px;">Click the Edit button to start editing this slide.</p>
-                                    <p style="margin-top: 10px; font-size: 14px; color: #999;">
-                                        Use the toolbar to add text, images, tables, and charts.
-                                    </p>
-                                </div>
-                            <?php endif; ?>
-                        </div>
+                    <div class="slide-content-container" style="padding:0;height:calc(100% - 60px);">
+                        <iframe
+                            id="slideIframe"
+                            src="page<?php echo $current_page; ?>.php"
+                            style="width:100%;height:100%;border:none;background:white;"
+                            title="Slide <?php echo $current_page; ?>">
+                        </iframe>
                     </div>
                 </div>
-                
-                <!-- <div class="slide-navigation">
-                    <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                     <div class="slide-counter">
-                        <span id="currentSlide"><?php echo $current_page; ?></span> / 23
-                    </div>
-                    <button class="nav-btn" onclick="nextSlide()" <?php if($current_page == 23) echo 'disabled'; ?>>
-                        <i class="fas fa-chevron-right"></i>
-                    </button> 
-                </div> -->
             </div>
             
             <!-- PowerPoint Style Status Bar -->
@@ -380,8 +320,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
     
     // Navigation functions
     function goToSlide(slideNumber) {
-        if (slideNumber >= 1 && slideNumber <= 23 && slideNumber !== currentSlide) {
-            showMessage('Navigating', `Loading slide ${slideNumber}...`, 'info');
+        if (slideNumber >= 1 && slideNumber <= 24) {
             window.location.href = '?page=' + slideNumber;
         }
     }
@@ -393,7 +332,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
     }
     
     function nextSlide() {
-        if (currentSlide < 23) {
+        if (currentSlide < 24) {
             goToSlide(currentSlide + 1);
         }
     }
@@ -844,7 +783,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         <?php endif; ?>
         
         // Welcome message
-        showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 23 loaded.`, 'info');
+        showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 24 loaded.`, 'info');
     });
     </script>
 </body>
