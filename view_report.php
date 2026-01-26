@@ -699,6 +699,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/view_report.css">
+    <link rel="stylesheet" href="public/css/navbar.css">
     
 </head>
 <body>

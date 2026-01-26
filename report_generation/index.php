@@ -157,7 +157,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                     <div class="slide-content-container" style="padding:0;height:calc(100% - 60px);">
                         <iframe
                             id="slideIframe"
-                            src="page<?php echo $current_page; ?>.php"
+                            src="page<?php echo $current_page; ?>.php?edit=1"
                             style="width:100%;height:100%;border:none;background:white;"
                             title="Slide <?php echo $current_page; ?>">
                         </iframe>
