@@ -212,17 +212,16 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                     </div>
                 </div>
                 
-                <!-- Slide Navigation -->
                 <div class="slide-navigation">
-                    <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
+                    <!-- <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
                         <i class="fas fa-chevron-left"></i>
                     </button>
-                    <div class="slide-counter">
+                     <div class="slide-counter">
                         <span id="currentSlide"><?php echo $current_page; ?></span> / 23
                     </div>
                     <button class="nav-btn" onclick="nextSlide()" <?php if($current_page == 23) echo 'disabled'; ?>>
                         <i class="fas fa-chevron-right"></i>
-                    </button>
+                    </button> -->
                 </div>
             </div>
             
