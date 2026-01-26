@@ -700,7 +700,17 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
     
     <link rel="stylesheet" href="public/css/view_report.css">
     <link rel="stylesheet" href="public/css/navbar.css">
-    
+    <style>
+        /* Ensure scrollbar is at the extreme right of the screen */
+        html, body {
+            height: 100%;
+            overflow-y: auto;
+        }
+        .main-content {
+            max-height: none;
+            overflow: visible;
+        }
+    </style>
 </head>
 <body>
   <?php include 'navbar.php'; ?>
@@ -1724,10 +1734,8 @@ function submitWorkflow(action) {
         document.getElementById('reportForm').appendChild(saveReportInput);
     }
 
-    // Force save rationale before submitting the form
-    forceSaveRationaleBeforeSubmit().finally(() => {
-        document.getElementById('reportForm').submit();
-    });
+    // Submit the form
+    document.getElementById('reportForm').submit();
 }
 
 // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
@@ -1765,6 +1773,8 @@ function closeRejectModal() {
     document.getElementById('rejectModal').style.display = 'none';
 }
 function submitRejection() {
+    const comment = document.getElementById('rejectComment').value.trim();
+    if (!comment) {
         alert("Comment is required for rejection.");
         return;
     }
