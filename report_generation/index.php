@@ -28,8 +28,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portfolio Slides - <?php echo htmlspecialchars($client_name); ?></title>
     <!-- Use absolute path for CSS to avoid path issues -->
-    <link rel="stylesheet" href="/email_automation/report_generation/style.css">
-    <link rel="stylesheet" href="/email_automation/public/css/navbar.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.ckeditor.com/ckeditor5/41.0.0/classic/ckeditor.js"></script>
 </head>
