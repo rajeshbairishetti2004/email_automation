@@ -43,12 +43,12 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 <h2><?php echo htmlspecialchars($client_name); ?></h2>
                 <div class="client-subtitle-sidebar">Portfolio Review Q1 2026</div>
                 <div class="client-meta-mini">
-                    <div class="meta-mini-item">
+                    <!-- <div class="meta-mini-item">
                         <i class="fas fa-chart-line fa-xs"></i> <?php echo htmlspecialchars($risk_profile); ?>
                     </div>
                     <div class="meta-mini-item">
                         <i class="fas fa-calendar-alt fa-xs"></i> <?php echo htmlspecialchars($investment_horizon); ?>
-                    </div>
+                    </div> -->
                 </div>
             </div>
             
@@ -212,8 +212,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                     </div>
                 </div>
                 
-                <div class="slide-navigation">
-                    <!-- <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
+                <!-- <div class="slide-navigation">
+                    <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
                         <i class="fas fa-chevron-left"></i>
                     </button>
                      <div class="slide-counter">
@@ -221,8 +221,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                     </div>
                     <button class="nav-btn" onclick="nextSlide()" <?php if($current_page == 23) echo 'disabled'; ?>>
                         <i class="fas fa-chevron-right"></i>
-                    </button> -->
-                </div>
+                    </button> 
+                </div> -->
             </div>
             
             <!-- PowerPoint Style Status Bar -->
