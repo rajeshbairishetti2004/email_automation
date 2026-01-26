@@ -503,8 +503,8 @@ $userDesignation = $currentUser['designation'] ?? '';
 </head>
 <body>
   <?php include 'navbar.php'; ?>
-
-    <div class="wrap">
+        <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
+            <div class="wrap">
         <div class="page-header">
             <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
                 <h1 style="margin:0;">Quarterly Review of <?php echo date('F Y'); ?></h1>
@@ -677,6 +677,7 @@ $userDesignation = $currentUser['designation'] ?? '';
             </script>
         </div> <!-- end .wrap main content -->
 
-    </div> <!-- end .wrap -->
+            </div> <!-- end .wrap -->
+        </div> <!-- end .main-scroll-container -->
 </body>
 </html>
