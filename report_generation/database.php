@@ -32,8 +32,43 @@ function getClientPages($client_id = 'MS_MUKTA_DUTTA') {
     }
 }
 
-// Function to get client info
-function getClientInfo($client_id = 'MS_MUKTA_DUTTA') {
+// In database.php, add this function
+function getClientDetailsFromClientsTable($client_id) {
+    $pdo = getDbConnection();
+    
+    try {
+        // Extract numeric ID from CLIENT_X format
+        if (strpos($client_id, 'CLIENT_') === 0) {
+            $numeric_id = str_replace('CLIENT_', '', $client_id);
+            
+            $stmt = $pdo->prepare("SELECT * FROM clients WHERE id = ?");
+            $stmt->execute([$numeric_id]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result) {
+                return [
+                    'client_id' => $client_id,
+                    'client_name' => $result['name'] ?? 'Client',
+                    'client_email' => $result['email'] ?? '',
+                    'phone' => $result['phone'] ?? '',
+                    'risk_profile' => 'Moderate', // Default or from another table
+                    'investment_horizon' => 'Long-term (7+ years)', // Default
+                    'portfolio_value' => $result['total_amount'] ?? null,
+                    'created_at' => date('Y-m-d H:i:s')
+                ];
+            }
+        }
+        
+        return null;
+    } catch (PDOException $e) {
+        error_log("Error getting client details: " . $e->getMessage());
+        return null;
+    }
+}
+
+// Update getClientInfo function to try multiple sources
+function getClientInfo($client_id) {
+    // First try the client_info table
     $pdo = getDbConnection();
     
     try {
@@ -41,23 +76,39 @@ function getClientInfo($client_id = 'MS_MUKTA_DUTTA') {
         $stmt->execute([$client_id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Return default structure if no client found
-        if (!$result) {
-            return [
-                'client_id' => $client_id,
-                'client_name' => 'Ms. Mukta Dutta Tomar',
-                'client_email' => '',
-                'phone' => '',
-                'risk_profile' => 'Moderate',
-                'investment_horizon' => 'Long-term (7+ years)',
-                'portfolio_value' => null,
-                'created_at' => date('Y-m-d H:i:s')
-            ];
+        if ($result) {
+            return $result;
         }
-        return $result;
+        
+        // If not found in client_info, try clients table
+        $client_details = getClientDetailsFromClientsTable($client_id);
+        if ($client_details) {
+            return $client_details;
+        }
+        
+        // Return default structure if no client found
+        return [
+            'client_id' => $client_id,
+            'client_name' => 'Client',
+            'client_email' => '',
+            'phone' => '',
+            'risk_profile' => 'Moderate',
+            'investment_horizon' => 'Long-term (7+ years)',
+            'portfolio_value' => null,
+            'created_at' => date('Y-m-d H:i:s')
+        ];
     } catch (PDOException $e) {
         error_log("Error getting client info: " . $e->getMessage());
-        return [];
+        return getClientDetailsFromClientsTable($client_id) ?? [
+            'client_id' => $client_id,
+            'client_name' => 'Client',
+            'client_email' => '',
+            'phone' => '',
+            'risk_profile' => 'Moderate',
+            'investment_horizon' => 'Long-term (7+ years)',
+            'portfolio_value' => null,
+            'created_at' => date('Y-m-d H:i:s')
+        ];
     }
 }
 

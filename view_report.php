@@ -761,18 +761,25 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
 
 <div class="main-content">
     <!-- ADD NAVIGATION BUTTONS HERE -->
-    <div class="nav-bar" style="margin-bottom: 20px;">
-        <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
-        <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
-        <?php if ($prevId): ?>
-            <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
-        <?php endif; ?>
-        <?php if ($nextId): ?>
-            <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
-        <?php endif; ?>
-        <button type="button" onclick="window.print()" class="nav-button">Print</button>
-    </div>
-    <!-- ...existing code... -->
+    <!-- In view_report.php, add this button with the navigation buttons -->
+<!-- In view_report.php, update the Generate Report button -->
+<div class="nav-bar" style="margin-bottom: 20px;">
+    <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
+    <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
+    <!-- UPDATE THIS BUTTON WITH FULL PATH -->
+    <a href="report_generation/index.php?client_id=CLIENT_<?php echo (int)$clientId; ?>" 
+       class="nav-button" 
+       target="_blank">
+       📊 Generate Report
+    </a>
+    <?php if ($prevId): ?>
+        <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
+    <?php endif; ?>
+    <?php if ($nextId): ?>
+        <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
+    <?php endif; ?>
+    <button type="button" onclick="window.print()" class="nav-button">Print</button>
+</div><!-- ...existing code... -->
     <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
         <!-- Show send_email.php only if reviewed and not rejected -->
         <?php if ($reportState === 'reviewed' && $reviewNotOk === 0): ?>

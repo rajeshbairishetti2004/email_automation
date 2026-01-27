@@ -1,41 +1,106 @@
-<div style="text-align: center; padding-top: 100px;">
-   
-    <h1 style="font-size: 48px; color: #2E75B6; margin-bottom: 20px;">
-        Quarterly Portfolio Review
-    </h1>
-    <h2 style="font-size: 36px; color: #1F4E79; margin-bottom: 30px;">
-        January - March 2026
-    </h2>
-    <div style="margin-top: 80px;">
-        <h3 style="font-size: 32px; color: #333; margin-bottom: 10px;">
-            Ms. Mukta Dutta Tomar
-        </h3>
-        <p style="font-size: 20px; color: #666;">
-            Client Portfolio Analysis & Recommendations
-        </p>
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once __DIR__ . '/database.php';
+
+$client_id = $_GET['client_id'] ?? null;
+$clientInfo = $client_id ? getClientInfo($client_id) : [];
+
+$client_name = htmlspecialchars($clientInfo['client_name'] ?? 'Client');
+
+// Quarter logic
+$month = date('n');
+$year = date('Y');
+$quarterMap = [
+    1 => 'Jan - Mar',
+    2 => 'Apr - Jun',
+    3 => 'Jul - Sep',
+    4 => 'Oct - Dec'
+];
+$quarter = $quarterMap[ceil($month / 3)] . ' ' . $year;
+?>
+
+<div style="
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    position: relative;
+    box-sizing: border-box;
+    padding: 80px 60px;
+">
+
+    <!-- Top teal line -->
+    <div style="height: 6px; background: #4DB6AC; width: 100%; margin-bottom: 10px;"></div>
+    <div style="height: 1px; background: #4DB6AC; width: 100%; margin-bottom: 80px;"></div>
+
+    <!-- Client Name -->
+    <div style="text-align: center;">
+        <div style="
+            font-size: 52px;
+            font-weight: 700;
+            color: #4F7DF3;
+            margin-bottom: 35px;
+        ">
+            <?php echo $client_name; ?>
+        </div>
+
+        <!-- Subtitle with gold lines -->
+        <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 12px;
+        ">
+            <div style="height: 4px; width: 70px; background: #B8A46A;"></div>
+
+            <div style="
+                font-size: 36px;
+                font-weight: 600;
+                color: #4F7DF3;
+            ">
+                Quarterly Portfolio Review
+            </div>
+
+            <div style="height: 4px; width: 70px; background: #B8A46A;"></div>
+        </div>
+
+        <!-- Quarter -->
+        <div style="
+            font-size: 22px;
+            color: #4F7DF3;
+            margin-bottom: 8px;
+        ">
+            <?php echo $quarter; ?>
+        </div>
     </div>
-    <div style="margin-top: 120px;">
-         <img src="../image.png" alt="Finance Doctor Logo" style="width: 200px; margin-bottom: 20px;align-self: left;">
-        <div style="font-size: 28px; color: #2E75B6; font-weight: bold; margin-bottom: 10px;">
-            Finance Doctor
-        </div>
-        <div style="font-size: 18px; color: #666;">
-            Wealth Management & Financial Advisory
-        </div>
-        <div style="margin-top: 30px; font-size: 16px; color: #888;">
-            Generated on: <span data-current-date><?php echo date('F d, Y'); ?></span>
-        </div>
-    </div>
+
+    <!-- Bottom teal lines -->
+     <div style="height: 1px; background: #4DB6AC; width: 100%; margin-top: 8px;"></div>
+    <div style="height: 6px; background: #4DB6AC; width: 100%; margin-top: 10px;"></div>
+    
+
+    <!-- Logo bottom-right -->
+    <div style="
+    position:absolute;
+    bottom:13%;
+    right:60px;
+">
+
+    <img 
+        src="../image.png"
+        alt="Finance Doctor"
+        style="
+            width: 140px;
+            height: auto;
+            display: block;
+            margin-left: 10px;
+        "
+    >
 </div>
-<div style="position: absolute; bottom: 20px; right: 40px; color: #666; font-size: 14px;">
-    Page 1 of 23
-</div>
-<div class="content-box">
-    <!-- Optional image (will be inserted by editor if uploaded) -->
-    <!-- <img src="uploads/page1_1680000000.jpg" style="max-width:300px;max-height:200px;float:right;margin:10px;" /> -->
-    <div class="slide-content">
-        <!-- Your slide content here. You can use HTML. -->
-        <h2 class="section-title">Executive Summary</h2>
-        <p>Welcome to your quarterly portfolio review.</p>
+
     </div>
 </div>
