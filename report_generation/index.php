@@ -280,8 +280,22 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
 
             </div>
 
+            <div id="slide7Warning"
+     style="
+        display:none;
+        background:#fff3cd;
+        color:#856404;
+        border-bottom:1px solid #ffeeba;
+        padding:10px 16px;
+        font-size:14px;
+        font-weight:500;
+     ">
+    ⚠ Recommended allocation must total <b>100%</b> to be saved
+</div>
+
             <div class="ppt-slide-area">
                 <div class="slide-frame">
+
 
 
                     <?php if (
@@ -437,6 +451,53 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
             }
         }
+       
+        let slide7IsValid = true;
+        let slide7Valid = true;
+
+window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'slide-validation') return;
+
+    if (event.data.slide !== 7) return;
+
+    slide7Valid = event.data.valid;
+    updateSlide7Warning();
+});
+
+function updateSlide7Warning() {
+    const bar = document.getElementById('slide7Warning');
+    if (!bar) return;
+
+    // show ONLY when slide 7 active AND invalid
+    if (currentSlide === 7 && slide7Valid === false) {
+        bar.style.display = 'block';
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+// run once on page load
+document.addEventListener('DOMContentLoaded', updateSlide7Warning);
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateSlideWarning();
+});
+
+function updateSlideWarning() {
+    const bar = document.getElementById('slideWarningBar');
+    if (!bar) return;
+
+    const activeSlide = <?= (int)$current_page ?>;
+
+    // Show warning ONLY when slide 7 is active AND invalid
+    if (activeSlide === 7 && slide7IsValid === false) {
+        bar.style.display = 'block';
+    } else {
+        bar.style.display = 'none';
+    }
+}
 
         // Save slide
         function saveSlide() {

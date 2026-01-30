@@ -228,6 +228,18 @@ body {
     cursor: not-allowed;
 }
 
+.allocationWarning{
+        display:none;
+        background:#fff3cd;
+        color:#856404;
+        border-bottom:1px solid #ffeeba;
+        padding:10px 16px;
+        font-size:14px;
+        font-weight:500;
+}
+     
+
+
 /* PowerPoint Slide Area */
 .ppt-slide-area {
     flex: 1;
