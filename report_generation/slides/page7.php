@@ -145,8 +145,12 @@ const pie3DPlugin = {
 </script>
 
 <style>
+    html, body {
+    height: 100%;
+}
+
 body{margin:0;font-family:Calibri,"Segoe UI",Arial;background:#fff}
-.slide{width:100%;height:100%;padding:42px 70px 52px;box-sizing:border-box;position:relative}
+.slide{width:100%;height:100vh;padding:42px 70px 0px;box-sizing:border-box;position:relative}
 .title{text-align:center;font-size:42px;color:#3B73E8;font-weight:600;margin-bottom:20px}
 .charts-row{display:flex;justify-content:space-between;gap:60px}
 .chart-box{width:46%;background:#fff;border-radius:12px;padding:22px 28px;box-shadow:0 4px 10px rgba(0,0,0,.06)}
@@ -161,7 +165,7 @@ canvas{width:200px!important;height:200px!important}
 .interpretation{margin-top:0;font-size:20px;color:#0b3cc1;font-style:italic;line-height:1.4}
 .logo{position:absolute;right:40px;bottom:35px}
 .logo img{width:120px}
-.footer{position:absolute;left:0;right:0;bottom:-19;height:10px;background:#21B6A8}
+.footer{position:absolute;left:0;right:0;bottom:0;height:10px;background:#21B6A8}
 /* Soft validation feedback – no layout impact */
 .rec-input.invalid {
     border: 1.5px solid #e55353;
