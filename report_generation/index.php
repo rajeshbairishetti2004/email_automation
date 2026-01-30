@@ -6,6 +6,32 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once 'database.php';
 
+$SLIDE_REGISTRY = [
+    1 => [
+        'title' => 'Portfolio Review',
+        'template' => 'page1.php',
+        'preview' => 'Client overview and portfolio summary'
+    ],
+    2 => [
+        'title' => 'Our Recommendations',
+        'template' => 'page2.php',
+        'preview' => 'Redeem & replace investment recommendations'
+    ],
+    5 => [
+        'title' => 'Portfolio at a Glance',
+        'template' => 'page5.php',
+        'preview' => 'Current portfolio value and goal report'
+    ],
+    7 => [
+        'title' => 'Asset Allocation',
+        'template' => 'page7.php',
+        'preview' => 'Current vs recommended asset allocation'
+    ],
+
+    // add up to 24 slides here later
+];
+
+
 // Get client_id from URL parameter or from referrer
 $client_id = isset($_GET['client_id']) ? $_GET['client_id'] : '';
 
@@ -23,7 +49,7 @@ if (empty($client_id)) {
             }
         }
     }
-    
+
     // Fallback: Get from session or default
     if (empty($client_id)) {
         $client_id = isset($_SESSION['current_client_id']) ? $_SESSION['current_client_id'] : 'CLIENT_1';
@@ -36,7 +62,42 @@ $_SESSION['current_client_id'] = $client_id;
 $current_page = isset($_GET['page']) ? max(1, min(24, intval($_GET['page']))) : 1;
 
 // Get pages and client info using functions from database.php
-$pages = getClientPages($client_id);
+
+
+// ===============================
+// INITIALIZE STATIC TEMPLATE SLIDES
+// ===============================
+
+
+function storeTemplateSlideIfMissing($client_id, $page, $config)
+{
+    $pages = getClientPages($client_id);
+
+    if (!isset($pages[$page])) {
+        ob_start();
+        include __DIR__ . "/slides/{$config['template']}";
+        $html = ob_get_clean();
+
+        savePageToDatabase(
+            $client_id,
+            $page,
+            $html,
+            $config['title'],
+            $config['preview']
+        );
+    }
+}
+
+foreach ($SLIDE_REGISTRY as $page => $config) {
+    storeTemplateSlideIfMissing($client_id, $page, $config);
+}
+
+
+$pages = getClientPages($client_id); // reload
+
+
+
+
 $clientInfo = getClientInfo($client_id);
 
 // Get client name from database - fetch from clients table instead
@@ -47,20 +108,15 @@ $client_details = null;
 if (strpos($client_id, 'CLIENT_') === 0) {
     $client_number = str_replace('CLIENT_', '', $client_id);
     if (is_numeric($client_number)) {
-        try {
-            $pdo = getDbConnection();
-            $stmt = $pdo->prepare("SELECT name, id FROM clients WHERE id = ?");
-            $stmt->execute([$client_number]);
-            $client_details = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($client_details && isset($client_details['name'])) {
-                $client_name = htmlspecialchars($client_details['name']);
-                $actual_client_id = (int)$client_details['id'];
-                // Also update clientInfo for consistency
-                $clientInfo['client_name'] = $client_name;
-            }
-        } catch (Exception $e) {
-            error_log("Error fetching client details: " . $e->getMessage());
+        $pdo = getDbConnection();
+        $stmt = $pdo->prepare("SELECT name, id FROM clients WHERE id = ?");
+        $stmt->execute([$client_number]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row) {
+            $client_name = $row['name'];
+            $actual_client_id = (int)$row['id'];
+            $clientInfo['client_name'] = $client_name;
         }
     }
 }
@@ -71,34 +127,12 @@ $investment_horizon = isset($clientInfo['investment_horizon']) && $clientInfo['i
 $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfolio_value'] !== null ? $clientInfo['portfolio_value'] : '';
 
 // Check if we have slides for this client, if not create first slide
-if (empty($pages) && $actual_client_id > 0) {
-    // Create first slide with client information
-    $firstSlideContent = "
-        <div class='slide-title'>
-            <h1>Portfolio Review</h1>
-            <h2>For {$client_name}</h2>
-        </div>
-        <div class='slide-content'>
-            <div class='client-info-section'>
-                <h3>Client Information</h3>
-                <div class='client-details'>
-                    <p><strong>Name:</strong> {$client_name}</p>
-                    <p><strong>Client ID:</strong> {$actual_client_id}</p>
-                    <p><strong>Report Date:</strong> " . date('F d, Y') . "</p>
-                </div>
-            </div>
-        </div>
-    ";
-    
-    // Save first slide
-    savePageToDatabase($client_id, 1, $firstSlideContent, "Portfolio Review - {$client_name}");
-    $pages = getClientPages($client_id);
-}
 
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -116,6 +150,7 @@ if (empty($pages) && $actual_client_id > 0) {
             color: #2E75B6;
             margin-bottom: 5px;
         }
+
         .client-id-display {
             font-size: 12px;
             color: #666;
@@ -125,6 +160,7 @@ if (empty($pages) && $actual_client_id > 0) {
             display: inline-block;
             margin-bottom: 10px;
         }
+
         .back-to-report {
             display: inline-block;
             background: #2E75B6;
@@ -135,14 +171,16 @@ if (empty($pages) && $actual_client_id > 0) {
             font-size: 12px;
             margin-top: 10px;
         }
+
         .back-to-report:hover {
             background: #1e5a96;
         }
     </style>
 </head>
+
 <body>
     <?php include '../navbar.php'; ?>
-    
+
     <div class="powerpoint-container">
         <!-- LEFT: PowerPoint style slide thumbnails -->
         <div class="powerpoint-sidebar">
@@ -170,31 +208,43 @@ if (empty($pages) && $actual_client_id > 0) {
                     </a>
                 <?php endif; ?>
             </div>
-            
+
             <div class="slide-thumbnails-container" id="slideThumbnails">
-                <?php for($i = 1; $i <= 24; $i++): ?>
-                    <div class="slide-thumbnail <?php if($i == $current_page) echo 'active'; ?>" 
-                         onclick="window.location.href='?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $i; ?>'">
+                <?php for ($i = 1; $i <= 24; $i++): ?>
+                    <div class="slide-thumbnail <?php if ($i == $current_page) echo 'active'; ?>"
+                        onclick="window.location.href='?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $i; ?>'">
                         <div class="slide-number"><?php echo $i; ?></div>
                         <div class="slide-preview-content">
                             <div class="slide-preview-title">
-                                <?php 
-                                if (isset($pages[$i]) && !empty($pages[$i]['title'])) {
+                                <?php
+                                if (isset($staticSlides[$i])) {
+                                    echo $staticSlides[$i];
+                                } elseif (isset($pages[$i]) && !empty($pages[$i]['title'])) {
                                     echo htmlspecialchars($pages[$i]['title']);
                                 } else {
                                     echo "Slide " . $i;
                                 }
+
                                 ?>
                             </div>
                             <div class="slide-preview-text">
                                 <?php
-                                if (isset($pages[$i]) && !empty($pages[$i]['content'])) {
-                                    $content = strip_tags($pages[$i]['content']);
-                                    $preview = strlen($content) > 100 ? substr($content, 0, 100) . '...' : $content;
-                                    echo htmlspecialchars($preview);
+                                if ($i == 2) {
+                                    // Slide 2 is data-driven, not HTML-driven
+                                    echo "Redeem & Replace investment recommendations";
+                                } elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
+                                    if (!empty($pages[$i]['preview_text'])) {
+                                        echo htmlspecialchars($pages[$i]['preview_text']);
+                                    } else {
+                                        echo 'No preview available';
+                                    }
+                                } elseif (isset($staticSlides[$i])) {
+                                    echo "Template slide";
                                 } else {
                                     echo "No content";
                                 }
+
+
                                 ?>
                             </div>
                         </div>
@@ -207,96 +257,63 @@ if (empty($pages) && $actual_client_id > 0) {
                 <?php endfor; ?>
             </div>
         </div>
-        
+
         <!-- CENTER: Main slide area with iframe -->
         <div class="powerpoint-main">
             <!-- PowerPoint Style Toolbar -->
-            <div class="ppt-toolbar" id="toolbar" style="display: none;">
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="toggleEditMode()" id="editToggleBtn">
-                        <i class="fas fa-edit"></i> Edit
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="saveSlide()" id="saveBtn" disabled>
-                        <i class="fas fa-save"></i> Save
-                    </button>
-                </div>
-                
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="insertImage()">
-                        <i class="fas fa-image"></i> Image
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="insertTable()">
-                        <i class="fas fa-table"></i> Table
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="insertChart()">
-                        <i class="fas fa-chart-bar"></i> Chart
-                    </button>
-                </div>
-                
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="formatText('bold')">
-                        <i class="fas fa-bold"></i>
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="formatText('italic')">
-                        <i class="fas fa-italic"></i>
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="formatText('underline')">
-                        <i class="fas fa-underline"></i>
-                    </button>
-                    <select class="property-select" style="width: 120px;" onchange="formatHeading(this.value)">
-                        <option value="">Text Style</option>
-                        <option value="h1">Title</option>
-                        <option value="h2">Heading</option>
-                        <option value="h3">Subheading</option>
-                        <option value="p">Normal</option>
-                    </select>
-                    <input type="color" id="colorPicker" onchange="changeColor(this.value)" value="#2E75B6" 
-                           style="width: 30px; height: 30px; border: none; cursor: pointer;" title="Text Color">
-                </div>
-                
-                <div class="ppt-toolbar-group" style="margin-left: auto;">
-                    <button class="ppt-toolbar-btn" onclick="previewSlide()">
-                        <i class="fas fa-eye"></i> Preview
-                    </button>
-                    <button class="ppt-toolbar-btn btn-success" onclick="downloadPPT()">
-                        <i class="fas fa-file-powerpoint"></i> Export PPT
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="window.print()">
-                        <i class="fas fa-print"></i> Print
-                    </button>
-                </div>
+            <!-- Add this button to your toolbar groups -->
+            <div class="ppt-toolbar-group">
+                <button class="ppt-toolbar-btn btn-success" onclick="downloadPPT()">
+                    <i class="fas fa-file-powerpoint"></i> Export PPT
+                </button>
+                <!-- Add this new button -->
+                <!-- In your toolbar section, replace the PDF button with: -->
+                <button class="ppt-toolbar-btn btn-primary" onclick="downloadPDF()">
+                    <i class="fas fa-file-pdf"></i> Export PDF
+                </button>
+                <button class="ppt-toolbar-btn" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                <button class="ppt-toolbar-btn" onclick="editCurrentSlide()">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+
             </div>
-            
+
             <div class="ppt-slide-area">
                 <div class="slide-frame">
-                    
-                   
-                        <?php if (isset($pages[$current_page])): ?>
-                            <iframe
-                                id="slideIframe"
-                                src="render_slide.php?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $current_page; ?>"
-                                style="width:100%;height:100%;border:none;background:white;"
-                                title="Slide <?php echo $current_page; ?>">
-                            </iframe>
-                        <?php else: ?>
-                            <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; background: #f9f9f9;">
-                                <i class="fas fa-file-alt fa-4x" style="color: #ccc; margin-bottom: 20px;"></i>
-                                <h3 style="color: #999;">No slide content yet</h3>
-                                <p style="color: #aaa; margin-top: 10px;">Click Edit to create this slide</p>
-                                <button class="btn btn-primary" onclick="toggleEditMode()" style="margin-top: 20px;">
-                                    <i class="fas fa-edit"></i> Edit Slide
-                                </button>
-                            </div>
-                        <?php endif; ?>
-                    
+
+
+                    <?php if (
+                        $current_page === 1 ||
+                        $current_page === 2 ||
+                        isset($pages[$current_page])
+                    ): ?>
+                        <iframe
+                            id="slideIframe"
+                            src="render_slide.php?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $current_page; ?>"
+                            style="width:100%;height:100%;border:none;background:white;"
+                            title="Slide <?php echo $current_page; ?>">
+                        </iframe>
+                    <?php else: ?>
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; background: #f9f9f9;">
+                            <i class="fas fa-file-alt fa-4x" style="color: #ccc; margin-bottom: 20px;"></i>
+                            <h3 style="color: #999;">No slide content yet</h3>
+                            <p style="color: #aaa; margin-top: 10px;">Click Edit to create this slide</p>
+                            <button class="btn btn-primary" onclick="toggleEditMode()" style="margin-top: 20px;">
+                                <i class="fas fa-edit"></i> Edit Slide
+                            </button>
+                        </div>
+                    <?php endif; ?>
+
                 </div>
             </div>
-            
+
             <!-- PowerPoint Style Status Bar -->
-            
+
         </div>
     </div>
-    
+
     <!-- Loading overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="loading-content">
@@ -304,7 +321,7 @@ if (empty($pages) && $actual_client_id > 0) {
             <p id="loadingMessage" style="margin-top: 15px;">Processing...</p>
         </div>
     </div>
-    
+
     <!-- Client Info Modal -->
     <div id="clientInfoModal" class="modal-overlay" style="display: none;">
         <div class="modal-box" style="max-width: 500px;">
@@ -335,461 +352,515 @@ if (empty($pages) && $actual_client_id > 0) {
             </div>
         </div>
     </div>
-    
+
     <script>
-    // --- POWERPOINT STYLE EDITOR LOGIC ---
-    let editMode = false;
-    let editor = null;
-    let currentSlide = <?php echo $current_page; ?>;
-    const CLIENT_ID = '<?php echo addslashes($client_id); ?>';
-    const CLIENT_NAME = '<?php echo addslashes($client_name); ?>';
-    const ACTUAL_CLIENT_ID = <?php echo $actual_client_id; ?>;
-    let activeImageId = null;
-    let messageCounter = 0;
-    
-    // Update current time in status bar
-    function updateCurrentTime() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        document.getElementById('currentTime').textContent = timeString;
-    }
-    setInterval(updateCurrentTime, 60000);
-    updateCurrentTime();
-    
-    // Tab switching
-    function switchTab(tabName) {
-        // Hide all tabs
-        document.getElementById('propertiesTab').style.display = 'none';
-        document.getElementById('notesTab').style.display = 'none';
-        document.getElementById('messagesTab').style.display = 'none';
-        
-        // Remove active class from all tabs
-        document.querySelectorAll('.properties-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        
-        // Show selected tab
-        document.getElementById(tabName + 'Tab').style.display = 'block';
-        
-        // Add active class to clicked tab
-        event.target.classList.add('active');
-    }
-    
-    // Navigation functions
-    function goToSlide(slideNumber) {
-        if (slideNumber >= 1 && slideNumber <= 24) {
-            window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + slideNumber;
+        // --- POWERPOINT STYLE EDITOR LOGIC ---
+        let editMode = false;
+        let editor = null;
+        let currentSlide = <?php echo $current_page; ?>;
+        const CLIENT_ID = '<?php echo addslashes($client_id); ?>';
+        const CLIENT_NAME = '<?php echo addslashes($client_name); ?>';
+        const ACTUAL_CLIENT_ID = <?php echo $actual_client_id; ?>;
+        let activeImageId = null;
+        let messageCounter = 0;
+
+        // Update current time in status bar
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.getElementById('propertiesTab').style.display = 'none';
+            document.getElementById('notesTab').style.display = 'none';
+            document.getElementById('messagesTab').style.display = 'none';
+
+            // Remove active class from all tabs
+            document.querySelectorAll('.properties-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').style.display = 'block';
+
+            // Add active class to clicked tab
+            event.target.classList.add('active');
         }
-    }
-    
-    function prevSlide() {
-        if (currentSlide > 1) {
-            goToSlide(currentSlide - 1);
+
+        // Navigation functions
+        function goToSlide(slideNumber) {
+            if (slideNumber >= 1 && slideNumber <= 24) {
+                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + slideNumber;
+            }
         }
-    }
-    
-    function nextSlide() {
-        if (currentSlide < 24) {
-            goToSlide(currentSlide + 1);
+
+        function prevSlide() {
+            if (currentSlide > 1) {
+                goToSlide(currentSlide - 1);
+            }
         }
-    }
-    
-    // Edit mode toggle
-    function toggleEditMode() {
-        const hasContent = <?php echo isset($pages[$current_page]) ? 'true' : 'false'; ?>;
-        
-        if (!hasContent) {
-            // Create new slide
-            createNewSlide();
-            return;
+
+        function nextSlide() {
+            if (currentSlide < 24) {
+                goToSlide(currentSlide + 1);
+            }
         }
-        
-        editMode = !editMode;
-        const editToggleBtn = document.getElementById('editToggleBtn');
-        const saveBtn = document.getElementById('saveBtn');
-        const toolbar = document.getElementById('toolbar');
-        
-        if (editMode) {
-            // Enter edit mode
-            editToggleBtn.innerHTML = '<i class="fas fa-times"></i> Exit Edit';
-            editToggleBtn.classList.add('active');
-            saveBtn.disabled = false;
-            toolbar.style.display = 'flex';
-            
-            showMessage('Edit Mode Enabled', 'You can now edit the slide content.', 'success');
-        } else {
-            // Exit edit mode
-            editToggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit';
-            editToggleBtn.classList.remove('active');
-            saveBtn.disabled = true;
-            toolbar.style.display = 'none';
-            
-            showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
+
+        // Edit mode toggle
+        function toggleEditMode() {
+            const hasContent = <?php echo isset($pages[$current_page]) ? 'true' : 'false'; ?>;
+
+            if (!hasContent) {
+                // Create new slide
+                createNewSlide();
+                return;
+            }
+
+            editMode = !editMode;
+            const editToggleBtn = document.getElementById('editToggleBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const toolbar = document.getElementById('toolbar');
+
+            if (editMode) {
+                // Enter edit mode
+                editToggleBtn.innerHTML = '<i class="fas fa-times"></i> Exit Edit';
+                editToggleBtn.classList.add('active');
+                saveBtn.disabled = false;
+                toolbar.style.display = 'flex';
+
+                showMessage('Edit Mode Enabled', 'You can now edit the slide content.', 'success');
+            } else {
+                // Exit edit mode
+                editToggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit';
+                editToggleBtn.classList.remove('active');
+                saveBtn.disabled = true;
+                toolbar.style.display = 'none';
+
+                showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
+            }
         }
-    }
-    
-    // Save slide
-    function saveSlide() {
-        showLoading('Saving slide...');
-        
-        const title = document.getElementById('slideTitle').value;
-        const bgColor = document.getElementById('slideBgColor').value;
-        const notes = document.getElementById('slideNotes').value;
-        
-        fetch('save_page.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                page_number: currentSlide,
-                title: title,
-                bg_color: bgColor,
-                notes: notes
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Slide Saved', 'Slide saved successfully!', 'success');
-                document.getElementById('saveBtn').disabled = true;
-                document.getElementById('saveStatus').textContent = 'Saved';
-                document.getElementById('saveStatus').style.color = '#10b981';
-                
-                // Update thumbnail status
-                const currentThumb = document.querySelector(`.slide-thumbnail:nth-child(${currentSlide})`);
-                if (currentThumb) {
-                    let statusIcon = currentThumb.querySelector('.slide-status');
-                    if (!statusIcon) {
-                        statusIcon = document.createElement('div');
-                        statusIcon.className = 'slide-status';
-                        statusIcon.title = 'Saved';
-                        statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
-                        currentThumb.appendChild(statusIcon);
+
+        // Save slide
+        function saveSlide() {
+            showLoading('Saving slide...');
+
+            const title = document.getElementById('slideTitle').value;
+            const bgColor = document.getElementById('slideBgColor').value;
+            const notes = document.getElementById('slideNotes').value;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        title: title,
+                        bg_color: bgColor,
+                        notes: notes
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Saved', 'Slide saved successfully!', 'success');
+                        document.getElementById('saveBtn').disabled = true;
+                        document.getElementById('saveStatus').textContent = 'Saved';
+                        document.getElementById('saveStatus').style.color = '#10b981';
+
+                        // Update thumbnail status
+                        const currentThumb = document.querySelector(`.slide-thumbnail:nth-child(${currentSlide})`);
+                        if (currentThumb) {
+                            let statusIcon = currentThumb.querySelector('.slide-status');
+                            if (!statusIcon) {
+                                statusIcon = document.createElement('div');
+                                statusIcon.className = 'slide-status';
+                                statusIcon.title = 'Saved';
+                                statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+                                currentThumb.appendChild(statusIcon);
+                            }
+
+                            // Update title in thumbnail
+                            const titleEl = currentThumb.querySelector('.slide-preview-title');
+                            if (titleEl) {
+                                titleEl.textContent = title;
+                            }
+                        }
+
+                        // Refresh iframe
+                        document.getElementById('slideIframe').src =
+                            'render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) +
+                            '&page=' + currentSlide + '&t=' + new Date().getTime();
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save slide.', 'error');
                     }
-                    
-                    // Update title in thumbnail
-                    const titleEl = currentThumb.querySelector('.slide-preview-title');
-                    if (titleEl) {
-                        titleEl.textContent = title;
+                })
+                .catch(err => {
+                    hideLoading();
+                    showMessage('Error', 'Error saving slide: ' + err.message, 'error');
+                });
+        }
+
+        // Save notes
+        function saveNotes() {
+            const notes = document.getElementById('slideNotes').value;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        notes: notes
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Notes Saved', 'Notes saved successfully!', 'success');
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save notes.', 'error');
                     }
+                });
+        }
+
+        // Create new slide
+        function createNewSlide() {
+            showLoading('Creating new slide...');
+
+            const title = document.getElementById('slideTitle').value || 'Slide ' + currentSlide;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        title: title,
+                        content: '<div class="slide-content"><h1>' + title + '</h1><p>Start editing this slide...</p></div>',
+                        bg_color: '#ffffff'
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Created', 'New slide created successfully!', 'success');
+                        // Reload the page to show the new slide
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + currentSlide;
+                    } else {
+                        showMessage('Creation Failed', data.error || 'Failed to create slide.', 'error');
+                    }
+                });
+        }
+
+        // Duplicate current slide
+        function duplicateCurrentSlide() {
+            if (currentSlide >= 24) {
+                showMessage('Error', 'Cannot duplicate - maximum slides reached.', 'error');
+                return;
+            }
+
+            showLoading('Duplicating slide...');
+
+            fetch('duplicate_slide.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        source_page: currentSlide,
+                        target_page: currentSlide + 1
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Duplicated', 'Slide duplicated successfully!', 'success');
+                        // Go to the duplicated slide
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + (currentSlide + 1);
+                    } else {
+                        showMessage('Duplication Failed', data.error || 'Failed to duplicate slide.', 'error');
+                    }
+                });
+        }
+
+        // Export as PDF
+        // Export as PDF
+        // Export as PDF - FIXED WORKING VERSION
+        function downloadPDF() {
+            console.log('Starting PDF download for client:', CLIENT_ID);
+
+            // Check if loading overlay exists before using it
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingMessage = document.getElementById('loadingMessage');
+
+            if (loadingOverlay && loadingMessage) {
+                loadingMessage.textContent = 'Generating PDF document...';
+                loadingOverlay.style.display = 'flex';
+            }
+
+            // Create a hidden iframe for PDF download (most reliable method)
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = 'none';
+            iframe.style.position = 'absolute';
+
+            // Add timestamp to prevent caching
+            const timestamp = new Date().getTime();
+            iframe.src = 'generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID) + '&t=' + timestamp;
+
+            document.body.appendChild(iframe);
+
+            console.log('PDF generation iframe created');
+
+            // Hide loading after 3 seconds (even if download hasn't finished)
+            setTimeout(() => {
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
                 }
-                
-                // Refresh iframe
-                document.getElementById('slideIframe').src = 
-                    'render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) + 
-                    '&page=' + currentSlide + '&t=' + new Date().getTime();
-            } else {
-                showMessage('Save Failed', data.error || 'Failed to save slide.', 'error');
-            }
-        })
-        .catch(err => {
-            hideLoading();
-            showMessage('Error', 'Error saving slide: ' + err.message, 'error');
-        });
-    }
-    
-    // Save notes
-    function saveNotes() {
-        const notes = document.getElementById('slideNotes').value;
-        
-        fetch('save_page.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                page_number: currentSlide,
-                notes: notes
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                showMessage('Notes Saved', 'Notes saved successfully!', 'success');
-            } else {
-                showMessage('Save Failed', data.error || 'Failed to save notes.', 'error');
-            }
-        });
-    }
-    
-    // Create new slide
-    function createNewSlide() {
-        showLoading('Creating new slide...');
-        
-        const title = document.getElementById('slideTitle').value || 'Slide ' + currentSlide;
-        
-        fetch('save_page.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                page_number: currentSlide,
-                title: title,
-                content: '<div class="slide-content"><h1>' + title + '</h1><p>Start editing this slide...</p></div>',
-                bg_color: '#ffffff'
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Slide Created', 'New slide created successfully!', 'success');
-                // Reload the page to show the new slide
-                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + currentSlide;
-            } else {
-                showMessage('Creation Failed', data.error || 'Failed to create slide.', 'error');
-            }
-        });
-    }
-    
-    // Duplicate current slide
-    function duplicateCurrentSlide() {
-        if (currentSlide >= 24) {
-            showMessage('Error', 'Cannot duplicate - maximum slides reached.', 'error');
-            return;
-        }
-        
-        showLoading('Duplicating slide...');
-        
-        fetch('duplicate_slide.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                source_page: currentSlide,
-                target_page: currentSlide + 1
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Slide Duplicated', 'Slide duplicated successfully!', 'success');
-                // Go to the duplicated slide
-                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + (currentSlide + 1);
-            } else {
-                showMessage('Duplication Failed', data.error || 'Failed to duplicate slide.', 'error');
-            }
-        });
-    }
-    
-    // Delete current slide
-    function deleteCurrentSlide() {
-        if (!confirm('Are you sure you want to delete this slide? This action cannot be undone.')) {
-            return;
-        }
-        
-        showLoading('Deleting slide...');
-        
-        fetch('delete_slide.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                page_number: currentSlide
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Slide Deleted', 'Slide deleted successfully!', 'success');
-                // Go to previous slide or first slide
-                const newPage = currentSlide > 1 ? currentSlide - 1 : 1;
-                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + newPage;
-            } else {
-                showMessage('Deletion Failed', data.error || 'Failed to delete slide.', 'error');
-            }
-        });
-    }
-    
-    // Insert image
-    function insertImage() {
-        showMessage('Coming Soon', 'Image insertion feature will be available in the next update.', 'info');
-    }
-    
-    // Insert table
-    function insertTable() {
-        showMessage('Coming Soon', 'Table insertion feature will be available in the next update.', 'info');
-    }
-    
-    // Insert chart
-    function insertChart() {
-        showMessage('Coming Soon', 'Chart insertion feature will be available soon.', 'info');
-    }
-    
-    // Text formatting functions
-    function formatText(cmd) {
-        showMessage('Coming Soon', 'Text formatting will be available in edit mode.', 'info');
-    }
-    
-    function formatHeading(val) {
-        showMessage('Coming Soon', 'Heading formatting will be available in edit mode.', 'info');
-    }
-    
-    function changeColor(color) {
-        showMessage('Coming Soon', 'Color formatting will be available in edit mode.', 'info');
-    }
-    
-    // Preview slide
-    function previewSlide() {
-        window.open('render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) + 
-                   '&page=' + currentSlide + '&preview=1', '_blank');
-    }
-    
-    // Show client info modal
-    function showClientInfo() {
-        document.getElementById('clientInfoModal').style.display = 'flex';
-    }
-    
-    function closeClientInfoModal() {
-        document.getElementById('clientInfoModal').style.display = 'none';
-    }
-    
-    function saveClientInfo() {
-        const clientName = document.getElementById('modalClientName').value;
-        const riskProfile = document.getElementById('modalRiskProfile').value;
-        const investmentHorizon = document.getElementById('modalInvestmentHorizon').value;
-        
-        showLoading('Saving client information...');
-        
-        fetch('save_client_info.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                client_name: clientName,
-                risk_profile: riskProfile,
-                investment_horizon: investmentHorizon
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Client Info Saved', 'Client information updated successfully!', 'success');
-                closeClientInfoModal();
-                // Update display
-                document.querySelector('.client-name-display').textContent = clientName;
-                // Reload page to reflect changes
+
+                // Show a simple alert
+                alert('PDF is being generated. It should start downloading automatically.\n\nIf download doesn\'t start, please:\n1. Check your browser downloads\n2. Allow pop-ups for this site\n3. Try again');
+
+                // Remove iframe after 10 seconds
                 setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
-            } else {
-                showMessage('Save Failed', data.error || 'Failed to save client information.', 'error');
-            }
-        });
-    }
-    
-    // Update slide title
-    function updateSlideTitle(title) {
-        document.querySelector('.slide-header h1').textContent = title;
-        document.getElementById('saveBtn').disabled = false;
-    }
-    
-    // Message system
-    function showMessage(title, content, type = 'info') {
-        messageCounter++;
-        const messagesPanel = document.getElementById('messagesPanel');
-        
-        // Remove "no messages" placeholder if present
-        const placeholder = messagesPanel.querySelector('.fa-comments');
-        if (placeholder) {
-            messagesPanel.innerHTML = '';
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        messageDiv.innerHTML = `
-            <div class="message-title">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
-                ${title}
-            </div>
-            <div class="message-content">${content}</div>
-        `;
-        
-        messagesPanel.prepend(messageDiv);
-        
-        // Auto-remove old messages
-        const allMessages = messagesPanel.querySelectorAll('.message');
-        if (allMessages.length > 10) {
-            for (let i = 10; i < allMessages.length; i++) {
-                allMessages[i].remove();
-            }
-        }
-        
-        // Auto-remove after 10 seconds
-        setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.style.opacity = '0';
-                setTimeout(() => {
-                    if (messageDiv.parentNode) {
-                        messageDiv.remove();
+                    if (iframe && iframe.parentNode) {
+                        iframe.parentNode.removeChild(iframe);
                     }
-                }, 300);
+                }, 10000);
+            }, 3000);
+
+            // Alternative: Also open in new tab as backup
+            setTimeout(() => {
+                window.open('generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
+            }, 1000);
+        }
+
+        function deleteCurrentSlide() {
+            if (!confirm('Are you sure you want to delete this slide? This action cannot be undone.')) {
+                return;
             }
-        }, 10000);
-    }
-    
-    function clearMessages() {
-        const messagesPanel = document.getElementById('messagesPanel');
-        messagesPanel.innerHTML = `
+
+            showLoading('Deleting slide...');
+
+            fetch('delete_slide.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Deleted', 'Slide deleted successfully!', 'success');
+                        // Go to previous slide or first slide
+                        const newPage = currentSlide > 1 ? currentSlide - 1 : 1;
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + newPage;
+                    } else {
+                        showMessage('Deletion Failed', data.error || 'Failed to delete slide.', 'error');
+                    }
+                });
+        }
+
+        // Insert image
+        function insertImage() {
+            showMessage('Coming Soon', 'Image insertion feature will be available in the next update.', 'info');
+        }
+
+        // Insert table
+        function insertTable() {
+            showMessage('Coming Soon', 'Table insertion feature will be available in the next update.', 'info');
+        }
+
+        // Insert chart
+        function insertChart() {
+            showMessage('Coming Soon', 'Chart insertion feature will be available soon.', 'info');
+        }
+
+        // Text formatting functions
+        function formatText(cmd) {
+            showMessage('Coming Soon', 'Text formatting will be available in edit mode.', 'info');
+        }
+
+        function formatHeading(val) {
+            showMessage('Coming Soon', 'Heading formatting will be available in edit mode.', 'info');
+        }
+
+        function changeColor(color) {
+            showMessage('Coming Soon', 'Color formatting will be available in edit mode.', 'info');
+        }
+
+        // Preview slide
+        function previewSlide() {
+            window.open('render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) +
+                '&page=' + currentSlide + '&preview=1', '_blank');
+        }
+
+        // Show client info modal
+        function showClientInfo() {
+            document.getElementById('clientInfoModal').style.display = 'flex';
+        }
+
+        function closeClientInfoModal() {
+            document.getElementById('clientInfoModal').style.display = 'none';
+        }
+
+        function saveClientInfo() {
+            const clientName = document.getElementById('modalClientName').value;
+            const riskProfile = document.getElementById('modalRiskProfile').value;
+            const investmentHorizon = document.getElementById('modalInvestmentHorizon').value;
+
+            showLoading('Saving client information...');
+
+            fetch('save_client_info.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        client_name: clientName,
+                        risk_profile: riskProfile,
+                        investment_horizon: investmentHorizon
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Client Info Saved', 'Client information updated successfully!', 'success');
+                        closeClientInfoModal();
+                        // Update display
+                        document.querySelector('.client-name-display').textContent = clientName;
+                        // Reload page to reflect changes
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save client information.', 'error');
+                    }
+                });
+        }
+
+        // Update slide title
+        function updateSlideTitle(title) {
+            document.querySelector('.slide-header h1').textContent = title;
+            document.getElementById('saveBtn').disabled = false;
+        }
+
+        // Message system
+        function showMessage(title, content, type = 'info') {
+            const messagesPanel = document.getElementById('messagesPanel');
+            if (!messagesPanel) {
+                console.warn('messagesPanel not found:', title, content);
+                return;
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = `
+        <strong>${title}</strong><br>${content}
+    `;
+            messagesPanel.prepend(messageDiv);
+        }
+
+        function clearMessages() {
+            const messagesPanel = document.getElementById('messagesPanel');
+            messagesPanel.innerHTML = `
             <div style="text-align: center; padding: 20px; color: #999;">
                 <i class="fas fa-comments fa-2x"></i>
                 <p style="margin-top: 10px;">No messages yet</p>
             </div>
         `;
-    }
-    
-    // Loading overlay
-    function showLoading(msg = "Processing...") {
-        document.getElementById('loadingMessage').textContent = msg;
-        document.getElementById('loadingOverlay').style.display = 'flex';
-    }
-    
-    function hideLoading() {
-        document.getElementById('loadingOverlay').style.display = 'none';
-    }
-    
-    // Export functions
-    function downloadPPT() {
-        showLoading('Generating PowerPoint presentation...');
-        showMessage('Export Started', 'PowerPoint generation in progress...', 'info');
-        
-        // Simulate processing
-        setTimeout(() => {
-            hideLoading();
-            showMessage('Export Complete', 'PowerPoint file has been generated successfully!', 'success');
-            window.open('generate_ppt.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
-        }, 2000);
-    }
-    
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
-        // Welcome message
-        showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 24 loaded.`, 'info');
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Left arrow - previous slide
-            if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-                prevSlide();
-                e.preventDefault();
-            }
-            // Right arrow - next slide
-            if (e.key === 'ArrowRight' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-                nextSlide();
-                e.preventDefault();
-            }
-            // Ctrl+S - save
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                if (!document.getElementById('saveBtn').disabled) {
-                    saveSlide();
+        }
+
+        // Loading overlay
+        function showLoading(msg = "Processing...") {
+            document.getElementById('loadingMessage').textContent = msg;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // Export functions
+        function downloadPPT() {
+            showLoading('Generating PowerPoint presentation...');
+            showMessage('Export Started', 'PowerPoint generation in progress...', 'info');
+
+            // Simulate processing
+            setTimeout(() => {
+                hideLoading();
+                showMessage('Export Complete', 'PowerPoint file has been generated successfully!', 'success');
+                window.open('generate_ppt.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
+            }, 2000);
+        }
+
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Welcome message
+            showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 24 loaded.`, 'info');
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Left arrow - previous slide
+                if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                    prevSlide();
+                    e.preventDefault();
                 }
-            }
+                // Right arrow - next slide
+                if (e.key === 'ArrowRight' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                    nextSlide();
+                    e.preventDefault();
+                }
+                // Ctrl+S - save
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    if (!document.getElementById('saveBtn').disabled) {
+                        saveSlide();
+                    }
+                }
+            });
         });
-    });
+
+        function getSlideIframe() {
+            return document.getElementById('slideIframe');
+        }
+
+        function editCurrentSlide() {
+            const iframe = getSlideIframe();
+            if (iframe && iframe.contentWindow.enableEdit) {
+                iframe.contentWindow.enableEdit();
+            } else {
+                alert('This slide is not editable');
+            }
+        }
+
+        function saveCurrentSlide() {
+            const iframe = getSlideIframe();
+            if (iframe && iframe.contentWindow.saveSlide) {
+                iframe.contentWindow.saveSlide();
+            } else {
+                alert('Nothing to save on this slide');
+            }
+        }
     </script>
 </body>
+
 </html>

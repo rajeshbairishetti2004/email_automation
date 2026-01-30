@@ -132,45 +132,52 @@ function getImageUrl($filename) {
 }
 
 // Function to save page
-function savePageToDatabase($client_id, $page_number, $content, $title, $bg_color = '#ffffff', $font_size = '14px', $tags = '', $notes = '') {
+function savePageToDatabase(
+    $client_id,
+    $page_number,
+    $content,
+    $title,
+    $preview_text = null,
+    $bg_color = '#ffffff',
+    $font_size = '14px',
+    $tags = '',
+    $notes = ''
+) {
     $pdo = getDbConnection();
-    
-    try {
-        // If title is empty, create a default title
-        if (empty($title)) {
-            $title = "Slide " . $page_number;
-        }
-        
-        $sql = "INSERT INTO portfolio_slides (client_id, page_number, title, content, bg_color, font_size, tags, notes, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON DUPLICATE KEY UPDATE 
-                title = VALUES(title),
-                content = VALUES(content),
-                bg_color = VALUES(bg_color),
-                font_size = VALUES(font_size),
-                tags = VALUES(tags),
-                notes = VALUES(notes),
-                updated_at = CURRENT_TIMESTAMP";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([$client_id, $page_number, $title, $content, $bg_color, $font_size, $tags, $notes]);
-        
-        // Save to history
-        if (isset($_SESSION['username'])) {
-            $changed_by = $_SESSION['username'];
-        } else {
-            $changed_by = 'admin';
-        }
-        
-        $history_sql = "INSERT INTO slide_history (client_id, page_number, content, changed_by) VALUES (?, ?, ?, ?)";
-        $history_stmt = $pdo->prepare($history_sql);
-        $history_stmt->execute([$client_id, $page_number, $content, $changed_by]);
-        
-        return ['success' => true, 'message' => 'Slide saved successfully'];
-    } catch (PDOException $e) {
-        error_log("Error saving page: " . $e->getMessage());
-        return ['success' => false, 'error' => 'Database error: ' . $e->getMessage()];
+
+    if (empty($title)) {
+        $title = "Slide " . $page_number;
     }
+
+    $sql = "
+        INSERT INTO portfolio_slides
+        (client_id, page_number, title, content, preview_text, bg_color, font_size, tags, notes, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE
+            title = VALUES(title),
+            content = VALUES(content),
+            preview_text = VALUES(preview_text),
+            bg_color = VALUES(bg_color),
+            font_size = VALUES(font_size),
+            tags = VALUES(tags),
+            notes = VALUES(notes),
+            updated_at = CURRENT_TIMESTAMP
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        $client_id,
+        $page_number,
+        $title,
+        $content,
+        $preview_text,
+        $bg_color,
+        $font_size,
+        $tags,
+        $notes
+    ]);
+
+    return ['success' => true];
 }
 
 // Function to save client info

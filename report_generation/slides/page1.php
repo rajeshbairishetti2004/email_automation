@@ -3,7 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/../database.php';
+
 
 $client_id = $_GET['client_id'] ?? null;
 $clientInfo = $client_id ? getClientInfo($client_id) : [];
@@ -91,7 +92,7 @@ $quarter = $quarterMap[ceil($month / 3)] . ' ' . $year;
 ">
 
     <img 
-        src="../image.png"
+        src="/image.png"
         alt="Finance Doctor"
         style="
             width: 140px;
