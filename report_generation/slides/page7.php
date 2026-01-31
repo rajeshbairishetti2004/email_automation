@@ -9,14 +9,14 @@ require_once __DIR__ . '/../../db_config.php';
 /* =====================================================
    DATABASE CONNECTIONS
 ===================================================== */
-$slidesPdo = getSlidesPdo();   // slides DB → slide7 table
-$mainPdo   = getPdo();         // client_reports DB → client_allocations
+$slidesPdo = getSlidesPdo();
+$mainPdo   = getPdo();
 
-$clientKey = $_SESSION['current_client_id'] ?? '';
+$clientKey = $_GET['client_id'] ?? ($_SESSION['current_client_id'] ?? '');
 $clientId  = (int)str_replace('CLIENT_', '', $clientKey);
 
 /* =====================================================
-   INITIAL SEED: table3 → slide7 (RUNS ONCE PER CLIENT)
+   INITIAL SEED (RUNS ONCE PER CLIENT)
 ===================================================== */
 $seedCheck = $slidesPdo->prepare(
     "SELECT COUNT(*) FROM slide7 WHERE client_id = ?"
@@ -25,7 +25,6 @@ $seedCheck->execute([$clientId]);
 
 if ($seedCheck->fetchColumn() == 0) {
 
-    // Fetch current allocation from table3 (client_allocations)
     $src = $mainPdo->prepare("
         SELECT asset, share_pct
         FROM client_allocations
@@ -41,8 +40,6 @@ if ($seedCheck->fetchColumn() == 0) {
 
     foreach ($src->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $pct = (float)$row['share_pct'];
-
-        // Initial: current == recommended
         $insert->execute([
             $clientId,
             ucfirst(strtolower($row['asset'])),
@@ -53,9 +50,13 @@ if ($seedCheck->fetchColumn() == 0) {
 }
 
 /* =====================================================
-   AJAX SAVE (RECOMMENDED ONLY)
+   SAVE RECOMMENDED (AJAX)
 ===================================================== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_recommended') {
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'save_recommended'
+) {
+
     header('Content-Type: application/json');
 
     $rows = json_decode($_POST['data'] ?? '[]', true);
@@ -67,18 +68,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $slidesPdo->beginTransaction();
     try {
         $update = $slidesPdo->prepare("
-            UPDATE slide7
-            SET recommended_pct = ?, updated_at = NOW()
-            WHERE client_id = ? AND asset = ?
-        ");
+    UPDATE slide7
+    SET recommended_pct = ?, updated_at = NOW()
+    WHERE id = ?
+");
+
 
         foreach ($rows as $r) {
             $update->execute([
                 (float)$r['value'],
-                $clientId,
-                $r['asset']
+                (int)$r['id']
             ]);
         }
+
 
         $slidesPdo->commit();
         echo json_encode(['success' => true]);
@@ -90,247 +92,343 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 }
 
 /* =====================================================
-   FETCH DATA FOR CHARTS
+   FETCH DATA (SINGLE SOURCE OF TRUTH)
 ===================================================== */
-$assetOrder = [];
-$stmt = $slidesPdo->prepare("
-    SELECT asset FROM slide7 WHERE client_id = ?
-");
-$stmt->execute([$clientId]);
-
-foreach ($stmt->fetchAll() as $r) {
-    $assetOrder[] = $r['asset'];
-}
-
-$colors     = ['#4f7df3', '#2eb85c', '#f9b115', '#e55353'];
-
-$currentMap     = array_fill_keys($assetOrder, 0);
-$recommendedMap = array_fill_keys($assetOrder, 0);
+$assetOrder      = [];
+$ids             = [];
+$currentData     = [];
+$recommendedData = [];
 
 $stmt = $slidesPdo->prepare("
-    SELECT asset, current_pct, recommended_pct
+    SELECT id, asset, current_pct, recommended_pct
     FROM slide7
     WHERE client_id = ?
+    ORDER BY id
 ");
 $stmt->execute([$clientId]);
 
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-    $k = ucfirst(strtolower($r['asset']));
-    if (isset($currentMap[$k])) {
-        $currentMap[$k]     = (float)$r['current_pct'];
-        $recommendedMap[$k] = (float)$r['recommended_pct'];
-    }
+    $assetOrder[]      = $r['asset'];
+    $ids[]             = (int)$r['id'];
+    $currentData[]     = (float)$r['current_pct'];
+    $recommendedData[] = (float)$r['recommended_pct'];
 }
+
+$colors = ['#4f7df3', '#2eb85c', '#f9b115', '#e55353'];
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="UTF-8">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script>
-const pie3DPlugin = {
-    id: 'pie3d',
-    beforeDatasetDraw(chart) {
-        const ctx = chart.ctx;
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.30)';
-        ctx.shadowBlur = 18;
-        ctx.shadowOffsetY = 10;
-    },
-    afterDatasetDraw(chart) {
-        chart.ctx.restore();
-    }
-};
-</script>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: Calibri, "Segoe UI", Arial;
+            background: #fff
+        }
 
-<style>
-    html, body {
-    height: 100%;
-}
+        .slide {
+            height: 100vh;
+            padding: 42px 70px 0;
+            position: relative;
+            box-sizing: border-box
+        }
 
-body{margin:0;font-family:Calibri,"Segoe UI",Arial;background:#fff}
-.slide{width:100%;height:100vh;padding:42px 70px 0px;box-sizing:border-box;position:relative}
-.title{text-align:center;font-size:42px;color:#3B73E8;font-weight:600;margin-bottom:20px}
-.charts-row{display:flex;justify-content:space-between;gap:60px}
-.chart-box{width:46%;background:#fff;border-radius:12px;padding:22px 28px;box-shadow:0 4px 10px rgba(0,0,0,.06)}
-.chart-title{text-align:center;font-weight:600;margin-bottom:18px}
-.chart-content{display:flex;align-items:center;gap:22px;justify-content:center}
-canvas{width:200px!important;height:200px!important}
-.legend{display:flex;flex-direction:column;gap:10px;font-size:13.5px}
-.legend-row{display:flex;align-items:center;gap:8px}
-.color-box{width:14px;height:14px;border-radius:3px}
-.legend input{width:54px;padding:3px;font-size:13px;text-align:right}
-.interpretation-title{margin-top:22px;margin-bottom:6px;font-weight:600;font-size:30px}
-.interpretation{margin-top:0;font-size:20px;color:#0b3cc1;font-style:italic;line-height:1.4}
-.logo{position:absolute;right:40px;bottom:35px}
-.logo img{width:120px}
-.footer{position:absolute;left:0;right:0;bottom:0;height:10px;background:#21B6A8}
-/* Soft validation feedback – no layout impact */
-.rec-input.invalid {
-    border: 1.5px solid #e55353;
-    box-shadow: 0 0 4px rgba(229,83,83,0.4);
-}
+        .title {
+            text-align: center;
+            font-size: 42px;
+            color: #3B73E8;
+            font-weight: 600;
+            margin-bottom: 20px
+        }
 
-.rec-input.valid {
-    border: 1.5px solid #2eb85c;
-}
+        .edit-controls {
+            position: absolute;
+            top: 30px;
+            right: 40px
+        }
 
-</style>
+        .edit-controls button {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        #editBtn {
+            background: #3B73E8;
+            color: #fff
+        }
+
+        #saveBtn {
+            background: #2eb85c;
+            color: #fff;
+            display: none
+        }
+
+        .charts-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 60px
+        }
+
+        .chart-box {
+            width: 46%;
+            background: #fff;
+            border-radius: 12px;
+            padding: 22px 28px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, .06)
+        }
+
+        .chart-title {
+            text-align: center;
+            font-weight: 600;
+            margin-bottom: 18px
+        }
+
+        .chart-content {
+            display: flex;
+            gap: 22px;
+            justify-content: center;
+            align-items: center
+        }
+
+        canvas {
+            width: 200px !important;
+            height: 200px !important
+        }
+
+        .legend {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 13.5px
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .color-box {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px
+        }
+
+        .legend input {
+            width: 54px;
+            padding: 3px;
+            text-align: right
+        }
+
+        .interpretation-title {
+            margin-top: 22px;
+            font-size: 30px;
+            font-weight: 600
+        }
+
+        .interpretation {
+            font-size: 20px;
+            color: #0b3cc1;
+            font-style: italic
+        }
+
+        .logo {
+            position: absolute;
+            right: 40px;
+            bottom: 35px
+        }
+
+        .logo img {
+            width: 120px
+        }
+
+        .footer {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 10px;
+            background: #21B6A8
+        }
+    </style>
 </head>
 
 <body>
-<div class="slide">
-<div class="title">Asset Allocation – Current vs Recommended</div>
+    <div class="slide">
 
-<div class="charts-row">
+        <div class="edit-controls">
+            <button id="editBtn">Edit</button>
+            <button id="saveBtn">Save</button>
+        </div>
 
-<div class="chart-box">
-<div class="chart-title">Current Allocation</div>
-<div class="chart-content">
-<canvas id="currentChart"></canvas>
-<div class="legend">
-<?php foreach ($assetOrder as $i => $a): ?>
-<div class="legend-row">
-<span class="color-box" style="background:<?= $colors[$i] ?>"></span>
-<?= $a ?> – <?= number_format($currentMap[$a],1) ?>%
-</div>
-<?php endforeach; ?>
-</div>
-</div>
-</div>
+        <div class="title">Asset Allocation – Current vs Recommended</div>
 
-<div class="chart-box">
-<div class="chart-title">Recommended Allocation</div>
-<div class="chart-content">
-<canvas id="recommendedChart"></canvas>
-<div class="legend">
-<?php foreach ($assetOrder as $i => $a): ?>
-<div class="legend-row">
-<span class="color-box" style="background:<?= $colors[$i] ?>"></span>
-<?= $a ?>
-<input type="number" class="rec-input" min="0" max="100"
-value="<?= (int)$recommendedMap[$a] ?>"> %
-</div>
-<?php endforeach; ?>
-</div>
-</div>
-</div>
+        <div class="charts-row">
 
-</div>
+            <div class="chart-box">
+                <div class="chart-title">Current Allocation</div>
+                <div class="chart-content">
+                    <canvas id="currentChart"></canvas>
+                    <div class="legend">
+                        <?php foreach ($assetOrder as $i => $a): ?>
+                            <div class="legend-row">
+                                <span class="color-box" style="background:<?= $colors[$i] ?>"></span>
+                                <?= $a ?> – <?= number_format($currentData[$i], 1) ?>%
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
 
-<div class="interpretation-title">Finance Doctor’s interpretation:</div>
-<div class="interpretation">
-To build up global wealth & precious metals, gradually move towards the recommended allocation.<br>
-As a first step, reduce Indian equity allocation slightly and reinvest into global equity.
-</div>
+            <div class="chart-box">
+                <div class="chart-title">Recommended Allocation</div>
+                <div class="chart-content">
+                    <canvas id="recommendedChart"></canvas>
+                    <div class="legend">
+                        <?php foreach ($assetOrder as $i => $a): ?>
+                            <div class="legend-row">
+                                <span class="color-box" style="background:<?= $colors[$i] ?>"></span>
+                                <?= $a ?>
+                                <input
+                                    type="number"
+                                    class="rec-input"
+                                    data-id="<?= $ids[$i] ?>"
+                                    min="0"
+                                    max="100"
+                                    value="<?= (int)$recommendedData[$i] ?>"
+                                    disabled> %
 
-<div class="logo"><img src="/image.png"></div>
-<div class="footer"></div>
-</div>
-<script>
-const labels = <?= json_encode($assetOrder) ?>;
-const colors = <?= json_encode($colors) ?>;
-const currentData = <?= json_encode(array_values($currentMap)) ?>;
-let recommendedData = <?= json_encode(array_values($recommendedMap)) ?>;
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
 
-/* ---------- CURRENT CHART ---------- */
-new Chart(currentChart,{
-    type:'pie',
-    plugins:[pie3DPlugin],
-    data:{
-        labels,
-        datasets:[{
-            data:currentData,
-            backgroundColor:colors,
-            borderColor:'#fff',
-            borderWidth:2
-        }]
-    },
-    options:{plugins:{legend:{display:false}}}
-});
+        </div>
 
-/* ---------- RECOMMENDED CHART ---------- */
-let recChart;
-function renderRec(){
-    if(!recChart){
-        recChart=new Chart(recommendedChart,{
-            type:'pie',
-            plugins:[pie3DPlugin],
-            data:{
+        <div class="interpretation-title">Finance Doctor’s interpretation:</div>
+        <div class="interpretation">
+            To build up global wealth & precious metals, gradually move towards the recommended allocation.<br>
+            As a first step, reduce Indian equity allocation slightly and reinvest into global equity.
+        </div>
+
+        <div class="logo"><img src="/image.png"></div>
+        <div class="footer"></div>
+    </div>
+
+    <script>
+        const labels = <?= json_encode($assetOrder) ?>;
+        const rowIds = <?= json_encode($ids) ?>;
+        const colors = <?= json_encode($colors) ?>;
+        const currentData = <?= json_encode($currentData) ?>;
+        let recommendedData = <?= json_encode($recommendedData) ?>;
+
+        new Chart(currentChart, {
+            type: 'pie',
+            data: {
                 labels,
-                datasets:[{
-                    data:recommendedData,
-                    backgroundColor:colors,
-                    borderColor:'#fff',
-                    borderWidth:2
+                datasets: [{
+                    data: currentData,
+                    backgroundColor: colors
                 }]
             },
-            options:{plugins:{legend:{display:false}}}
+            options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
         });
-    }else{
-        recChart.data.datasets[0].data = recommendedData;
-        recChart.update();
-    }
-}
-renderRec();
 
-/* ---------- VALIDATION + AUTOSAVE ---------- */
+        let recChart = new Chart(recommendedChart, {
+            type: 'pie',
+            data: {
+                labels,
+                datasets: [{
+                    data: recommendedData,
+                    backgroundColor: colors
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
 
-function saveToDB(){
-    const payload = labels.map((a,i)=>({
-        asset:a,
-        value:recommendedData[i]
-    }));
-    const fd = new FormData();
-    fd.append('action','save_recommended');
-    fd.append('data',JSON.stringify(payload));
+        let editMode = false;
+        const editBtn = document.getElementById('editBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const inputs = document.querySelectorAll('.rec-input');
 
-    fetch('',{method:'POST',body:fd});
-}
+        editBtn.onclick = () => {
+            editMode = true;
+            inputs.forEach(i => i.disabled = false);
+            editBtn.style.display = 'none';
+            saveBtn.style.display = 'inline-block';
+        };
 
-/* ---------- INPUT HANDLER ---------- */
-document.querySelectorAll('.rec-input').forEach((el,i)=>{
-    el.addEventListener('input',()=>{
-        recommendedData[i] = parseFloat(el.value) || 0;
-        renderRec();
-        validateAndSave();   // ✅ THIS WAS MISSING
-    });
-});
-function notifyParent(valid) {
-    if (window.parent !== window) {
-        window.parent.postMessage({
-            type: 'allocation-warning',
-            valid: valid
-        }, '*');
-    }
-}
+        saveBtn.onclick = async () => {
+            const total = [...document.querySelectorAll('.rec-input')]
+                .reduce((s, i) => s + (parseFloat(i.value) || 0), 0);
 
-function sendSlide7Status(isValid) {
-    if (window.parent !== window) {
-        window.parent.postMessage({
-            type: 'slide-validation',
-            slide: 7,
-            valid: isValid
-        }, '*');
-    }
-}
+            if (Math.round(total) !== 100) {
+                alert('Recommended allocation must total 100%');
+                return;
+            }
 
-function validateAndSave() {
-    const total = recommendedData.reduce((a, b) => a + b, 0);
-    const isValid = Math.round(total) === 100;
+            await saveToDB(); // ✅ USE THE CORRECT FUNCTION
 
-    // 🔔 Notify parent on every change
-    sendSlide7Status(isValid);
+            editMode = false;
+            inputs.forEach(i => i.disabled = true);
+            saveBtn.style.display = 'none';
+            editBtn.style.display = 'inline-block';
+        };
 
-    // ❌ Do not save unless valid
-    if (!isValid) return;
 
-    // ✅ Save only when valid
-    saveToDB();
-}
+        function saveToDB() {
+            const payload = [];
 
-</script>
+            document.querySelectorAll('.rec-input').forEach(input => {
+                payload.push({
+                    id: parseInt(input.dataset.id),
+                    value: parseFloat(input.value) || 0
+                });
+            });
 
+            const fd = new FormData();
+            fd.append('action', 'save_recommended');
+            fd.append('data', JSON.stringify(payload));
+
+            return fetch('slides/page7.php', {
+                method: 'POST',
+                body: fd
+            });
+        }
+
+
+        inputs.forEach((el, i) => {
+            el.oninput = () => {
+                if (!editMode) return;
+                recommendedData[i] = parseFloat(el.value) || 0;
+                recChart.data.datasets[0].data = recommendedData;
+                recChart.update();
+            };
+        });
+    </script>
 </body>
+
 </html>

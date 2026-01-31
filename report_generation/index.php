@@ -17,6 +17,11 @@ $SLIDE_REGISTRY = [
         'template' => 'page2.php',
         'preview' => 'Redeem & replace investment recommendations'
     ],
+    3 => [
+        'title' => 'Impact of our recommendations',
+        'template' => 'page3.php',
+        'preview' => 'Portfolio and Tax impact analysis of recommendations'
+    ],
     5 => [
         'title' => 'Portfolio at a Glance',
         'template' => 'page5.php',
@@ -232,6 +237,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                                 if ($i == 2) {
                                     // Slide 2 is data-driven, not HTML-driven
                                     echo "Redeem & Replace investment recommendations";
+                                } elseif ($i == 3) {
+                                    echo "Portfolio & Tax impact of recommendations";
                                 } elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
                                     if (!empty($pages[$i]['preview_text'])) {
                                         echo htmlspecialchars($pages[$i]['preview_text']);
@@ -277,11 +284,15 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 <button class="ppt-toolbar-btn" onclick="editCurrentSlide()">
                     <i class="fas fa-edit"></i> Edit
                 </button>
+                <button class="ppt-toolbar-btn btn-success" onclick="saveCurrentSlide()">
+                    <i class="fas fa-save"></i> Save
+                </button>
+
 
             </div>
 
             <div id="slide7Warning"
-     style="
+                style="
         display:none;
         background:#fff3cd;
         color:#856404;
@@ -290,8 +301,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         font-size:14px;
         font-weight:500;
      ">
-    ⚠ Recommended allocation must total <b>100%</b> to be saved
-</div>
+                ⚠ Recommended allocation must total <b>100%</b> to be saved
+            </div>
 
             <div class="ppt-slide-area">
                 <div class="slide-frame">
@@ -301,6 +312,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                     <?php if (
                         $current_page === 1 ||
                         $current_page === 2 ||
+                        $current_page === 3 ||
                         isset($pages[$current_page])
                     ): ?>
                         <iframe
@@ -451,53 +463,53 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
             }
         }
-       
+
         let slide7IsValid = true;
         let slide7Valid = true;
 
-window.addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== 'slide-validation') return;
+        window.addEventListener('message', function(event) {
+            if (!event.data || event.data.type !== 'slide-validation') return;
 
-    if (event.data.slide !== 7) return;
+            if (event.data.slide !== 7) return;
 
-    slide7Valid = event.data.valid;
-    updateSlide7Warning();
-});
+            slide7Valid = event.data.valid;
+            updateSlide7Warning();
+        });
 
-function updateSlide7Warning() {
-    const bar = document.getElementById('slide7Warning');
-    if (!bar) return;
+        function updateSlide7Warning() {
+            const bar = document.getElementById('slide7Warning');
+            if (!bar) return;
 
-    // show ONLY when slide 7 active AND invalid
-    if (currentSlide === 7 && slide7Valid === false) {
-        bar.style.display = 'block';
-    } else {
-        bar.style.display = 'none';
-    }
-}
+            // show ONLY when slide 7 active AND invalid
+            if (currentSlide === 7 && slide7Valid === false) {
+                bar.style.display = 'block';
+            } else {
+                bar.style.display = 'none';
+            }
+        }
 
-// run once on page load
-document.addEventListener('DOMContentLoaded', updateSlide7Warning);
+        // run once on page load
+        document.addEventListener('DOMContentLoaded', updateSlide7Warning);
 
 
 
-document.addEventListener('DOMContentLoaded', () => {
-    updateSlideWarning();
-});
+        document.addEventListener('DOMContentLoaded', () => {
+            updateSlideWarning();
+        });
 
-function updateSlideWarning() {
-    const bar = document.getElementById('slideWarningBar');
-    if (!bar) return;
+        function updateSlideWarning() {
+            const bar = document.getElementById('slideWarningBar');
+            if (!bar) return;
 
-    const activeSlide = <?= (int)$current_page ?>;
+            const activeSlide = <?= (int)$current_page ?>;
 
-    // Show warning ONLY when slide 7 is active AND invalid
-    if (activeSlide === 7 && slide7IsValid === false) {
-        bar.style.display = 'block';
-    } else {
-        bar.style.display = 'none';
-    }
-}
+            // Show warning ONLY when slide 7 is active AND invalid
+            if (activeSlide === 7 && slide7IsValid === false) {
+                bar.style.display = 'block';
+            } else {
+                bar.style.display = 'none';
+            }
+        }
 
         // Save slide
         function saveSlide() {
