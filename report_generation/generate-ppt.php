@@ -1,436 +1,463 @@
 <?php
-// generate-ppt.php - FULL COLOR VERSION
-
-// Fix vendor path
-$vendorPath = 'vendor/autoload.php';
-if (!file_exists($vendorPath)) {
-    $vendorPath = '../vendor/autoload.php';
+// generate_pdf.php - Creates PDF exactly matching slide designs
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-if (!file_exists($vendorPath)) {
-    die('Error: PHPPresentation library not found. Run: composer require phpoffice/phppresentation');
+require_once 'database.php';
+
+// Check for TCPDF
+$tcpdf_path = __DIR__ . '/vendor/tecnickcom/tcpdf/tcpdf.php';
+if (!file_exists($tcpdf_path)) {
+    $tcpdf_path = __DIR__ . '/../vendor/tecnickcom/tcpdf/tcpdf.php';
 }
 
-require_once $vendorPath;
+if (!file_exists($tcpdf_path)) {
+    die('TCPDF not found. Please run: composer require tecnickcom/tcpdf');
+}
 
-use PhpOffice\PhpPresentation\PhpPresentation;
-use PhpOffice\PhpPresentation\IOFactory;
-use PhpOffice\PhpPresentation\Style\Alignment;
-use PhpOffice\PhpPresentation\Style\Color;
-use PhpOffice\PhpPresentation\Slide\Background\Color as BgColor;
-use PhpOffice\PhpPresentation\DocumentLayout;
-use PhpOffice\PhpPresentation\Style\Fill;
-use PhpOffice\PhpPresentation\Style\Border;
+require_once $tcpdf_path;
 
 // Get client data
-$client_name = $_POST['client_name'] ?? 'Ms. Mukta Dutta Tomar';
-$period = $_POST['period'] ?? 'January - March 2026';
+$client_id = $_GET['client_id'] ?? $_POST['client_id'] ?? 'CLIENT_1';
+$clientInfo = getClientInfo($client_id);
 
-// Create new presentation
-$presentation = new PhpPresentation();
+// Extract client name
+$client_name = 'Client';
+$actual_client_id = 0;
 
-// Set PPT dimensions (16:9 aspect ratio - Screen)
-$presentation->getLayout()->setDocumentLayout(DocumentLayout::LAYOUT_SCREEN_16X9, true);
+if (strpos($client_id, 'CLIENT_') === 0) {
+    $client_number = str_replace('CLIENT_', '', $client_id);
+    if (is_numeric($client_number)) {
+        $pdo = getDbConnection();
+        $stmt = $pdo->prepare("SELECT name, id FROM clients WHERE id = ?");
+        $stmt->execute([$client_number]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Set properties
-$presentation->getDocumentProperties()
-    ->setCreator('Finance Doctor Wealth Management')
-    ->setTitle('Quarterly Portfolio Review')
-    ->setSubject('Portfolio Analysis')
-    ->setDescription('Quarterly review for ' . $client_name)
-    ->setCompany('Finance Doctor');
-
-// Function to extract content properly
-function extractContentFromPage($pageNumber) {
-    $filename = "page{$pageNumber}.php";
-    if (!file_exists($filename)) {
-        return "Page {$pageNumber}\n\nContent not available.";
+        if ($row) {
+            $client_name = $row['name'];
+            $actual_client_id = (int)$row['id'];
+        }
     }
-    
-    ob_start();
-    include $filename;
-    $content = ob_get_clean();
-    
-    // Remove scripts and styles
-    $content = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $content);
-    $content = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', '', $content);
-    
-    // Convert to plain text
-    $content = strip_tags($content);
-    $content = html_entity_decode($content);
-    $content = preg_replace('/\s+/', ' ', $content);
-    $content = trim($content);
-    
-    // Limit length for PPT
-    if (strlen($content) > 600) {
-        $content = substr($content, 0, 600) . '...';
-    }
-    
-    return $content;
 }
 
-// ========== TITLE SLIDE ==========
-$slide = $presentation->getActiveSlide();
-$slide->setName('Title Slide');
-
-// Set vibrant blue background for title slide
-$bgColor = new BgColor();
-$bgColor->setColor(new Color('2E75B6')); // Vibrant blue
-$slide->setBackground($bgColor);
-
-// Main Title (White text for contrast)
-$titleShape = $slide->createRichTextShape()
-    ->setHeight(120)
-    ->setWidth(800)
-    ->setOffsetX(80)
-    ->setOffsetY(120);
-$titleShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$titleRun = $titleShape->createTextRun('QUARTERLY PORTFOLIO REVIEW');
-$titleRun->getFont()->setBold(true)->setSize(44)->setColor(new Color('FFFFFF')); // White text
-
-// Period (Light blue text)
-$periodShape = $slide->createRichTextShape()
-    ->setHeight(60)
-    ->setWidth(800)
-    ->setOffsetX(80)
-    ->setOffsetY(220);
-$periodShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$periodRun = $periodShape->createTextRun($period);
-$periodRun->getFont()->setBold(true)->setSize(32)->setColor(new Color('E6F2FF')); // Light blue
-
-// Decorative separator line
-$separatorShape = $slide->createRichTextShape()
-    ->setHeight(10)
-    ->setWidth(600)
-    ->setOffsetX(180)
-    ->setOffsetY(290);
-$separatorRun = $separatorShape->createTextRun(str_repeat('─', 80));
-$separatorRun->getFont()->setSize(14)->setColor(new Color('FFFFFF'));
-
-// Client Name (White text on yellow background box)
-$clientBox = $slide->createRichTextShape()
-    ->setHeight(80)
-    ->setWidth(600)
-    ->setOffsetX(180)
-    ->setOffsetY(320);
-$clientBox->getFill()->setFillType(Fill::FILL_SOLID)
-    ->setStartColor(new Color('FFC000')); // Yellow background
-
-$clientShape = $slide->createRichTextShape()
-    ->setHeight(60)
-    ->setWidth(600)
-    ->setOffsetX(180)
-    ->setOffsetY(335);
-$clientShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$clientRun = $clientShape->createTextRun('Prepared for: ' . $client_name);
-$clientRun->getFont()->setBold(true)->setSize(24)->setColor(new Color('1F4E79')); // Dark blue text
-
-// Footer (White text)
-$footerShape = $slide->createRichTextShape()
-    ->setHeight(40)
-    ->setWidth(960)
-    ->setOffsetX(0)
-    ->setOffsetY(480);
-$footerShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$footerRun = $footerShape->createTextRun('Finance Doctor Wealth Management • ' . date('F d, Y'));
-$footerRun->getFont()->setSize(14)->setColor(new Color('FFFFFF')); // White text
-
-// ========== AGENDA SLIDE ==========
-$agendaSlide = $presentation->createSlide();
-$agendaSlide->setName('Agenda');
-
-// White background for agenda
-$agendaBg = new BgColor();
-$agendaBg->setColor(new Color('FFFFFF'));
-$agendaSlide->setBackground($agendaBg);
-
-// Colored header bar
-$headerBar = $agendaSlide->createRichTextShape()
-    ->setHeight(60)
-    ->setWidth(960)
-    ->setOffsetX(0)
-    ->setOffsetY(0);
-$headerBar->getFill()->setFillType(Fill::FILL_SOLID)
-    ->setStartColor(new Color('2E75B6'));
-
-// Agenda title (White on blue)
-$agendaTitle = $agendaSlide->createRichTextShape()
-    ->setHeight(60)
-    ->setWidth(800)
-    ->setOffsetX(80)
-    ->setOffsetY(15);
-$agendaTitle->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$agendaTitle->createTextRun('PRESENTATION AGENDA');
-$agendaTitle->getActiveParagraph()->getFont()
-    ->setBold(true)
-    ->setSize(36)
-    ->setColor(new Color('FFFFFF'));
-
-// Agenda items
-$agendaItems = [
-    'Executive Summary',
-    'Portfolio Performance Overview',
-    'Asset Allocation Analysis',
-    'Equity Portfolio Review',
-    'Debt Portfolio Analysis',
-    'Mutual Fund Performance',
-    'Risk Assessment',
-    'Market Outlook',
-    'Investment Recommendations',
-    'Action Plan & Next Steps'
+// Quarter logic
+$month = date('n');
+$year = date('Y');
+$quarterMap = [
+    1 => 'Jan - Mar',
+    2 => 'Apr - Jun', 
+    3 => 'Jul - Sep',
+    4 => 'Oct - Dec'
 ];
+$quarter = $quarterMap[ceil($month / 3)] . ' ' . $year;
 
-$agendaShape = $agendaSlide->createRichTextShape()
-    ->setHeight(350)
-    ->setWidth(700)
-    ->setOffsetX(130)
-    ->setOffsetY(100);
-
-foreach ($agendaItems as $index => $item) {
-    $number = $index + 1;
+// Create custom PDF class for exact slide rendering
+class SlidePDF extends TCPDF {
     
-    // Create colored bullet
-    $bulletShape = $agendaSlide->createRichTextShape()
-        ->setHeight(30)
-        ->setWidth(30)
-        ->setOffsetX(130)
-        ->setOffsetY(120 + ($index * 35));
-    $bulletShape->getFill()->setFillType(Fill::FILL_SOLID)
-        ->setStartColor(new Color('FFC000')); // Yellow bullet
-    $bulletShape->createTextRun($number)
-        ->getFont()->setBold(true)->setSize(14)->setColor(new Color('1F4E79'));
-    $bulletShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    // Colors from your slides
+    private $blue = array(79, 125, 243);    // #4F7DF3
+    private $teal = array(77, 182, 172);    // #4DB6AC
+    private $gold = array(184, 164, 106);   // #B8A46A
+    private $dark_blue = array(10, 61, 186); // #0A3DBA
     
-    // Agenda item text
-    $itemText = $agendaSlide->createRichTextShape()
-        ->setHeight(30)
-        ->setWidth(600)
-        ->setOffsetX(170)
-        ->setOffsetY(120 + ($index * 35));
-    $itemText->createTextRun($item)
-        ->getFont()->setSize(18)->setColor(new Color('333333'));
-}
-
-// Footer (Blue text)
-$agendaFooter = $agendaSlide->createRichTextShape()
-    ->setHeight(30)
-    ->setWidth(960)
-    ->setOffsetX(0)
-    ->setOffsetY(500);
-$agendaFooter->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$agendaFooter->createTextRun('Finance Doctor • Professional Portfolio Review')
-    ->getFont()->setSize(12)->setColor(new Color('2E75B6'));
-
-// ========== CONTENT SLIDES ==========
-for ($i = 1; $i <= 23; $i++) {
-    $slide = $presentation->createSlide();
-    $slide->setName("Page {$i}");
+    // Slide dimensions (16:9 aspect ratio like PowerPoint)
+    private $slide_width = 297;  // A4 width in mm (landscape)
+    private $slide_height = 167; // 16:9 ratio height
     
-    // White background
-    $bgColor = new BgColor();
-    $bgColor->setColor(new Color('FFFFFF'));
-    $slide->setBackground($bgColor);
+    public function __construct() {
+        // Create custom page size for 16:9 slides
+        parent::__construct('L', 'mm', array($this->slide_width, $this->slide_height), true, 'UTF-8', false);
+        
+        // Set document properties
+        $this->SetCreator('Finance Doctor');
+        $this->SetAuthor('Finance Doctor Wealth Management');
+        
+        // Disable auto page break
+        $this->SetAutoPageBreak(false);
+        
+        // Set margins to zero for full-page slides
+        $this->SetMargins(0, 0, 0);
+        $this->SetHeaderMargin(0);
+        $this->SetFooterMargin(0);
+        
+        // Remove header and footer
+        $this->setPrintHeader(false);
+        $this->setPrintFooter(false);
+    }
     
-    // Colored header
-    $headerBg = $slide->createRichTextShape()
-        ->setHeight(60)
-        ->setWidth(960)
-        ->setOffsetX(0)
-        ->setOffsetY(0);
-    $headerBg->getFill()->setFillType(Fill::FILL_SOLID)
-        ->setStartColor(new Color('2E75B6'));
+    // Add a new slide (page)
+    public function addSlide() {
+        $this->AddPage();
+        // Set white background for the entire slide
+        $this->SetFillColor(255, 255, 255);
+        $this->Rect(0, 0, $this->slide_width, $this->slide_height, 'F');
+    }
     
-    // Page title (White on blue)
-    $pageTitle = $slide->createRichTextShape()
-        ->setHeight(40)
-        ->setWidth(600)
-        ->setOffsetX(50)
-        ->setOffsetY(15);
-    $pageTitle->createTextRun("Portfolio Review - Page {$i}");
-    $pageTitle->getActiveParagraph()->getFont()
-        ->setBold(true)
-        ->setSize(24)
-        ->setColor(new Color('FFFFFF'));
+    // Render Slide 1 exactly as in page1.php
+    public function renderSlide1($client_name, $quarter) {
+        $this->addSlide();
+        
+        // Top teal lines
+        $this->SetLineWidth(1.2); // 6px equivalent
+        $this->SetDrawColorArray($this->teal);
+        $this->Line(25, 30, $this->slide_width - 25, 30);
+        
+        $this->SetLineWidth(0.2); // 1px equivalent
+        $this->Line(25, 35, $this->slide_width - 25, 35);
+        
+        // Client Name
+        $this->SetFont('helvetica', 'B', 36);
+        $this->SetTextColorArray($this->blue);
+        $this->SetXY(0, 70);
+        $this->Cell(0, 0, $client_name, 0, 1, 'C');
+        
+        // Subtitle with gold lines
+        $this->SetFont('helvetica', 'B', 24);
+        $this->SetXY(0, 110);
+        $this->Cell(0, 0, 'Quarterly Portfolio Review', 0, 1, 'C');
+        
+        // Gold lines
+        $this->SetLineWidth(0.8); // 4px equivalent
+        $this->SetDrawColorArray($this->gold);
+        
+        // Calculate positions for gold lines
+        $center_x = $this->slide_width / 2;
+        $line_length = 30;
+        $text_width = $this->GetStringWidth('Quarterly Portfolio Review');
+        
+        // Left gold line
+        $left_line_x = $center_x - ($text_width/2) - $line_length - 10;
+        $this->Line($left_line_x, 120, $left_line_x + $line_length, 120);
+        
+        // Right gold line
+        $right_line_x = $center_x + ($text_width/2) + 10;
+        $this->Line($right_line_x, 120, $right_line_x + $line_length, 120);
+        
+        // Quarter
+        $this->SetFont('helvetica', '', 16);
+        $this->SetTextColorArray($this->blue);
+        $this->SetXY(0, 130);
+        $this->Cell(0, 0, $quarter, 0, 1, 'C');
+        
+        // Bottom teal lines
+        $this->SetLineWidth(0.2); // 1px equivalent
+        $this->SetDrawColorArray($this->teal);
+        $this->Line(25, 145, $this->slide_width - 25, 145);
+        
+        $this->SetLineWidth(1.2); // 6px equivalent
+        $this->Line(25, 148, $this->slide_width - 25, 148);
+        
+        // Logo
+        $this->addLogo();
+    }
     
-    // Slide number (White on blue)
-    $slideNum = $slide->createRichTextShape()
-        ->setHeight(40)
-        ->setWidth(100)
-        ->setOffsetX(850)
-        ->setOffsetY(15);
-    $slideNum->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-    $slideNum->createTextRun("Slide " . ($i + 2)); // +2 for title and agenda slides
-    $slideNum->getActiveParagraph()->getFont()
-        ->setSize(14)
-        ->setColor(new Color('FFFFFF'));
+    // Render generic slide with title and content
+    public function renderGenericSlide($slideNumber, $title, $content) {
+        $this->addSlide();
+        
+        // Add slide border for design
+        $this->SetLineWidth(0.2);
+        $this->SetDrawColor(230, 230, 230);
+        $this->Rect(15, 15, $this->slide_width - 30, $this->slide_height - 30);
+        
+        // Slide title
+        $this->SetFont('helvetica', 'B', 28);
+        $this->SetTextColorArray($this->blue);
+        $this->SetXY(40, 40);
+        $this->Cell(0, 0, $title, 0, 1, 'L');
+        
+        // Title underline
+        $this->SetLineWidth(2);
+        $this->SetDrawColorArray($this->gold);
+        $this->Line(40, 55, min(40 + $this->GetStringWidth($title), $this->slide_width - 40), 55);
+        
+        // Content area with subtle background
+        $this->SetFillColor(250, 250, 255);
+        $this->Rect(40, 70, $this->slide_width - 80, $this->slide_height - 110, 'F');
+        
+        // Render content based on slide number
+        $this->renderSlideContent($slideNumber, $content);
+        
+        // Add logo
+        $this->addLogo();
+        
+        // Add slide number in bottom right
+        $this->SetFont('helvetica', '', 10);
+        $this->SetTextColor(150, 150, 150);
+        $this->SetXY($this->slide_width - 60, $this->slide_height - 25);
+        $this->Cell(0, 0, 'Slide ' . $slideNumber, 0, 1, 'R');
+    }
     
-    // Content
-    $content = extractContentFromPage($i);
-    
-    $contentShape = $slide->createRichTextShape()
-        ->setHeight(350)
-        ->setWidth(880)
-        ->setOffsetX(40)
-        ->setOffsetY(80);
-    
-    // Add styled content
-    $lines = explode('. ', $content);
-    foreach ($lines as $line) {
-        if (trim($line) !== '') {
-            $textRun = $contentShape->createTextRun(trim($line) . '. ');
-            
-            // Style based on content
-            if (stripos($line, 'important') !== false || 
-                stripos($line, 'key') !== false ||
-                stripos($line, 'note') !== false) {
-                $textRun->getFont()->setBold(true)->setColor(new Color('C43E1C')); // Red for important
-            } elseif (stripos($line, 'profit') !== false || 
-                     stripos($line, 'gain') !== false ||
-                     stripos($line, 'growth') !== false) {
-                $textRun->getFont()->setColor(new Color('00B050')); // Green for positive
-            } elseif (stripos($line, 'loss') !== false || 
-                     stripos($line, 'risk') !== false ||
-                     stripos($line, 'warning') !== false) {
-                $textRun->getFont()->setColor(new Color('FF0000')); // Red for negative
-            } else {
-                $textRun->getFont()->setColor(new Color('333333')); // Dark gray for normal
-            }
-            
-            $textRun->getFont()->setSize(14);
-            $contentShape->createBreak();
+    // Render specific slide content based on slide number
+    private function renderSlideContent($slideNumber, $content) {
+        // Clean HTML content
+        $content = $this->cleanHTML($content);
+        
+        // Set font for content
+        $this->SetFont('helvetica', '', 12);
+        $this->SetTextColorArray($this->dark_blue);
+        
+        // Different rendering based on slide number
+        switch($slideNumber) {
+            case 2: // Our Recommendations
+            case 3: // Impact
+            case 4: // Rationale
+            case 5: // Portfolio at a Glance
+                $this->SetXY(50, 75);
+                $this->MultiCell($this->slide_width - 100, 8, $content, 0, 'L', false, 1, '', '', true, 0, false, true, 0, 'T');
+                break;
+                
+            case 7: // Asset Allocation - could add charts here
+                $this->renderAssetAllocation($content);
+                break;
+                
+            case 11: // Fund Performance
+            case 14: // Tax-Smart Rebalancing
+                $this->SetFont('helvetica', '', 11);
+                $this->SetXY(50, 75);
+                $this->writeHTMLCell($this->slide_width - 100, 0, 50, 75, $content, 0, 1, 0, true, 'L', true);
+                break;
+                
+            case 16: // Support Team
+                $this->renderSupportTeam($content);
+                break;
+                
+            case 21: // Recommendations this quarter
+            case 22: // Rationale
+            case 23: // Strategic & Tax-Smart Rebalancing
+                $this->SetFont('helvetica', '', 11);
+                $this->SetXY(50, 75);
+                // Preserve some HTML formatting
+                $content = strip_tags($content, '<b><strong><i><em><u><br><p>');
+                $this->writeHTMLCell($this->slide_width - 100, 0, 50, 75, $content, 0, 1, 0, true, 'L', true);
+                break;
+                
+            default:
+                // Default rendering for other slides
+                $this->SetXY(50, 75);
+                $this->MultiCell($this->slide_width - 100, 8, $content, 0, 'L', false, 1, '', '', true, 0, false, true, 0, 'T');
         }
     }
     
-    // Footer (Blue text)
-    $footer = $slide->createRichTextShape()
-        ->setHeight(30)
-        ->setWidth(960)
-        ->setOffsetX(0)
-        ->setOffsetY(500);
-    $footer->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $footer->createTextRun("Finance Doctor Wealth Management • Page {$i} of 23 • " . date('M d, Y'));
-    $footer->getActiveParagraph()->getFont()->setSize(10)->setColor(new Color('2E75B6'));
+    // Special rendering for Asset Allocation (Slide 7)
+    private function renderAssetAllocation($content) {
+        // Parse content to extract allocation data
+        $lines = explode("\n", $content);
+        
+        $current_y = 75;
+        foreach ($lines as $line) {
+            if (trim($line) !== '') {
+                // Check if line contains percentage
+                if (preg_match('/(\d+)%/', $line, $matches)) {
+                    $percentage = $matches[1];
+                    
+                    // Create progress bar
+                    $bar_width = 200;
+                    $filled_width = ($percentage / 100) * $bar_width;
+                    
+                    // Draw progress bar background
+                    $this->SetFillColor(230, 230, 230);
+                    $this->Rect(50, $current_y, $bar_width, 8, 'F');
+                    
+                    // Draw filled portion
+                    $this->SetFillColorArray($this->teal);
+                    $this->Rect(50, $current_y, $filled_width, 8, 'F');
+                    
+                    // Add percentage text
+                    $this->SetFont('helvetica', 'B', 10);
+                    $this->SetTextColor(0, 0, 0);
+                    $this->SetXY(50, $current_y - 2);
+                    $this->Cell($bar_width, 8, $line, 0, 1, 'C');
+                    
+                    $current_y += 15;
+                } else {
+                    // Regular text
+                    $this->SetFont('helvetica', '', 11);
+                    $this->SetTextColorArray($this->dark_blue);
+                    $this->SetXY(50, $current_y);
+                    $this->Cell(0, 0, $line, 0, 1, 'L');
+                    $current_y += 8;
+                }
+            }
+        }
+    }
+    
+    // Special rendering for Support Team (Slide 16)
+    private function renderSupportTeam($content) {
+        $this->SetFont('helvetica', 'B', 16);
+        $this->SetTextColorArray($this->blue);
+        $this->SetXY(0, 75);
+        $this->Cell(0, 0, 'Your Support Team', 0, 1, 'C');
+        
+        $this->SetLineWidth(1);
+        $this->SetDrawColorArray($this->gold);
+        $this->Line($this->slide_width/2 - 50, 85, $this->slide_width/2 + 50, 85);
+        
+        // Team members
+        $team = [
+            ['Sailesh Kumar Mulleti', 'Relationship Manager', 'sailesh.mulleti@financedoctor.in', '9949700435'],
+            ['Ajit P Nair', 'Portfolio Manager', 'ajit@financedoctor.in', '---'],
+            ['Support Team', 'Customer Service', 'support@financedoctor.in', '---']
+        ];
+        
+        $start_y = 100;
+        foreach ($team as $member) {
+            $this->SetFont('helvetica', 'B', 14);
+            $this->SetTextColorArray($this->blue);
+            $this->SetXY(80, $start_y);
+            $this->Cell(0, 0, $member[0], 0, 1, 'L');
+            
+            $this->SetFont('helvetica', '', 12);
+            $this->SetTextColor(100, 100, 100);
+            $this->SetXY(80, $start_y + 8);
+            $this->Cell(0, 0, $member[1], 0, 1, 'L');
+            
+            $this->SetFont('helvetica', '', 11);
+            $this->SetTextColorArray($this->teal);
+            $this->SetXY(80, $start_y + 18);
+            $this->Cell(0, 0, '✉ ' . $member[2], 0, 1, 'L');
+            
+            $this->SetXY(80, $start_y + 26);
+            $this->Cell(0, 0, '📞 ' . $member[3], 0, 1, 'L');
+            
+            $start_y += 50;
+        }
+    }
+    
+    // Add Finance Doctor logo to slide
+    private function addLogo() {
+        $logo_path = __DIR__ . '/../image.png';
+        if (file_exists($logo_path)) {
+            $this->Image($logo_path, $this->slide_width - 60, $this->slide_height - 35, 40, 0, 'PNG', '', '', false, 300, '', false, false, 0, false, false, false);
+        } else {
+            // Fallback text logo
+            $this->SetFont('helvetica', 'B', 12);
+            $this->SetTextColorArray($this->blue);
+            $this->SetXY($this->slide_width - 80, $this->slide_height - 30);
+            $this->Cell(0, 0, 'Finance Doctor', 0, 1, 'R');
+        }
+    }
+    
+    // Clean HTML content
+    private function cleanHTML($html) {
+        // Remove scripts
+        $html = preg_replace('/<script\b[^>]*>(.*?)<\/script>/is', '', $html);
+        // Remove styles
+        $html = preg_replace('/<style\b[^>]*>(.*?)<\/style>/is', '', $html);
+        // Remove iframes
+        $html = preg_replace('/<iframe\b[^>]*>(.*?)<\/iframe>/is', '', $html);
+        // Remove JavaScript attributes
+        $html = preg_replace('/\s(onclick|onload|onerror|onmouse|onkey)="[^"]*"/i', '', $html);
+        // Convert HTML entities
+        $html = html_entity_decode($html);
+        // Remove multiple spaces
+        $html = preg_replace('/\s+/', ' ', $html);
+        // Strip tags but keep line breaks
+        $html = strip_tags($html, '<br><p><b><strong><i><em><u>');
+        // Convert <br> and <p> to newlines
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $html = preg_replace('/<\/p>/i', "\n\n", $html);
+        $html = preg_replace('/<p>/i', '', $html);
+        
+        return trim($html);
+    }
+    
+    // Helper method to set color from array
+    private function SetDrawColorArray($color) {
+        $this->SetDrawColor($color[0], $color[1], $color[2]);
+    }
+    
+    private function SetTextColorArray($color) {
+        $this->SetTextColor($color[0], $color[1], $color[2]);
+    }
+    
+    private function SetFillColorArray($color) {
+        $this->SetFillColor($color[0], $color[1], $color[2]);
+    }
 }
 
-// ========== THANK YOU SLIDE ==========
-$finalSlide = $presentation->createSlide();
-$finalSlide->setName('Thank You Slide');
+// Create PDF document
+$pdf = new SlidePDF();
+$pdf->SetTitle('Portfolio Review - ' . $client_name);
 
-// Blue gradient background
-$finalBg = new BgColor();
-$finalBg->setColor(new Color('1F4E79')); // Dark blue
-$finalSlide->setBackground($finalBg);
+// Slide titles from your registry
+$slideTitles = [
+    1 => 'Portfolio Review',
+    2 => 'Our Recommendations',
+    3 => 'Impact of our recommendations',
+    4 => 'Rationale',
+    5 => 'Portfolio at a Glance',
+    6 => 'Slide 6',
+    7 => 'Asset Allocation',
+    8 => 'Slide 8',
+    9 => 'Slide 9',
+    10 => 'Slide 10',
+    11 => 'Fund Performance & Risk Metrics',
+    12 => 'Slide 12',
+    13 => 'Slide 13',
+    14 => 'Tax-Smart Rebalancing',
+    15 => 'Slide 15',
+    16 => 'Your Support Team',
+    17 => 'Slide 17',
+    18 => 'Slide 18',
+    19 => 'Slide 19',
+    20 => 'Slide 20',
+    21 => 'Our Recommendations This Quarter',
+    22 => 'Rationale',
+    23 => 'Strategic & Tax-Smart Rebalancing'
+];
 
-// Thank you text
-$thankYouTitle = $finalSlide->createRichTextShape()
-    ->setHeight(100)
-    ->setWidth(800)
-    ->setOffsetX(80)
-    ->setOffsetY(100);
-$thankYouTitle->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$thankYouRun = $thankYouTitle->createTextRun('Thank You');
-$thankYouRun->getFont()->setBold(true)->setSize(48)->setColor(new Color('FFFFFF'));
-
-// Subtitle
-$subtitleShape = $finalSlide->createRichTextShape()
-    ->setHeight(50)
-    ->setWidth(800)
-    ->setOffsetX(80)
-    ->setOffsetY(180);
-$subtitleShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$subtitleShape->createTextRun('For Your Trust and Partnership')
-    ->getFont()->setSize(24)->setColor(new Color('CCE0FF'));
-
-// Contact info box
-$contactBox = $finalSlide->createRichTextShape()
-    ->setHeight(200)
-    ->setWidth(600)
-    ->setOffsetX(180)
-    ->setOffsetY(250);
-$contactBox->getFill()->setFillType(Fill::FILL_SOLID)
-    ->setStartColor(new Color('FFFFFF')); // White box
-$contactBox->getBorder()->setLineStyle(Border::LINE_SINGLE)
-    ->setColor(new Color('2E75B6'))
-    ->setDashStyle(Border::DASH_SOLID)
-    ->setLineWidth(2);
-
-$contactShape = $finalSlide->createRichTextShape()
-    ->setHeight(180)
-    ->setWidth(580)
-    ->setOffsetX(190)
-    ->setOffsetY(260);
-$contactShape->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-$contactShape->createTextRun("Finance Doctor Wealth Management\n\n")
-    ->getFont()->setSize(20)->setBold(true)->setColor(new Color('2E75B6'));
-
-$contactShape->createTextRun("Relationship Manager\n")
-    ->getFont()->setSize(16)->setColor(new Color('666666'));
-$contactShape->createTextRun("Sailesh Kumar Mulleti\n\n")
-    ->getFont()->setSize(18)->setBold(true)->setColor(new Color('1F4E79'));
-
-$contactShape->createTextRun("✉ sailesh.mulleti@financedoctor.in\n")
-    ->getFont()->setSize(14)->setColor(new Color('2E75B6'));
-$contactShape->createTextRun("📞 9949700435\n\n")
-    ->getFont()->setSize(14)->setColor(new Color('2E75B6'));
-
-$contactShape->createTextRun("Presentation Generated: " . date('F d, Y H:i'))
-    ->getFont()->setSize(12)->setColor(new Color('666666'));
-
-// Final footer
-$finalFooter = $finalSlide->createRichTextShape()
-    ->setHeight(30)
-    ->setWidth(960)
-    ->setOffsetX(0)
-    ->setOffsetY(500);
-$finalFooter->getActiveParagraph()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$finalFooter->createTextRun('© ' . date('Y') . ' Finance Doctor Wealth Management. All Rights Reserved.')
-    ->getFont()->setSize(10)->setColor(new Color('CCE0FF'));
-
-// ========== SAVE PRESENTATION ==========
-$filename = 'Portfolio_Review_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $client_name) . '_' . date('Y-m-d_H-i') . '.pptx';
-
-// Set headers
-header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
-header('Content-Disposition: attachment; filename="' . $filename . '"');
-header('Cache-Control: max-age=0');
-header('Expires: 0');
-header('Pragma: public');
-header('Content-Transfer-Encoding: binary');
-
-// Save presentation
-try {
-    $writer = IOFactory::createWriter($presentation, 'PowerPoint2007');
-    $writer->save('php://output');
-} catch (Exception $e) {
-    // Handle errors gracefully
-    header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html>
-    <html>
-    <head>
-        <title>PPT Generation Error</title>
-        <style>
-            body { font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa; }
-            .error-box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 800px; margin: 50px auto; }
-            h1 { color: #dc3545; }
-            .btn { display: inline-block; padding: 10px 20px; background: #2E75B6; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-        </style>
-    </head>
-    <body>
-        <div class="error-box">
-            <h1>⚠️ PowerPoint Generation Error</h1>
-            <p><strong>Error:</strong> ' . htmlspecialchars($e->getMessage()) . '</p>
-            <p>Please ensure:</p>
-            <ol>
-                <li>All page files exist (page1.php to page23.php)</li>
-                <li>PHPPresentation library is installed: <code>composer require phpoffice/phppresentation</code></li>
-                <li>PHP has sufficient memory (128MB or more)</li>
-                <li>Try the <a href="generate-ppt-simple.php">simple version</a> if this continues</li>
-            </ol>
-            <p><a href="index.php" class="btn">← Back to Report Generator</a></p>
-        </div>
-    </body>
-    </html>';
+// Function to get slide content
+function getSlideContent($slideNumber, $client_id) {
+    // First try to get from database
+    $pages = getClientPages($client_id);
+    
+    if (isset($pages[$slideNumber]) && !empty($pages[$slideNumber]['content'])) {
+        return $pages[$slideNumber]['content'];
+    }
+    
+    // If not in database, try to load from template file
+    $template_file = __DIR__ . '/slides/page' . $slideNumber . '.php';
+    if (file_exists($template_file)) {
+        ob_start();
+        // Set client_id for the template
+        $_GET['client_id'] = $client_id;
+        include $template_file;
+        $content = ob_get_clean();
+        return $content;
+    }
+    
+    // Default content for missing slides
+    return '<div style="padding: 40px; text-align: center;">
+                <h3>Slide ' . $slideNumber . '</h3>
+                <p>Content will be added in the final report.</p>
+            </div>';
 }
+
+// Generate all 23 slides
+for ($i = 1; $i <= 23; $i++) {
+    $title = isset($slideTitles[$i]) ? $slideTitles[$i] : 'Slide ' . $i;
+    $content = getSlideContent($i, $client_id);
+    
+    if ($i == 1) {
+        // Special rendering for Slide 1
+        $pdf->renderSlide1($client_name, $quarter);
+    } else {
+        // Generic rendering for other slides
+        $pdf->renderGenericSlide($i, $title, $content);
+    }
+}
+
+// Output PDF filename
+$filename = 'Portfolio_Review_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $client_name) . '_' . date('Y-m-d') . '.pdf';
+
+// For direct download
+$pdf->Output($filename, 'D');
+
+// Alternative: For browser display
+// header('Content-Type: application/pdf');
+// header('Content-Disposition: inline; filename="' . $filename . '"');
+// $pdf->Output($filename, 'I');
 
 exit;

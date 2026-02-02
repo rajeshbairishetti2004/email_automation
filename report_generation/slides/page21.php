@@ -77,23 +77,35 @@ html, body {
     line-height: 1.8;
 }
 
+/* --- Table styling to match page15.php --- */
 .tax-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
-    font-size: 16px;
+    margin-top: 18px;
+    font-size: 14px;
+    background: #fff;
+}
+.tax-table th, .tax-table td {
+    border: 1px solid #e0e0e0;
+    padding: 7px 10px;
+    text-align: left;
 }
 .tax-table th {
-    background: #4F7DF3;
-    color: #fff;
-    padding: 10px;
-    border: 1px solid #3b66d4;
-    text-align: center;
+    background: #f7fafd;
+    font-weight: bold;
+    color: #2e75b6;
+    font-size: 14px;
+}
+.tax-table tr:nth-child(even) {
+    background: #fafbfc;
+}
+.tax-table .total-row {
+    background: #e8f4ff;
+    font-weight: bold;
 }
 .tax-table td {
-    border: 1px solid #cfd8ff;
-    padding: 8px;
-    text-align: center;
+    color: #222;
+    font-size: 14px;
 }
 
 .note {

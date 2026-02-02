@@ -830,57 +830,11 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         }
 
         // Export as PDF
-        // Export as PDF
-        // Export as PDF - FIXED WORKING VERSION
         function downloadPDF() {
-            console.log('Starting PDF download for client:', CLIENT_ID);
-
-            // Check if loading overlay exists before using it
-            const loadingOverlay = document.getElementById('loadingOverlay');
-            const loadingMessage = document.getElementById('loadingMessage');
-
-            if (loadingOverlay && loadingMessage) {
-                loadingMessage.textContent = 'Generating PDF document...';
-                loadingOverlay.style.display = 'flex';
-            }
-
-            // Create a hidden iframe for PDF download (most reliable method)
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = 'none';
-            iframe.style.position = 'absolute';
-
-            // Add timestamp to prevent caching
-            const timestamp = new Date().getTime();
-            iframe.src = 'generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID) + '&t=' + timestamp;
-
-            document.body.appendChild(iframe);
-
-            console.log('PDF generation iframe created');
-
-            // Hide loading after 3 seconds (even if download hasn't finished)
-            setTimeout(() => {
-                if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
-                }
-
-                // Show a simple alert
-                alert('PDF is being generated. It should start downloading automatically.\n\nIf download doesn\'t start, please:\n1. Check your browser downloads\n2. Allow pop-ups for this site\n3. Try again');
-
-                // Remove iframe after 10 seconds
-                setTimeout(() => {
-                    if (iframe && iframe.parentNode) {
-                        iframe.parentNode.removeChild(iframe);
-                    }
-                }, 10000);
-            }, 3000);
-
-            // Alternative: Also open in new tab as backup
-            setTimeout(() => {
-                window.open('generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
-            }, 1000);
+            showLoading('Generating PDF document...');
+            // Open PDF in a new tab/window for download
+            window.open('generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
+            setTimeout(hideLoading, 2000);
         }
 
         function deleteCurrentSlide() {
