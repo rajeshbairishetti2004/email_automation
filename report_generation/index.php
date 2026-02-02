@@ -22,6 +22,11 @@ $SLIDE_REGISTRY = [
         'template' => 'page3.php',
         'preview' => 'Portfolio and Tax impact analysis of recommendations'
     ],
+    4 => [
+        'title' => 'Rationale',
+        'template' => 'page4.php',
+        'preview' => 'rationale behind our recommendations'
+    ],
     5 => [
         'title' => 'Portfolio at a Glance',
         'template' => 'page5.php',
@@ -31,6 +36,36 @@ $SLIDE_REGISTRY = [
         'title' => 'Asset Allocation',
         'template' => 'page7.php',
         'preview' => 'Current vs recommended asset allocation'
+    ],
+    11 => [
+        'title' => 'Fund Performance & Risk Metrics',
+        'template' => 'page11.php',
+        'preview' => 'Performance of Funds and its Risks'
+    ],
+    14 => [
+        'title' => 'Tax-Smart Rebalancing',
+        'template' => 'page14.php',
+        'preview' => 'Tax efficient rebalancing strategies'
+    ],
+    16 => [
+        'title' => 'Your Support Team',
+        'template' => 'page16.php',
+        'preview' => 'Meet your support team'
+    ],
+    21 => [
+        'title' => 'Our recommendations this quarter',
+        'template' => 'page21.php',
+        'preview' => 'Our recommendations this quarter'
+    ],
+    22 => [
+        'title' => 'Rationale',
+        'template' => 'page22.php',
+        'preview' => 'Rationale'
+    ],
+    23 => [
+        'title' => 'Strategic & Tax-Smart Rebalancing',
+        'template' => 'page23.php',
+        'preview' => 'Strategic & Tax-Smart Rebalancing'
     ],
 
     // add up to 24 slides here later
@@ -239,7 +274,23 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                                     echo "Redeem & Replace investment recommendations";
                                 } elseif ($i == 3) {
                                     echo "Portfolio & Tax impact of recommendations";
-                                } elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
+                                } elseif ($i == 4) {
+                                    echo "Rationale behind our recommendations";
+                                }elseif ($i == 11) {
+                                    echo "Performance & Risk Metrics";
+                                }elseif ($i == 14) {
+                                    echo "Tax -Smart Rebalancing";
+                                }elseif ($i == 16) {
+                                    echo "Your Support Team";
+                                }elseif ($i == 21) {
+                                    echo "Our Recommendations This Quater ";}
+                                elseif ($i == 22) {
+                                    echo "Rationale";
+                                }elseif ($i == 23) {
+                                    echo "Strategic & Tax -Smart Rebalancing";
+                                }
+
+                                elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
                                     if (!empty($pages[$i]['preview_text'])) {
                                         echo htmlspecialchars($pages[$i]['preview_text']);
                                     } else {
