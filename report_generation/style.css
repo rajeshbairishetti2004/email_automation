@@ -112,13 +112,15 @@ body {
 }
 
 .slide-thumbnail:hover {
+    /* Only apply transform on hover, not on active */
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.4);
 }
 
 .slide-thumbnail.active {
     border: 3px solid #4a9eff;
-    transform: translateY(-2px);
+    /* Remove transform here to avoid flicker */
+    /* transform: none; */
     box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
 }
 
@@ -560,3 +562,4 @@ body {
         height: 85%;
     }
 }
+

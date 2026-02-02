@@ -6,6 +6,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once 'database.php';
 
+// Complete slide registry with all slides
 $SLIDE_REGISTRY = [
     1 => [
         'title' => 'Portfolio Review',
@@ -25,35 +26,90 @@ $SLIDE_REGISTRY = [
     4 => [
         'title' => 'Rationale',
         'template' => 'page4.php',
-        'preview' => 'rationale behind our recommendations'
+        'preview' => 'Rationale behind our recommendations'
     ],
     5 => [
         'title' => 'Portfolio at a Glance',
         'template' => 'page5.php',
         'preview' => 'Current portfolio value and goal report'
     ],
+    6 => [
+        'title' => 'Slide 6',
+        'template' => 'page6.php',
+        'preview' => 'No content available'
+    ],
     7 => [
         'title' => 'Asset Allocation',
         'template' => 'page7.php',
         'preview' => 'Current vs recommended asset allocation'
+    ],
+    8 => [
+        'title' => 'Slide 8',
+        'template' => 'page8.php',
+        'preview' => 'No content available'
+    ],
+    9 => [
+        'title' => 'Slide 9',
+        'template' => 'page9.php',
+        'preview' => 'No content available'
+    ],
+    10 => [
+        'title' => 'Slide 10',
+        'template' => 'page10.php',
+        'preview' => 'No content available'
     ],
     11 => [
         'title' => 'Fund Performance & Risk Metrics',
         'template' => 'page11.php',
         'preview' => 'Performance of Funds and its Risks'
     ],
+    12 => [
+        'title' => 'Slide 12',
+        'template' => 'page12.php',
+        'preview' => 'No content available'
+    ],
+    13 => [
+        'title' => 'Slide 13',
+        'template' => 'page13.php',
+        'preview' => 'No content available'
+    ],
     14 => [
         'title' => 'Tax-Smart Rebalancing',
         'template' => 'page14.php',
         'preview' => 'Tax efficient rebalancing strategies'
+    ],
+    15 => [
+        'title' => 'Slide 15',
+        'template' => 'page15.php',
+        'preview' => 'No content available'
     ],
     16 => [
         'title' => 'Your Support Team',
         'template' => 'page16.php',
         'preview' => 'Meet your support team'
     ],
+    17 => [
+        'title' => 'Slide 17',
+        'template' => 'page17.php',
+        'preview' => 'No content available'
+    ],
+    18 => [
+        'title' => 'Slide 18',
+        'template' => 'page18.php',
+        'preview' => 'No content available'
+    ],
+    19 => [
+        'title' => 'Slide 19',
+        'template' => 'page19.php',
+        'preview' => 'No content available'
+    ],
+    20 => [
+        'title' => 'Slide 20',
+        'template' => 'page20.php',
+        'preview' => 'No content available'
+    ],
     21 => [
-        'title' => 'Our recommendations this quarter',
+        'title' => 'Our Recommendations This Quarter',
         'template' => 'page21.php',
         'preview' => 'Our recommendations this quarter'
     ],
@@ -67,10 +123,12 @@ $SLIDE_REGISTRY = [
         'template' => 'page23.php',
         'preview' => 'Strategic & Tax-Smart Rebalancing'
     ],
-
-    // add up to 24 slides here later
+    24 => [
+        'title' => 'Slide 24',
+        'template' => 'page24.php',
+        'preview' => 'No content available'
+    ]
 ];
-
 
 // Get client_id from URL parameter or from referrer
 $client_id = isset($_GET['client_id']) ? $_GET['client_id'] : '';
@@ -215,6 +273,25 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         .back-to-report:hover {
             background: #1e5a96;
         }
+        
+        /* Ensure slide thumbnails container is scrollable and styled */
+        .slide-thumbnails-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            max-height: calc(100vh - 200px);
+        }
+        
+        /* Ensure slide thumbnails show correct active state */
+        .slide-thumbnail.active {
+            border-color: #2E75B6;
+            background-color: #f0f7ff;
+        }
+        
+        .slide-thumbnail.active .slide-number {
+            background-color: #2E75B6;
+            color: white;
+        }
     </style>
 </head>
 
@@ -250,60 +327,24 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
             </div>
 
             <div class="slide-thumbnails-container" id="slideThumbnails">
-                <?php for ($i = 1; $i <= 24; $i++): ?>
+                <?php
+                // Get all registered slides from SLIDE_REGISTRY
+                $allSlides = array_keys($SLIDE_REGISTRY);
+                sort($allSlides);
+                
+                foreach ($allSlides as $i): 
+                    $slideConfig = $SLIDE_REGISTRY[$i];
+                    ?>
                     <div class="slide-thumbnail <?php if ($i == $current_page) echo 'active'; ?>"
-                        onclick="window.location.href='?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $i; ?>'">
+                        data-slide="<?php echo $i; ?>"
+                        onclick="loadSlide(<?php echo $i; ?>)">
                         <div class="slide-number"><?php echo $i; ?></div>
                         <div class="slide-preview-content">
                             <div class="slide-preview-title">
-                                <?php
-                                if (isset($staticSlides[$i])) {
-                                    echo $staticSlides[$i];
-                                } elseif (isset($pages[$i]) && !empty($pages[$i]['title'])) {
-                                    echo htmlspecialchars($pages[$i]['title']);
-                                } else {
-                                    echo "Slide " . $i;
-                                }
-
-                                ?>
+                                <?php echo htmlspecialchars($slideConfig['title']); ?>
                             </div>
                             <div class="slide-preview-text">
-                                <?php
-                                if ($i == 2) {
-                                    // Slide 2 is data-driven, not HTML-driven
-                                    echo "Redeem & Replace investment recommendations";
-                                } elseif ($i == 3) {
-                                    echo "Portfolio & Tax impact of recommendations";
-                                } elseif ($i == 4) {
-                                    echo "Rationale behind our recommendations";
-                                }elseif ($i == 11) {
-                                    echo "Performance & Risk Metrics";
-                                }elseif ($i == 14) {
-                                    echo "Tax -Smart Rebalancing";
-                                }elseif ($i == 16) {
-                                    echo "Your Support Team";
-                                }elseif ($i == 21) {
-                                    echo "Our Recommendations This Quater ";}
-                                elseif ($i == 22) {
-                                    echo "Rationale";
-                                }elseif ($i == 23) {
-                                    echo "Strategic & Tax -Smart Rebalancing";
-                                }
-
-                                elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
-                                    if (!empty($pages[$i]['preview_text'])) {
-                                        echo htmlspecialchars($pages[$i]['preview_text']);
-                                    } else {
-                                        echo 'No preview available';
-                                    }
-                                } elseif (isset($staticSlides[$i])) {
-                                    echo "Template slide";
-                                } else {
-                                    echo "No content";
-                                }
-
-
-                                ?>
+                                <?php echo htmlspecialchars($slideConfig['preview']); ?>
                             </div>
                         </div>
                         <?php if (isset($pages[$i])): ?>
@@ -312,7 +353,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                             </div>
                         <?php endif; ?>
                     </div>
-                <?php endfor; ?>
+                <?php endforeach; ?>
             </div>
         </div>
 
@@ -357,37 +398,37 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
 
             <div class="ppt-slide-area">
                 <div class="slide-frame">
-
-
-
-                    <?php if (
-                        $current_page === 1 ||
-                        $current_page === 2 ||
-                        $current_page === 3 ||
-                        isset($pages[$current_page])
-                    ): ?>
-                        <iframe
-                            id="slideIframe"
-                            src="render_slide.php?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $current_page; ?>"
-                            style="width:100%;height:100%;border:none;background:white;"
-                            title="Slide <?php echo $current_page; ?>">
-                        </iframe>
-                    <?php else: ?>
-                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; background: #f9f9f9;">
-                            <i class="fas fa-file-alt fa-4x" style="color: #ccc; margin-bottom: 20px;"></i>
-                            <h3 style="color: #999;">No slide content yet</h3>
-                            <p style="color: #aaa; margin-top: 10px;">Click Edit to create this slide</p>
-                            <button class="btn btn-primary" onclick="toggleEditMode()" style="margin-top: 20px;">
-                                <i class="fas fa-edit"></i> Edit Slide
-                            </button>
-                        </div>
-                    <?php endif; ?>
-
+                    <iframe
+                        id="slideIframe"
+                        src="render_slide.php?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $current_page; ?>"
+                        style="width:100%;height:100%;border:none;background:white;"
+                        title="Slide <?php echo $current_page; ?>">
+                    </iframe>
                 </div>
             </div>
 
             <!-- PowerPoint Style Status Bar -->
-
+            <div class="ppt-status-bar"
+                 style="
+                    position: fixed;
+                    right: 30px;
+                    bottom: 30px;
+                    background: #2E75B6;
+                    color: white;
+                    padding: 10px 28px;
+                    border-radius: 24px;
+                    box-shadow: 0 4px 16px rgba(46,117,182,0.18);
+                    display: flex;
+                    align-items: center;
+                    gap: 24px;
+                    font-size: 15px;
+                    z-index: 1000;
+                    min-width: 120px;
+                 ">
+                <div class="status-item" id="currentSlideDisplay" style="font-weight:600;">
+                    Slide <?php echo $current_page; ?> of <?php echo count($allSlides); ?>
+                </div>    
+            </div>
         </div>
     </div>
 
@@ -438,47 +479,120 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         const CLIENT_ID = '<?php echo addslashes($client_id); ?>';
         const CLIENT_NAME = '<?php echo addslashes($client_name); ?>';
         const ACTUAL_CLIENT_ID = <?php echo $actual_client_id; ?>;
-        let activeImageId = null;
-        let messageCounter = 0;
+        const TOTAL_SLIDES = <?php echo count($allSlides); ?>;
 
-        // Update current time in status bar
+        // Function to load slide without page reload (PowerPoint-like)
+        function loadSlide(slideNumber) {
+            if (slideNumber < 1 || slideNumber > TOTAL_SLIDES) return;
+            if (slideNumber === currentSlide) return; // Don't scroll or reload if already on this slide
 
-        // Tab switching
-        function switchTab(tabName) {
-            // Hide all tabs
-            document.getElementById('propertiesTab').style.display = 'none';
-            document.getElementById('notesTab').style.display = 'none';
-            document.getElementById('messagesTab').style.display = 'none';
+            currentSlide = slideNumber;
 
-            // Remove active class from all tabs
-            document.querySelectorAll('.properties-tab').forEach(tab => {
-                tab.classList.remove('active');
+            // Update active state in sidebar
+            document.querySelectorAll('.slide-thumbnail').forEach(thumb => {
+                const slideNum = parseInt(thumb.getAttribute('data-slide'));
+                if (slideNum === slideNumber) {
+                    thumb.classList.add('active');
+                } else {
+                    thumb.classList.remove('active');
+                }
             });
 
-            // Show selected tab
-            document.getElementById(tabName + 'Tab').style.display = 'block';
+            // Update status bar
+            document.getElementById('currentSlideDisplay').innerHTML = `Slide ${slideNumber} of ${TOTAL_SLIDES}`;
 
-            // Add active class to clicked tab
-            event.target.classList.add('active');
+            // Update URL without page reload
+            const url = new URL(window.location);
+            url.searchParams.set('page', slideNumber);
+            window.history.pushState({}, '', url);
+
+            // Show loading
+            showLoading('Loading slide...');
+
+            // Load slide in iframe with timestamp to prevent caching
+            const timestamp = new Date().getTime();
+            const iframe = document.getElementById('slideIframe');
+            iframe.src = `render_slide.php?client_id=${encodeURIComponent(CLIENT_ID)}&page=${slideNumber}&t=${timestamp}`;
+
+            // Hide loading when iframe is loaded
+            iframe.onload = function() {
+                hideLoading();
+            };
         }
 
         // Navigation functions
         function goToSlide(slideNumber) {
-            if (slideNumber >= 1 && slideNumber <= 24) {
-                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + slideNumber;
-            }
+            loadSlide(slideNumber);
         }
-
         function prevSlide() {
             if (currentSlide > 1) {
-                goToSlide(currentSlide - 1);
+                loadSlide(currentSlide - 1);
+            }
+        }
+        function nextSlide() {
+            if (currentSlide < TOTAL_SLIDES) {
+                loadSlide(currentSlide + 1);
             }
         }
 
-        function nextSlide() {
-            if (currentSlide < 24) {
-                goToSlide(currentSlide + 1);
+        // Update current time in status bar
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+            document.getElementById('currentTime').textContent = timeString;
+        }
+        setInterval(updateCurrentTime, 60000);
+        updateCurrentTime();
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                prevSlide();
+                e.preventDefault();
             }
+            if (e.key === 'ArrowRight' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                nextSlide();
+                e.preventDefault();
+            }
+            if ((e.key === ' ' || e.key === 'PageDown') && !e.ctrlKey && !e.altKey) {
+                nextSlide();
+                e.preventDefault();
+            }
+            if (e.key === 'PageUp' && !e.ctrlKey && !e.altKey) {
+                prevSlide();
+                e.preventDefault();
+            }
+            if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey) {
+                const num = parseInt(e.key);
+                if (num <= TOTAL_SLIDES) {
+                    loadSlide(num);
+                }
+            }
+        });
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', function(event) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const page = urlParams.get('page');
+            if (page) {
+                const slideNum = parseInt(page);
+                if (!isNaN(slideNum) && slideNum >= 1 && slideNum <= TOTAL_SLIDES) {
+                    loadSlide(slideNum);
+                }
+            }
+        });
+
+        // Loading overlay
+        function showLoading(msg = "Loading...") {
+            document.getElementById('loadingMessage').textContent = msg;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
         }
 
         // Edit mode toggle
@@ -684,7 +798,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
 
         // Duplicate current slide
         function duplicateCurrentSlide() {
-            if (currentSlide >= 24) {
+            if (currentSlide >= TOTAL_SLIDES) {
                 showMessage('Error', 'Cannot duplicate - maximum slides reached.', 'error');
                 return;
             }
@@ -939,7 +1053,7 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Welcome message
-            showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 24 loaded.`, 'info');
+            showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of ${TOTAL_SLIDES} loaded.`, 'info');
 
             // Keyboard shortcuts
             document.addEventListener('keydown', function(e) {
@@ -969,22 +1083,49 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
 
         function editCurrentSlide() {
             const iframe = getSlideIframe();
-            if (iframe && iframe.contentWindow.enableEdit) {
+            if (iframe && iframe.contentWindow && iframe.contentWindow.enableEdit) {
                 iframe.contentWindow.enableEdit();
             } else {
-                alert('This slide is not editable');
+                alert('This slide is not editable or edit function not available');
             }
         }
 
         function saveCurrentSlide() {
             const iframe = getSlideIframe();
-            if (iframe && iframe.contentWindow.saveSlide) {
+            if (iframe && iframe.contentWindow && iframe.contentWindow.saveSlide) {
                 iframe.contentWindow.saveSlide();
             } else {
-                alert('Nothing to save on this slide');
+                alert('Nothing to save on this slide or save function not available');
             }
         }
+
+        // Function to scroll to active slide in sidebar ONLY if not already visible
+        function scrollToActiveSlide() {
+            const activeSlide = document.querySelector('.slide-thumbnail.active');
+            if (activeSlide) {
+                const sidebar = document.querySelector('.slide-thumbnails-container');
+                const sidebarRect = sidebar.getBoundingClientRect();
+                const slideRect = activeSlide.getBoundingClientRect();
+
+                // Only scroll if active slide is not fully visible in the sidebar viewport
+                if (slideRect.top < sidebarRect.top || slideRect.bottom > sidebarRect.bottom) {
+                    // Calculate scroll position so active slide is centered
+                    const slideTop = slideRect.top - sidebarRect.top + sidebar.scrollTop;
+                    const slideMiddle = slideTop - (sidebarRect.height / 2) + (slideRect.height / 2);
+                    sidebar.scrollTo({
+                        top: slideMiddle,
+                        behavior: 'smooth'
+                    });
+                }
+                // If already visible, do nothing (no scroll)
+            }
+        }
+
+        // Initialize - scroll to active slide on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(scrollToActiveSlide, 100);
+            // ...existing code...
+        });
     </script>
 </body>
-
 </html>
