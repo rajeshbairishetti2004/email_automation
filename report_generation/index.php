@@ -37,10 +37,20 @@ $SLIDE_REGISTRY = [
         'template' => 'page7.php',
         'preview' => 'Current vs recommended asset allocation'
     ],
+    8 => [
+        'title' => 'Equity MCAP allocation',
+        'template' => 'page8.php',
+        'preview' => 'Equity MCAP allocation'
+    ],
     11 => [
         'title' => 'Fund Performance & Risk Metrics',
         'template' => 'page11.php',
         'preview' => 'Performance of Funds and its Risks'
+    ],
+    13 => [
+        'title' => 'Strategic Rebalancing',
+        'template' => 'page13.php',
+        'preview' => 'Strategic rebalancing strategies'
     ],
     14 => [
         'title' => 'Tax-Smart Rebalancing',
@@ -276,8 +286,12 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                                     echo "Portfolio & Tax impact of recommendations";
                                 } elseif ($i == 4) {
                                     echo "Rationale behind our recommendations";
+                                }elseif ($i == 8) {
+                                     echo "Equity MCAP allocation";
                                 }elseif ($i == 11) {
                                     echo "Performance & Risk Metrics";
+                                }elseif ($i == 13) {
+                                    echo "Strategic Rebalancing";
                                 }elseif ($i == 14) {
                                     echo "Tax -Smart Rebalancing";
                                 }elseif ($i == 16) {
