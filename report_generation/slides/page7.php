@@ -322,7 +322,16 @@ $colors = ['#4f7df3', '#2eb85c', '#f9b115', '#e55353'];
             As a first step, reduce Indian equity allocation slightly and reinvest into global equity.
         </div>
 
-        <div class="logo"><img src="/image.png"></div>
+        <div class="logo"><img 
+    src="/email_automation/image.png"
+    alt="Finance Doctor"
+    style="
+        width: 140px;
+        height: auto;
+        display: block;
+        margin-left: 10px;
+    "
+></div>
         <div class="footer"></div>
     </div>
 

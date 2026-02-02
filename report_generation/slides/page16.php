@@ -140,7 +140,16 @@ html, body {
 </div>
 
 <div class="slide-logo">
-    <img src="/image.png" alt="Finance Doctor">
+   <img 
+    src="/email_automation/image.png"
+    alt="Finance Doctor"
+    style="
+        width: 140px;
+        height: auto;
+        display: block;
+        margin-left: 10px;
+    "
+>
 </div>
 <div class="slide-footer-bar"></div>
 </div>
