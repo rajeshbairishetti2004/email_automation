@@ -32,6 +32,11 @@ $SLIDE_REGISTRY = [
         'template' => 'page5.php',
         'preview' => 'Current portfolio value and goal report'
     ],
+    6 => [
+        'title' => 'Investment Journey',
+        'template' => 'page6.php',
+        'preview' => 'Investment journey graph'
+    ],
     7 => [
         'title' => 'Asset Allocation',
         'template' => 'page7.php',
@@ -286,6 +291,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                                     echo "Portfolio & Tax impact of recommendations";
                                 } elseif ($i == 4) {
                                     echo "Rationale behind our recommendations";
+                                }elseif ($i == 6) {
+                                    echo "investment journey graph";
                                 }elseif ($i == 8) {
                                      echo "Equity MCAP allocation";
                                 }elseif ($i == 11) {
