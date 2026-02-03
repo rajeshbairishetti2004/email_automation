@@ -216,6 +216,47 @@ if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
             height: 10px;
             background: #21B6A8;
         }
+
+        .logo {
+            position: absolute;
+            right: 40px;
+            bottom: 28px;
+        }
+
+        .logo img {
+            width: 120px;
+        }
+
+        .snapshot-table {
+            margin-top: 15px;
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            max-width: calc(100% - 140px);
+        }
+
+        .snapshot-table th {
+            background: #F4F6FA;
+            color: #333;
+            padding: 8px;
+            border: 1px solid #dcdcdc;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .snapshot-table td {
+            padding: 8px;
+            border: 1px solid #dcdcdc;
+            text-align: right;
+            font-weight: 600;
+        }
+        .snapshot-table th:first-child {
+    width: 110px;
+    white-space: nowrap;
+    font-size: 12px;
+}
     </style>
 </head>
 
@@ -234,19 +275,25 @@ if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
             </div>
 
             <div class="section">Investment Snapshot</div>
-            <table>
-                <?php foreach ($tableData as $k => $v): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($k) ?></td>
-                        <td><?= htmlspecialchars($v) ?></td>
-                    </tr>
-                <?php endforeach; ?>
+
+            <table class="snapshot-table">
                 <tr>
-                    <td>XIRR</td>
+                    <?php foreach ($snapshot as $label => $val): ?>
+                        <th><?= htmlspecialchars($label) ?></th>
+                    <?php endforeach; ?>
+                    <th>XIRR</th>
+                </tr>
+                <tr>
+                    <?php foreach ($snapshot as $val): ?>
+                        <td>₹<?= $val ?></td>
+                    <?php endforeach; ?>
                     <td><?= $xirr ?></td>
                 </tr>
             </table>
+        </div>
 
+        <div class="logo">
+            <img src="/email_automation/image.png" alt="Finance Doctor">
         </div>
         <div class="footer"></div>
     </div>

@@ -188,7 +188,7 @@ window.saveSlide = () => {
         e.classList.remove('editing');
     });
 
-    fetch('/report_generation/slides/page8.php',{method:'POST',body:f})
+    fetch('/email_automation/report_generation/slides/page8.php',{method:'POST',body:f})
     .then(r=>r.json())
     .then(res=>{
         if(res.success){

@@ -129,7 +129,7 @@ window.saveSlide = () => {
         el.classList.remove('editing');
     });
 
-    fetch('/report_generation/slides/page22.php', {
+    fetch('/email_automation/report_generation/slides/page22.php', {
         method: 'POST',
         body: form
     })

@@ -187,7 +187,7 @@ function renderSlide2Template(array $data = [])
                 e.classList.remove('editing');
             });
 
-            fetch('/report_generation/slides/page2.php', {
+            fetch('/email_automation/report_generation/slides/page2.php', {
                     method: 'POST',
                     body: form
                 })
