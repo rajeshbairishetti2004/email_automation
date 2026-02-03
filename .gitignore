@@ -89,6 +89,7 @@ storage/logs/
 /public/uploads/
 /storage/uploads/
 !uploads/.gitkeep
+/report_generation/extracted/
 
 # ========== DATABASE ============
 # Database files and dumps

@@ -4,299 +4,249 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/../database.php';
-require_once __DIR__ . '/../../vendor/autoload.php';
 
-use Smalot\PdfParser\Parser;
-
-/* =========================
+/* =====================================================
    CLIENT CONTEXT
-========================= */
+===================================================== */
 
 $clientKey = $_SESSION['current_client_id'] ?? '';
-$clientId  = (int)str_replace('CLIENT_', '', $clientKey);
+$clientId  = (int) str_replace('CLIENT_', '', $clientKey);
 
 if ($clientId <= 0) {
     echo "<div style='padding:40px;color:#999;'>Client not found</div>";
-    return;
+    exit;
 }
 
-/* =========================
+/* =====================================================
    FIND CLIENT PDF
-========================= */
-$clientAttachDir = __DIR__ . '/../../uploads/attachments/client_' . $clientId;
+===================================================== */
+
+$clientAttachDir = __DIR__ . "/../../uploads/attachments/client_$clientId";
 
 if (!is_dir($clientAttachDir)) {
     echo "<div style='padding:40px;color:#999;'>No attachment folder found</div>";
-    return;
+    exit;
 }
 
-$pdfFile = null;
-$parser  = new Parser();
-
-foreach (glob($clientAttachDir . '/*.pdf') as $file) {
-    try {
-        $pdf  = $parser->parseFile($file);
-        $text = strtolower(preg_replace('/\s+/', ' ', $pdf->getText()));
-
-        if (
-            strpos($text, 'investment journey report') !== false &&
-            strpos($text, 'investment snapshot') !== false
-        ) {
-            $pdfFile = $file;
-            break;
-        }
-    } catch (Throwable $e) {
-    }
-}
+$pdfFiles = glob($clientAttachDir . '/*.pdf');
+$pdfFile  = $pdfFiles[0] ?? null;
 
 if (!$pdfFile) {
     echo "<div style='padding:40px;color:#999;'>Investment PDF not found</div>";
-    return;
+    exit;
 }
 
-/* =========================
-   HARD-CODED GRAPH EXTRACTION
-   (same as crop.php)
-========================= */
-$imgDir = __DIR__ . '/../extracted';
-if (!is_dir($imgDir)) mkdir($imgDir, 0777, true);
+/* =====================================================
+   GRAPH EXTRACTION (PAGE 1)
+===================================================== */
 
-// remove old graph images for this client
-foreach (glob($imgDir . "/client{$clientId}_graph_*.png") as $old) {
+$imgDir = __DIR__ . '/../extracted';
+if (!is_dir($imgDir)) {
+    mkdir($imgDir, 0777, true);
+}
+
+// cleanup old graphs
+foreach (glob("$imgDir/client{$clientId}_graph_*.png") as $old) {
     @unlink($old);
 }
 
 $version   = time();
-$imageBase = $imgDir . "/client{$clientId}_graph_$version";
-$imagePath = $imageBase . "-1.png";
+$imageBase = "$imgDir/client{$clientId}_graph_$version";
+$imagePath = "$imageBase-1.png";
 
 $pdftoppm = "C:\\poppler\\Library\\bin\\pdftoppm.exe";
 
-/*
-  VERIFIED HARD-CODED VALUES
-  -------------------------
-  DPI = 340
-  y   = 600   → below black line
-  H   = 950   → till x-axis dates
-  W   = 2750
-*/
 $cmd = "\"$pdftoppm\" -png -r 340 -f 1 -l 1 -x 0 -y 600 -W 2850 -H 1100 \"$pdfFile\" \"$imageBase\"";
 exec($cmd);
 
 if (!file_exists($imagePath)) {
     echo "<div style='padding:40px;color:#999;'>Graph extraction failed</div>";
-    return;
+    exit;
 }
 
-/* =========================
-   TABLE DATA EXTRACTION
-========================= */
-$pdf  = $parser->parseFile($pdfFile);
-$text = preg_replace('/\s+/', ' ', $pdf->getText());
+$imageUrl = "/email_automation/report_generation/extracted/" . basename($imagePath);
 
-function extractVal($text, $label)
+/* =====================================================
+   SNAPSHOT OCR (PYTHON)
+===================================================== */
+
+$pythonExe    = "C:\\Users\\vigne\\AppData\\Local\\Programs\\Python\\Python314\\python.exe";
+$pythonScript = "C:\\xampp\\htdocs\\email_automation\\report_generation\\snapshot_ocr.py";
+
+if (!file_exists($pythonScript)) {
+    echo "<pre>Python script not found:\n$pythonScript</pre>";
+    exit;
+}
+
+$cmd    = "\"$pythonExe\" \"$pythonScript\" \"$pdfFile\" 2>&1";
+$output = shell_exec($cmd);
+
+$data = json_decode($output, true);
+
+if (!is_array($data)) {
+    echo "<pre>OCR ERROR:\n$output</pre>";
+    exit;
+}
+
+/* =====================================================
+   HELPERS
+===================================================== */
+
+function money($v)
 {
-    if (preg_match('/' . $label . '\s*\([A-Z\-+]+\)\s*([0-9,]+)/i', $text, $m)) {
-        return '₹' . number_format((int)str_replace(',', '', $m[1]));
+    if ($v === null || $v === '' || $v === '-') {
+        return '₹ -';
     }
-    return '-';
+    return '₹' . number_format((int)$v);
 }
 
-function extractNumber($text, $label)
-{
-    if (preg_match('/' . preg_quote($label, '/') . '\s*\([A-Z\-+]+\)\s*([0-9,]+)/i', $text, $m)) {
-        return number_format((int)str_replace(',', '', $m[1]));
-    }
-    return '-';
-}
+/* =====================================================
+   SNAPSHOT DATA (FINAL & CORRECT)
+===================================================== */
 
 $snapshot = [
-    'Investment (A)'                   => extractNumber($text, 'Investment'),
-    'Switch In (B)'                    => extractNumber($text, 'Switch In'),
-    'Switch Out (C)'                   => extractNumber($text, 'Switch Out'),
-    'Redemption (D)'                   => extractNumber($text, 'Redemption'),
-    'Div. Payout / FD Interest (E)'    => extractNumber($text, 'Div. Payout'),
-    'Current Value (F)'                => extractNumber($text, 'Current Value'),
-    'Net Gain'                         => extractNumber($text, 'Net Gain'),
+    'Investment (A)'                => money($data['investment']     ?? '-'),
+    'Switch In (B)'                 => money($data['switch_in']      ?? '-'),
+    'Switch Out (C)'                => money($data['switch_out']     ?? '-'),
+    'Redemption (D)'                => money($data['redemption']     ?? '-'),
+    'Div. Payout / FD Interest (E)' => money($data['div_payout']     ?? '-'),
+    'Current Value (F)'             => money($data['current_value']  ?? '-'),
+    'Net Gain'                      => money($data['net_gain']       ?? '-'),
 ];
 
-$xirr = '-';
-if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
-    $xirr = number_format($m[1], 2) . '%';
-}
-
-$xirr = '-';
-if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
-    $xirr = number_format($m[1], 2) . '%';
-}
+$xirr = $data['xirr'] ?? '-';
 ?>
 
 <!DOCTYPE html>
 <html>
-
 <head>
-    <meta charset="UTF-8">
-    <title>Investment Journey</title>
+<meta charset="UTF-8">
+<title>Investment Journey</title>
 
-    <style>
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background: #fff;
-            font-family: Calibri, "Segoe UI", Arial, sans-serif;
-        }
+<style>
+body {
+    margin: 0;
+    background: #fff;
+    font-family: Calibri, "Segoe UI", Arial, sans-serif;
+}
 
-        .slide {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
+.slide {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
 
-        .content {
-            padding: 25px 90px;
-        }
+.content {
+    padding: 25px 180px 25px 90px;
+}
 
-        .title {
-            text-align: center;
-            font-size: 42px;
-            color: #3B73E8;
-            font-weight: 600;
-        }
+.title {
+    text-align: center;
+    font-size: 42px;
+    color: #3B73E8;
+    font-weight: 600;
+}
 
-        .section {
-            margin-top: 0px;
-            color: #0A3DBA;
-            font-size: 20px;
-            font-weight: 600;
-        }
+.section {
+    color: #0A3DBA;
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 10px;
+}
 
-        .graph-box {
-            width: 85%;
-            height: 320px;
-            border: 1px solid #dcdcdc;
-            overflow: hidden;
-        }
+.graph-box {
+    width: 100%;
+    height: 320px;
+    border: 1px solid #dcdcdc;
+    overflow: hidden;
+}
 
-        .graph-box img {
-            width: 100%;
-            display: block;
-        }
+.graph-box img {
+    width: 100%;
+}
 
-        table {
-            margin-top: 15px;
-            border-collapse: collapse;
-            font-size: 15px;
-        }
-
-        td {
-            padding: 6px 10px;
-            border: 1px solid #dcdcdc;
-        }
-
-        td:first-child {
-            background: #3B73E8;
-            color: #fff;
-            font-weight: 600;
-            width: 300px;
-        }
-
-        td:last-child {
-            text-align: right;
-            font-weight: 600;
-        }
-
-        .footer {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 10px;
-            background: #21B6A8;
-        }
-
-        .logo {
-            position: absolute;
-            right: 40px;
-            bottom: 28px;
-        }
-
-        .logo img {
-            width: 120px;
-        }
-
-        .snapshot-table {
-            margin-top: 15px;
-            table-layout: fixed;
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-            max-width: calc(100% - 140px);
-        }
-
-        .snapshot-table th {
-            background: #F4F6FA;
-            color: #333;
-            padding: 8px;
-            border: 1px solid #dcdcdc;
-            font-weight: 600;
-            text-align: center;
-            white-space: nowrap;
-        }
-
-        .snapshot-table td {
-            padding: 8px;
-            border: 1px solid #dcdcdc;
-            text-align: right;
-            font-weight: 600;
-        }
-        .snapshot-table th:first-child {
-    width: 110px;
-    white-space: nowrap;
+.snapshot-table {
+    width: calc(100% - 20px);
+    margin-top: 15px;
+    table-layout: fixed;
+    border-collapse: collapse;
     font-size: 12px;
 }
-    </style>
+
+.snapshot-table th,
+.snapshot-table td {
+    border: 1px solid #dcdcdc;
+    padding: 6px 5px;
+    text-align: center;
+}
+
+.snapshot-table th {
+    background: #F4F6FA;
+    font-weight: 600;
+}
+
+.snapshot-table td {
+    font-weight: 600;
+    text-align: right;
+}
+
+.logo {
+    position: absolute;
+    right: 40px;
+    bottom: 28px;
+}
+
+.logo img {
+    width: 120px;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 10px;
+    background: #21B6A8;
+}
+</style>
 </head>
 
 <body>
-    <div class="slide">
-        <div class="content">
+<div class="slide">
+<div class="content">
 
-            <div class="title">Investment Journey</div>
+<div class="title">Investment Journey</div>
 
-            <div class="section">Portfolio Growth</div>
-            <div class="graph-box">
-                <?php
-                $imageUrl = "/email_automation/report_generation/extracted/" . basename($imagePath);
-                ?>
-                <img src="<?= $imageUrl ?>" alt="Investment Graph">
-            </div>
+<div class="section">Portfolio Growth</div>
+<div class="graph-box">
+    <img src="<?= $imageUrl ?>" alt="Investment Graph">
+</div>
 
-            <div class="section">Investment Snapshot</div>
+<div class="section">Investment Snapshot</div>
 
-            <table class="snapshot-table">
-                <tr>
-                    <?php foreach ($snapshot as $label => $val): ?>
-                        <th><?= htmlspecialchars($label) ?></th>
-                    <?php endforeach; ?>
-                    <th>XIRR</th>
-                </tr>
-                <tr>
-                    <?php foreach ($snapshot as $val): ?>
-                        <td>₹<?= $val ?></td>
-                    <?php endforeach; ?>
-                    <td><?= $xirr ?></td>
-                </tr>
-            </table>
-        </div>
+<table class="snapshot-table">
+<tr>
+<?php foreach ($snapshot as $label => $_): ?>
+    <th><?= htmlspecialchars($label) ?></th>
+<?php endforeach; ?>
+<th>XIRR</th>
+</tr>
 
-        <div class="logo">
-            <img src="/email_automation/image.png" alt="Finance Doctor">
-        </div>
-        <div class="footer"></div>
-    </div>
+<tr>
+<?php foreach ($snapshot as $value): ?>
+    <td><?= $value ?></td>
+<?php endforeach; ?>
+<td><?= htmlspecialchars($xirr) ?></td>
+</tr>
+</table>
+
+</div>
+
+<div class="logo">
+    <img src="/email_automation/image.png" alt="Logo">
+</div>
+
+<div class="footer"></div>
+</div>
 </body>
-
 </html>
