@@ -162,7 +162,7 @@ function renderSlide2Template(array $data = [])
             </ul>
         </div>
         <div class="slide-logo">
-            <img src="/image.png"
+            <img src="/email_automation/image.png"
                 alt="Finance Doctor">
         </div>
         <div class="slide-footer-bar"></div>

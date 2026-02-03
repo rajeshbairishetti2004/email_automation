@@ -80,7 +80,7 @@ $pdftoppm = "C:\\poppler\\Library\\bin\\pdftoppm.exe";
   H   = 950   → till x-axis dates
   W   = 2750
 */
-$cmd = "\"$pdftoppm\" -png -r 340 -f 1 -l 1 -x 0 -y 600 -W 2750 -H 950 \"$pdfFile\" \"$imageBase\"";
+$cmd = "\"$pdftoppm\" -png -r 340 -f 1 -l 1 -x 0 -y 600 -W 2850 -H 1100 \"$pdfFile\" \"$imageBase\"";
 exec($cmd);
 
 if (!file_exists($imagePath)) {
@@ -102,11 +102,28 @@ function extractVal($text, $label)
     return '-';
 }
 
-$tableData = [
-    'Investment (A)'    => extractVal($text, 'Investment'),
-    'Current Value (F)' => extractVal($text, 'Current Value'),
-    'Net Gain'          => extractVal($text, 'Net Gain'),
+function extractNumber($text, $label)
+{
+    if (preg_match('/' . preg_quote($label, '/') . '\s*\([A-Z\-+]+\)\s*([0-9,]+)/i', $text, $m)) {
+        return number_format((int)str_replace(',', '', $m[1]));
+    }
+    return '-';
+}
+
+$snapshot = [
+    'Investment (A)'                   => extractNumber($text, 'Investment'),
+    'Switch In (B)'                    => extractNumber($text, 'Switch In'),
+    'Switch Out (C)'                   => extractNumber($text, 'Switch Out'),
+    'Redemption (D)'                   => extractNumber($text, 'Redemption'),
+    'Div. Payout / FD Interest (E)'    => extractNumber($text, 'Div. Payout'),
+    'Current Value (F)'                => extractNumber($text, 'Current Value'),
+    'Net Gain'                         => extractNumber($text, 'Net Gain'),
 ];
+
+$xirr = '-';
+if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
+    $xirr = number_format($m[1], 2) . '%';
+}
 
 $xirr = '-';
 if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
@@ -139,7 +156,7 @@ if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
         }
 
         .content {
-            padding: 80px 90px;
+            padding: 25px 90px;
         }
 
         .title {
@@ -150,7 +167,7 @@ if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
         }
 
         .section {
-            margin-top: 25px;
+            margin-top: 0px;
             color: #0A3DBA;
             font-size: 20px;
             font-weight: 600;
@@ -211,7 +228,7 @@ if (preg_match('/XIRR\s*([0-9.]+)\s*%/i', $text, $m)) {
             <div class="section">Portfolio Growth</div>
             <div class="graph-box">
                 <?php
-                $imageUrl = "/report_generation/extracted/" . basename($imagePath);
+                $imageUrl = "/email_automation/report_generation/extracted/" . basename($imagePath);
                 ?>
                 <img src="<?= $imageUrl ?>" alt="Investment Graph">
             </div>

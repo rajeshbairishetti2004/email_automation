@@ -92,7 +92,7 @@ $quarter = $quarterMap[ceil($month / 3)] . ' ' . $year;
 ">
 
     <img 
-        src="/image.png"
+        src="/email_automation/image.png"
         alt="Finance Doctor"
         style="
             width: 140px;

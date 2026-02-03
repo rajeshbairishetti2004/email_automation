@@ -149,7 +149,7 @@ ul.sub {
 </div>
 
 <div class="slide-logo">
-    <img src="/image.png" alt="Finance Doctor">
+    <img src="/email_automation/image.png" alt="Finance Doctor">
 </div>
 <div class="slide-footer-bar"></div>
 </div>
