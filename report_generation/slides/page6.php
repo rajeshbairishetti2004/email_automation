@@ -124,6 +124,11 @@ $xirr = $data['xirr'] ?? '-';
 <title>Investment Journey</title>
 
 <style>
+    html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
 body {
     margin: 0;
     background: #fff;
@@ -133,7 +138,8 @@ body {
 .slide {
     position: relative;
     width: 100%;
-    height: 100%;
+    height: 100vh;   /* 👈 KEY FIX */
+    overflow: hidden;
 }
 
 .content {
