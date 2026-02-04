@@ -577,6 +577,44 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                         </div>
                     </div>
 
+                    <!-- Signature Section -->
+                    <?php
+                    // Include signature.php with modifications for send_email context
+                    $signatureStored = '';
+                    $rmName = '';
+                    $rmDesignation = '';
+                    $rmMobile = '';
+                    $rmEmail = '';
+                    
+                    // Get the first user from sendAsProfiles as default
+                    if (!empty($sendAsProfiles)) {
+                        $firstProfile = reset($sendAsProfiles);
+                        $rmName = $firstProfile['name'] ?? '';
+                        $rmDesignation = $firstProfile['designation'] ?? '';
+                        $rmMobile = ''; // Not available in sendAsProfiles
+                        $rmEmail = key($sendAsProfiles); // The email is the key in the array
+                    }
+                    
+                    // Load signature.php content directly
+                    $signatureContent = file_get_contents(__DIR__ . '/signature.php');
+                    
+                    // Modify the signature.php content to work in send_email context
+                    $signatureContent = str_replace(
+                        'require_once \'db_config.php\';',
+                        '// Database already included',
+                        $signatureContent
+                    );
+                    
+                    $signatureContent = str_replace(
+                        '$pdo = getPdo();',
+                        'global $pdo;',
+                        $signatureContent
+                    );
+                    
+                    // Execute the modified signature.php
+                    eval('?>' . $signatureContent);
+                    ?>
+
                     <!-- Follow-up Section -->
                     <div class="followup-section" id="followup_section">
                         <div class="followup-toggle-container">
@@ -694,6 +732,24 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         const followupTextarea = document.getElementById('followup_message');
         if (followupTextarea) {
             autoResizeFollowup(followupTextarea);
+        }
+        
+        // Add listener for signature changes
+        const signatureTextarea = document.getElementById('signature_block');
+        if (signatureTextarea) {
+            signatureTextarea.addEventListener('change', function() {
+                // Update follow-up if it contains old signature
+                const followupText = document.getElementById('followup_message').value;
+                const newSignature = this.value;
+                
+                // Check if follow-up already has a signature
+                if (followupText.includes('Regards,')) {
+                    // Extract the part before "Regards,"
+                    const beforeSignature = followupText.split('Regards,')[0];
+                    document.getElementById('followup_message').value = beforeSignature.trim() + '\n\n' + newSignature;
+                    autoResizeFollowup(document.getElementById('followup_message'));
+                }
+            });
         }
     });
     
@@ -1231,10 +1287,12 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         const textarea = document.getElementById('followup_message');
         const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
         
+        // Get the signature from signature.php textarea
+        const signatureTextarea = document.getElementById('signature_block');
+        const signature = signatureTextarea ? signatureTextarea.value : '';
+        
         const templates = {
-            default: `<?php echo addslashes(
-                $lastFollowup ?: 
-                "Dear {$clientInfo['name']},
+            default: `Dear ${clientName},
 
 I hope you are doing well.
 
@@ -1242,21 +1300,9 @@ We have sent your quarterly review for this month, it would be good to connect o
 
 Please let me know your convenience, and I will be happy to schedule the meeting accordingly.
 
-
 Looking forward to speaking with you.
 
-
-Regards,
-
-Sailesh Kumar Mulleti
-Head of Investor Services
-Finance Doctor Pvt Ltd
-(O) +91 4046019753
-(M) +91 9949700435
-
-Email: sailesh.mulleti@financedoctor.in
-Visit our Website"
-            ); ?>`,
+${signature}`,
             
             review: `Dear ${clientName},
 
@@ -1268,8 +1314,7 @@ I would appreciate the opportunity to walk you through the review in detail via 
 
 Please suggest a time that works for your schedule.
 
-Best regards,
-Finance Doctor Team`,
+${signature}`,
             
             meeting: `Dear ${clientName},
 
@@ -1281,8 +1326,7 @@ Please let me know your availability for a 30-minute Zoom call sometime next wee
 
 Looking forward to connecting with you.
 
-Kind regards,
-Finance Doctor Team`
+${signature}`
         };
         
         if (templates[templateKey]) {
@@ -1308,9 +1352,11 @@ Finance Doctor Team`
         const textarea = document.getElementById('followup_message');
         const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
         
-        const defaultText = `<?php echo addslashes(
-            $lastFollowup ?: 
-            "Dear {$clientInfo['name']},
+        // Get the signature from signature.php textarea
+        const signatureTextarea = document.getElementById('signature_block');
+        const signature = signatureTextarea ? signatureTextarea.value : '';
+        
+        const defaultText = `Dear ${clientName},
 
 I hope you are doing well.
 
@@ -1318,21 +1364,9 @@ We have sent your quarterly review for this month, it would be good to connect o
 
 Please let me know your convenience, and I will be happy to schedule the meeting accordingly.
 
-
 Looking forward to speaking with you.
 
-
-Regards,
-
-Sailesh Kumar Mulleti
-Head of Investor Services
-Finance Doctor Pvt Ltd
-(O) +91 4046019753
-(M) +91 9949700435
-
-Email: sailesh.mulleti@financedoctor.in
-Visit our Website"
-        ); ?>`;
+${signature}`;
         
         textarea.value = defaultText;
         autoResizeFollowup(textarea);
@@ -1350,6 +1384,51 @@ Visit our Website"
             resetBtn.style.color = '';
         }, 1500);
     }
+    
+    // Listen for signature changes to update follow-up templates
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'signature_block') {
+            // Check if follow-up is visible and has content
+            const followupCheckbox = document.getElementById('send_followup_checkbox');
+            const followupTextarea = document.getElementById('followup_message');
+            
+            if (followupCheckbox && followupCheckbox.checked && followupTextarea.value) {
+                // Extract the part before "Regards," if it exists
+                const followupText = followupTextarea.value;
+                const newSignature = e.target.value;
+                
+                if (followupText.includes('Regards,')) {
+                    const beforeSignature = followupText.split('Regards,')[0];
+                    followupTextarea.value = beforeSignature.trim() + '\n\n' + newSignature;
+                    autoResizeFollowup(followupTextarea);
+                }
+            }
+        }
+    });
+    
+    // Listen for user selection changes in signature dropdown
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'signature_user_selector') {
+            // Give the signature module time to update the signature textarea
+            setTimeout(() => {
+                const signatureTextarea = document.getElementById('signature_block');
+                const followupCheckbox = document.getElementById('send_followup_checkbox');
+                const followupTextarea = document.getElementById('followup_message');
+                
+                if (followupCheckbox && followupCheckbox.checked && followupTextarea.value && signatureTextarea) {
+                    const followupText = followupTextarea.value;
+                    const newSignature = signatureTextarea.value;
+                    
+                    // Update only if the follow-up already has a signature
+                    if (followupText.includes('Regards,')) {
+                        const beforeSignature = followupText.split('Regards,')[0];
+                        followupTextarea.value = beforeSignature.trim() + '\n\n' + newSignature;
+                        autoResizeFollowup(followupTextarea);
+                    }
+                }
+            }, 500); // Wait 500ms for signature module to update
+        }
+    });
     </script>
 </body>
 </html>
