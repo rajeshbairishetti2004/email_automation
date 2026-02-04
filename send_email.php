@@ -23,6 +23,25 @@ if (!empty($clientId)) {
     $clientInfo = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+$lastFollowup = '';
+
+if (!empty($clientId)) {
+    $stmt = $pdo->prepare("
+        SELECT email_body 
+        FROM email_logs 
+        WHERE client_id = ? AND email_type = 'followup'
+        ORDER BY sent_at DESC 
+        LIMIT 1
+    ");
+    $stmt->execute([$clientId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        // Convert HTML back to plain text for textarea
+        $lastFollowup = html_entity_decode(strip_tags($row['email_body']));
+    }
+}
+
+
 try {
     $allClientEmails = [];
     $stmt = $pdo->query("SELECT DISTINCT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
@@ -809,7 +828,10 @@ function toggleFollowupBox() {
 
     const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
 
-    const defaultText = `Dear ${clientName},
+    const defaultText = `<?php
+echo addslashes(
+    $lastFollowup ?: 
+    "Dear {$clientInfo['name']},
 
 I hope you are doing well.
 
@@ -830,7 +852,9 @@ Finance Doctor Pvt Ltd
 (M) +91 9949700435
 
 Email: sailesh.mulleti@financedoctor.in
-Visit our Website`;
+Visit our Website"
+);
+?>`;
 
     if (checkbox.checked) {
         box.style.display = "block";
