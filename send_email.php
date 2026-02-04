@@ -80,6 +80,299 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Communication Center</title>
     <link rel="stylesheet" href="public/css/send_email.css">
+    <style>
+        /* Additional CSS for improved follow-up section */
+        .followup-section {
+            margin-top: 24px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .followup-section.active {
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .followup-toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0;
+        }
+
+        .followup-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding: 8px 0;
+        }
+
+        .followup-toggle input {
+            display: none;
+        }
+
+        .toggle-slider {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #e2e8f0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-slider:before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: white;
+            top: 3px;
+            left: 3px;
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .followup-toggle input:checked + .toggle-slider {
+            background: #3b82f6;
+        }
+
+        .followup-toggle input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #1e293b;
+            font-size: 15px;
+        }
+
+        .toggle-icon {
+            color: #3b82f6;
+            width: 16px;
+            height: 16px;
+        }
+
+        .followup-hint {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #64748b;
+            padding: 4px 12px;
+            background: rgba(59, 130, 246, 0.08);
+            border-radius: 6px;
+            max-width: 300px;
+        }
+
+        .followup-hint svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+        }
+
+        .followup-content-box {
+            display: none;
+            margin-top: 20px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .followup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .followup-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .followup-icon {
+            color: #3b82f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+        }
+
+        .followup-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .followup-main-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        .followup-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin: 4px 0 0 0;
+        }
+
+        .followup-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .followup-action-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            color: #64748b;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .followup-action-btn:hover {
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+
+        .followup-action-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .followup-textarea-container {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .followup-textarea {
+            width: 95%;
+            min-height: 120px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #1e293b;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            resize: vertical;
+            transition: all 0.2s ease;
+        }
+
+        .followup-textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .textarea-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .character-count, .word-count {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: #f8fafc;
+            border-radius: 4px;
+        }
+
+        .followup-template-options {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .template-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #64748b;
+        }
+
+        .template-btn {
+            padding: 6px 12px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            color: #64748b;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .template-btn:hover {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .followup-content-box.visible {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .followup-toggle-container {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            
+            .followup-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            
+            .followup-template-options {
+                flex-wrap: wrap;
+            }
+            
+            .followup-hint {
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="email-send-container">
@@ -89,8 +382,6 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
             <input type="hidden" name="cc_emails" id="cc_emails">
             
             <div class="communication-box-style">
-            
-                
                 <div class="email-fields-container">
                     <div class="form-row">
                         <!-- Send As Dropdown -->
@@ -286,29 +577,80 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                         </div>
                     </div>
 
-<!-- Follow-up toggle -->
-<div style="margin-top:15px; text-align:center;">
-    <label style="cursor:pointer; font-weight:600;">
-        <input type="checkbox" name="send_followup" id="send_followup_checkbox" value="1" onchange="toggleFollowupBox()">
-        Send follow-up email also
-    </label>
-</div>
+                    <!-- Follow-up Section -->
+                    <div class="followup-section" id="followup_section">
+                        <div class="followup-toggle-container">
+                            <label class="followup-toggle">
+                                <input type="checkbox" name="send_followup" id="send_followup_checkbox" value="1" onchange="toggleFollowupBox()">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">
+                                    <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                    </svg>
+                                    Send Follow-up Email
+                                </span>
+                            </label>
+                            <div class="followup-hint">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 16v-4"/>
+                                    <path d="M12 8h.01"/>
+                                </svg>
+                                Send an additional follow-up email after the main communication
+                            </div>
+                        </div>
 
-<!-- Follow-up Text Area -->
-<div id="followup_box" style="display:none; margin-top:15px;">
-    <label style="font-weight:600;">Follow-up Email Content</label>
-<textarea 
-    name="followup_message" 
-    id="followup_message" 
-    style="width:100%; padding:10px; resize:none; overflow:hidden;"
-    oninput="autoResizeFollowup(this)">
-</textarea>
+                        <!-- Follow-up Content Box -->
+                        <div class="followup-content-box" id="followup_box">
+                            <div class="followup-header">
+                                <div class="followup-title-group">
+                                    <div class="followup-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="followup-main-title">Follow-up Email Content</h3>
+                                        <p class="followup-subtitle">This email will be sent as a separate follow-up</p>
+                                    </div>
+                                </div>
+                                <div class="followup-actions">
+                                    <button type="button" class="followup-action-btn" onclick="resetFollowupContent()" title="Reset to default">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                            <path d="M3 3v5h5"/>
+                                        </svg>
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
 
-</div>
+                            <div class="followup-textarea-container">
+                                <textarea 
+                                    name="followup_message" 
+                                    id="followup_message" 
+                                    class="followup-textarea" 
+                                    placeholder="Enter follow-up email content..."
+                                    oninput="autoResizeFollowup(this)"
+                                    spellcheck="true"
+                                ></textarea>
+                                <div class="textarea-footer">
+                                    <div class="character-count" id="character_count">0 characters</div>
+                                    <div class="word-count" id="word_count">0 words</div>
+                                </div>
+                            </div>
 
+                            <div class="followup-template-options">
+                                <span class="template-label">Quick templates:</span>
+                                <button type="button" class="template-btn" onclick="applyTemplate('default')">Default Follow-up</button>
+                                <button type="button" class="template-btn" onclick="applyTemplate('review')">Quarterly Review</button>
+                                <button type="button" class="template-btn" onclick="applyTemplate('meeting')">Meeting Request</button>
+                            </div>
+                        </div>
+                    </div>
                     
                     <!-- Submit Button -->
-                    <div style="margin-top: 24px; text-align: center;">
+                    <div class="submit-button-container">
                         <button type="submit" class="submit-button">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -338,6 +680,7 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         updateCcSummary();
         updateSmartHint('');
         updateSendAsHint();
+        updateTextCounts();
         
         // Focus management
         const searchInput = document.getElementById('recipient_email_search');
@@ -346,6 +689,12 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                 handleEmailInput();
             }
         });
+        
+        // Initialize followup textarea with proper height
+        const followupTextarea = document.getElementById('followup_message');
+        if (followupTextarea) {
+            autoResizeFollowup(followupTextarea);
+        }
     });
     
     // Handle email input with smart search
@@ -819,19 +1168,73 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         items[newIndex].classList.add('active');
         items[newIndex].scrollIntoView({ block: 'nearest' });
     }
-    </script>
-   <script>
-function toggleFollowupBox() {
-    const checkbox = document.getElementById("send_followup_checkbox");
-    const box = document.getElementById("followup_box");
-    const textarea = document.getElementById("followup_message");
+    
+    // Follow-up Section Functions
+    function toggleFollowupBox() {
+        const checkbox = document.getElementById("send_followup_checkbox");
+        const box = document.getElementById("followup_box");
+        const section = document.getElementById("followup_section");
+        const textarea = document.getElementById("followup_message");
 
-    const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
 
-    const defaultText = `<?php
-echo addslashes(
-    $lastFollowup ?: 
-    "Dear {$clientInfo['name']},
+        if (checkbox.checked) {
+            section.classList.add('active');
+            box.classList.add('visible');
+            box.style.display = "block";
+
+            if (textarea.value.trim() === "") {
+                // Load the default template
+                applyTemplate('default');
+            }
+
+            autoResizeFollowup(textarea);
+            updateTextCounts();
+        } else {
+            section.classList.remove('active');
+            box.classList.remove('visible');
+            box.style.display = "none";
+        }
+    }
+    
+    function autoResizeFollowup(el) {
+        el.style.height = "auto";
+        el.style.height = el.scrollHeight + "px";
+        updateTextCounts();
+    }
+    
+    function updateTextCounts() {
+        const textarea = document.getElementById('followup_message');
+        const text = textarea.value;
+        const charCount = document.getElementById('character_count');
+        const wordCount = document.getElementById('word_count');
+        
+        // Count characters
+        const chars = text.length;
+        charCount.textContent = `${chars} characters`;
+        
+        // Count words
+        const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+        wordCount.textContent = `${words} words`;
+        
+        // Add warning for very long emails
+        if (chars > 2000) {
+            charCount.style.color = '#ef4444';
+        } else if (chars > 1000) {
+            charCount.style.color = '#f59e0b';
+        } else {
+            charCount.style.color = '';
+        }
+    }
+    
+    function applyTemplate(templateKey) {
+        const textarea = document.getElementById('followup_message');
+        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        
+        const templates = {
+            default: `<?php echo addslashes(
+                $lastFollowup ?: 
+                "Dear {$clientInfo['name']},
 
 I hope you are doing well.
 
@@ -853,28 +1256,100 @@ Finance Doctor Pvt Ltd
 
 Email: sailesh.mulleti@financedoctor.in
 Visit our Website"
-);
-?>`;
+            ); ?>`,
+            
+            review: `Dear ${clientName},
 
-    if (checkbox.checked) {
-        box.style.display = "block";
+I hope this email finds you well.
 
-        if (textarea.value.trim() === "") {
-            textarea.value = defaultText;
+We have completed your quarterly portfolio review for this month. The report highlights your current investment performance, market trends affecting your portfolio, and recommendations for the upcoming quarter.
+
+I would appreciate the opportunity to walk you through the review in detail via a Zoom meeting. This will help ensure you have a clear understanding of your investment strategy and we can address any questions you may have.
+
+Please suggest a time that works for your schedule.
+
+Best regards,
+Finance Doctor Team`,
+            
+            meeting: `Dear ${clientName},
+
+Hope you're having a productive week.
+
+I'm writing to schedule a brief catch-up meeting to discuss your financial goals and review your current portfolio performance.
+
+Please let me know your availability for a 30-minute Zoom call sometime next week.
+
+Looking forward to connecting with you.
+
+Kind regards,
+Finance Doctor Team`
+        };
+        
+        if (templates[templateKey]) {
+            textarea.value = templates[templateKey];
+            autoResizeFollowup(textarea);
+            
+            // Show success feedback
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Applied';
+            btn.style.backgroundColor = '#10b981';
+            btn.style.color = 'white';
+            
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }, 1500);
         }
-
-        autoResizeFollowup(textarea);
-    } else {
-        box.style.display = "none";
-        textarea.value = "";
     }
-}
+    
+    function resetFollowupContent() {
+        const textarea = document.getElementById('followup_message');
+        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        
+        const defaultText = `<?php echo addslashes(
+            $lastFollowup ?: 
+            "Dear {$clientInfo['name']},
 
-function autoResizeFollowup(el) {
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + "px";
-}
-</script>
+I hope you are doing well.
 
+We have sent your quarterly review for this month, it would be good to connect over a Zoom meeting to walk through the review together, understand your current priorities, and discuss the way forward.
+
+Please let me know your convenience, and I will be happy to schedule the meeting accordingly.
+
+
+Looking forward to speaking with you.
+
+
+Regards,
+
+Sailesh Kumar Mulleti
+Head of Investor Services
+Finance Doctor Pvt Ltd
+(O) +91 4046019753
+(M) +91 9949700435
+
+Email: sailesh.mulleti@financedoctor.in
+Visit our Website"
+        ); ?>`;
+        
+        textarea.value = defaultText;
+        autoResizeFollowup(textarea);
+        
+        // Show feedback
+        const resetBtn = event.target.closest('.followup-action-btn');
+        const originalText = resetBtn.textContent;
+        resetBtn.textContent = '✓ Reset';
+        resetBtn.style.backgroundColor = '#10b981';
+        resetBtn.style.color = 'white';
+        
+        setTimeout(() => {
+            resetBtn.textContent = originalText;
+            resetBtn.style.backgroundColor = '';
+            resetBtn.style.color = '';
+        }, 1500);
+    }
+    </script>
 </body>
 </html>
