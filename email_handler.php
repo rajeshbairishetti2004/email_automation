@@ -687,20 +687,33 @@ function handleEmailSending($clientId) {
     // ---------------------------------------------------------
     ?>
 
-    <?php if (trim($rationaleText) !== ''): ?>
-        <div style="margin-top: 20px; border: 1px solid #29B6F6; border-radius: 4px; overflow: hidden;width:70%; margin-left: 30px;">
-            <table style="margin: 0;">
-                <tr>
-                    <td style="width: 120px; background-color: #E1F5FE; font-weight: bold; text-align: center; border-right: 1px solid #29B6F6; border-bottom: none;">
-                        Rationale
-                    </td>
-                    <td style="border-bottom: none; padding: 15px;">
-                        <?php echo nl2br(htmlspecialchars($rationaleText)); ?>
-                    </td>
-                </tr>
-            </table>
-        </div>
-    <?php endif; ?>
+<?php if (trim($rationaleText) !== ''): ?>
+<table width="70%" cellpadding="0" cellspacing="0"
+       style="margin:20px 0 20px 30px;
+              border:1px solid #29B6F6;
+              border-collapse:collapse;
+              display:block; clear:both;">
+    <tr>
+        <td width="120"
+            style="background:#E1F5FE;
+                   font-weight:bold;
+                   text-align:center;
+                   border-right:1px solid #29B6F6;
+                   border-bottom:1px solid #29B6F6;
+                   vertical-align:top;
+                   padding:12px;">
+            Rationale
+        </td>
+        <td
+            style="padding:12px;
+                   vertical-align:top;
+                   border-bottom:1px solid #29B6F6;
+                   word-wrap:break-word;">
+            <?php echo nl2br(htmlspecialchars($rationaleText)); ?>
+        </td>
+    </tr>
+</table>
+<?php endif; ?>
 
     <?php if (!empty($emailAnnexures)): ?>
         <h4>Annexures</h4>
