@@ -16,6 +16,13 @@ $allEmails = [
     'sailesh.mulleti@financedoctor.in'
 ];
 
+$clientInfo = [];
+if (!empty($clientId)) {
+    $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
+    $stmt->execute([$clientId]);
+    $clientInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 try {
     $allClientEmails = [];
     $stmt = $pdo->query("SELECT DISTINCT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
@@ -259,6 +266,27 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                             </div>
                         </div>
                     </div>
+
+<!-- Follow-up toggle -->
+<div style="margin-top:15px; text-align:center;">
+    <label style="cursor:pointer; font-weight:600;">
+        <input type="checkbox" name="send_followup" id="send_followup_checkbox" value="1" onchange="toggleFollowupBox()">
+        Send follow-up email also
+    </label>
+</div>
+
+<!-- Follow-up Text Area -->
+<div id="followup_box" style="display:none; margin-top:15px;">
+    <label style="font-weight:600;">Follow-up Email Content</label>
+<textarea 
+    name="followup_message" 
+    id="followup_message" 
+    style="width:100%; padding:10px; resize:none; overflow:hidden;"
+    oninput="autoResizeFollowup(this)">
+</textarea>
+
+</div>
+
                     
                     <!-- Submit Button -->
                     <div style="margin-top: 24px; text-align: center;">
@@ -773,5 +801,56 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         items[newIndex].scrollIntoView({ block: 'nearest' });
     }
     </script>
+   <script>
+function toggleFollowupBox() {
+    const checkbox = document.getElementById("send_followup_checkbox");
+    const box = document.getElementById("followup_box");
+    const textarea = document.getElementById("followup_message");
+
+    const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+
+    const defaultText = `Dear ${clientName},
+
+I hope you are doing well.
+
+We have sent your quarterly review for this month, it would be good to connect over a Zoom meeting to walk through the review together, understand your current priorities, and discuss the way forward.
+
+Please let me know your convenience, and I will be happy to schedule the meeting accordingly.
+
+
+Looking forward to speaking with you.
+
+
+Regards,
+
+Sailesh Kumar Mulleti
+Head of Investor Services
+Finance Doctor Pvt Ltd
+(O) +91 4046019753
+(M) +91 9949700435
+
+Email: sailesh.mulleti@financedoctor.in
+Visit our Website`;
+
+    if (checkbox.checked) {
+        box.style.display = "block";
+
+        if (textarea.value.trim() === "") {
+            textarea.value = defaultText;
+        }
+
+        autoResizeFollowup(textarea);
+    } else {
+        box.style.display = "none";
+        textarea.value = "";
+    }
+}
+
+function autoResizeFollowup(el) {
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+}
+</script>
+
 </body>
 </html>

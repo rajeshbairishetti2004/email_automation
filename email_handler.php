@@ -3,6 +3,8 @@
 require_once __DIR__ . '/vendor/autoload.php';
 require_once 'db_config.php';
 require_once 'env_loader.php';
+require_once 'followup_email_handler.php';
+
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -784,6 +786,20 @@ function handleEmailSending($clientId) {
         }
 
         $mail->send();
+
+        // ✅ SEND FOLLOW-UP EMAIL IF TOGGLE IS CHECKED
+if (!empty($_POST['send_followup']) && !empty($_POST['followup_message'])) {
+    sendFollowupEmail(
+        $client,
+        $toEmail,
+        $ccList,
+        $smtpFromEmail,
+        $smtpFromName,
+        $pdo,
+        $_POST['followup_message']
+    );
+}
+
         
         // --- UPDATE REPORT STATUS TO 'SENT' ---
         $updateStmt = $pdo->prepare("
@@ -807,36 +823,23 @@ function handleEmailSending($clientId) {
             // Prepare CC emails as comma-separated string
             $ccEmailsString = !empty($ccList) ? implode(', ', $ccList) : '';
             
-            // Insert into email_logs table
-            $logStmt = $pdo->prepare("
-                INSERT INTO email_logs (
-                    client_id,
-                    from_email,
-                    from_name,
-                    sent_to_email,
-                    sent_to_name,
-                    cc_emails,
-                    sent_at
-                ) VALUES (
-                    :client_id,
-                    :from_email,
-                    :from_name,
-                    :sent_to_email,
-                    :sent_to_name,
-                    :cc_emails,
-                    NOW()
-                )
-            ");
-            
-            $logStmt->execute([
-                ':client_id' => $clientId,
-                ':from_email' => $fromEmail,
-                ':from_name' => $fromName,
-                ':sent_to_email' => $toEmail,
-                ':sent_to_name' => $toName,
-                ':cc_emails' => $ccEmailsString
-            ]);
-            
+$logStmt = $pdo->prepare("
+    INSERT INTO email_logs 
+    (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type, followup_sent)
+    VALUES 
+    (:client_id, :from_email, :from_name, :to_email, :to_name, :cc_emails, :email_body, 'primary', 0)
+");
+
+$logStmt->execute([
+    ':client_id' => $clientId,
+    ':from_email' => $fromEmail,
+    ':from_name' => $fromName,
+    ':to_email' => $toEmail,
+    ':to_name' => $name,
+    ':cc_emails' => $ccEmailsString,
+    ':email_body' => $emailHtml
+]);
+
             $logId = $pdo->lastInsertId();
             error_log("Email logged successfully with ID: $logId - From: $fromEmail, To: $toEmail, CC: " . substr($ccEmailsString, 0, 50) . "...");
             
