@@ -531,21 +531,22 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                             </label>
                         </div>
 
-                        <div class="cc-checkboxes-grid" id="cc_checkbox_list">
-                            <?php foreach ($allEmails as $index => $email): ?>
-                                <div class="cc-checkbox-wrapper">
-                                    <input type="checkbox" 
-                                           id="cc_<?php echo $index; ?>"
-                                           value="<?php echo htmlspecialchars($email); ?>" 
-                                           onchange="onCcCheckboxChange()"
-                                           <?php echo ($index === 0) ? 'checked' : ''; ?>>
-                                    <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
-                                        <span class="cc-checkbox-custom"></span>
-                                        <span class="cc-email"><?php echo htmlspecialchars($email); ?></span>
-                                    </label>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
+<div class="cc-checkboxes-grid" id="cc_checkbox_list">
+    <?php foreach ($allEmails as $index => $email): ?>
+        <div class="cc-checkbox-wrapper">
+            <input type="checkbox" 
+                   id="cc_<?php echo $index; ?>"
+                   value="<?php echo htmlspecialchars($email); ?>" 
+                   onchange="onCcCheckboxChange()"
+                   <?php echo ($index === 0 || $email === 'sailesh.mulleti@financedoctor.in') ? 'checked' : ''; ?>>
+            <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
+                <span class="cc-checkbox-custom"></span>
+                <span class="cc-email"><?php echo htmlspecialchars($email); ?></span>
+            </label>
+        </div>
+    <?php endforeach; ?>
+</div>
+
                         
                         <div class="cc-summary-card">
                             <div class="cc-summary-header">
