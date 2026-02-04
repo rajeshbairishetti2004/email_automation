@@ -595,24 +595,8 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                         $rmEmail = key($sendAsProfiles); // The email is the key in the array
                     }
                     
-                    // Load signature.php content directly
-                    $signatureContent = file_get_contents(__DIR__ . '/signature.php');
-                    
-                    // Modify the signature.php content to work in send_email context
-                    $signatureContent = str_replace(
-                        'require_once \'db_config.php\';',
-                        '// Database already included',
-                        $signatureContent
-                    );
-                    
-                    $signatureContent = str_replace(
-                        '$pdo = getPdo();',
-                        'global $pdo;',
-                        $signatureContent
-                    );
-                    
-                    // Execute the modified signature.php
-                    eval('?>' . $signatureContent);
+
+                
                     ?>
 
                     <!-- Follow-up Section -->
