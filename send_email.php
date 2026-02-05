@@ -372,6 +372,32 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                 max-width: 100%;
             }
         }
+        .cc-external-input {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cc-external-input input {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1.5px solid #cbd5e1;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.cc-external-input input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.cc-external-hint {
+    font-size: 12px;
+    color: #64748b;
+}
+
     </style>
 </head>
 <body>
@@ -546,6 +572,18 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         </div>
     <?php endforeach; ?>
 </div>
+
+<!-- External CC Input -->
+<div class="cc-external-input">
+    <input
+        type="email"
+        id="cc_external_email"
+        style="margin-bottom: 20px;"
+        placeholder="Add external CC email & press Enter"
+        onkeydown="handleExternalCc(event)"
+    />
+</div>
+
 
                         
                         <div class="cc-summary-card">
@@ -1414,6 +1452,97 @@ ${signature}`;
             }, 500); // Wait 500ms for signature module to update
         }
     });
+
+    let externalCcEmails = [];
+
+/* Handle Enter key in external CC input */
+function handleExternalCc(e) {
+    if (e.key !== 'Enter') return;
+
+    e.preventDefault();
+    const input = e.target;
+    const email = input.value.trim().toLowerCase();
+
+    if (!validateEmailFormat(email)) {
+        alert('Please enter a valid email address');
+        return;
+    }
+
+    // Prevent duplicates (checkbox + external)
+    const checkboxExists = document.querySelector(
+        `#cc_checkbox_list input[value="${email}"]`
+    );
+
+    if (checkboxExists || externalCcEmails.includes(email)) {
+        alert('This email is already added in CC');
+        return;
+    }
+
+    externalCcEmails.push(email);
+    input.value = '';
+
+    updateCcSummary();
+}
+
+/* Extend existing CC summary logic */
+const originalUpdateCcSummary = updateCcSummary;
+
+updateCcSummary = function () {
+    // Existing checkbox emails
+    const checkboxes = document.querySelectorAll(
+        '#cc_checkbox_list input[type="checkbox"]:checked'
+    );
+
+    let selectedEmails = Array.from(checkboxes).map(cb => cb.value);
+
+    // Add external CC emails
+    selectedEmails = selectedEmails.concat(externalCcEmails);
+
+    // Update hidden input
+    document.getElementById('cc_emails').value = selectedEmails.join(', ');
+
+    // Update count
+    document.getElementById('cc_count').textContent = selectedEmails.length;
+
+    // Update chips
+    const selectedList = document.getElementById('selected_emails_list');
+    selectedList.innerHTML = '';
+
+    selectedEmails.forEach(email => {
+        const chip = document.createElement('div');
+        chip.className = 'email-chip';
+        chip.innerHTML = `
+            <span class="chip-email">${email}</span>
+            <button type="button" class="chip-remove" onclick="removeCcEmail('${email}')">
+                ✕
+            </button>
+        `;
+        selectedList.appendChild(chip);
+    });
+
+    // Update hint
+    const hint = document.getElementById('cc_summary_hint');
+    hint.textContent =
+        selectedEmails.length === 0
+            ? 'No CC recipients selected'
+            : `Email will be copied to ${selectedEmails.length} recipients`;
+};
+
+/* Remove CC (checkbox or external) */
+function removeCcEmail(email) {
+    const checkbox = document.querySelector(
+        `#cc_checkbox_list input[value="${email}"]`
+    );
+
+    if (checkbox) {
+        checkbox.checked = false;
+    } else {
+        externalCcEmails = externalCcEmails.filter(e => e !== email);
+    }
+
+    updateCcSummary();
+}
+
     </script>
 </body>
 </html>
