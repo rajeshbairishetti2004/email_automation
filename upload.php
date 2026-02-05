@@ -13,6 +13,12 @@ requireAuth();
 $currentReviewPeriod = date('F Y');
 $pdo           = getPdo();
 $currentUser   = getCurrentUser();
+// ---------------- ADMIN CHECK (USERNAME BASED) ----------------
+$isAdmin = (
+    isset($currentUser['username']) &&
+    strtolower($currentUser['username']) === 'admin'
+);
+
 $currentUserId = (int)($_SESSION['user_id'] ?? 0);
 
 const DEFAULT_GREETING  = 'Dear Mr.';
@@ -142,7 +148,17 @@ function mergeClientArrays(array &$target, array $source): void
 
 $cycleFilter = isset($_GET['cycle_filter']) ? $_GET['cycle_filter'] : '';
 
-$viewContext = $_GET['view_context'] ?? 'mine';
+$requestedContext = $_GET['view_context'] ?? 'mine';
+
+// 🔐 HARD RULE
+if ($isAdmin) {
+    // Admin can see everything
+    $viewContext = $requestedContext;
+} else {
+    // Everyone else → ONLY their own data
+    $viewContext = 'mine';
+}
+
 $targetName  = 'My';
 if ($viewContext === 'all') {
     $targetName = 'Global';
@@ -487,6 +503,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $navUser     = $_SESSION['username'] ?? ($currentUser['username'] ?? 'User');
 $currentPage = basename($_SERVER['PHP_SELF']);
 $filterParam = ($viewContext === 'all') ? 'all' : (($viewContext === 'mine') ? 'mine' : $viewContext);
+// 🔐 Force KPI links for non-admin
+if (!$isAdmin) {
+    $filterParam = 'mine';
+}
+
 $userDesignation = $currentUser['designation'] ?? '';
 ?>
 <!DOCTYPE html>
@@ -530,14 +551,32 @@ $userDesignation = $currentUser['designation'] ?? '';
                 </div>
             </div>
 
-            <nav class="context-navbar">
-                    <a href="?view_context=all<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
-                    <a href="?view_context=mine<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
-                    <?php foreach ($allUsers as $user): ?>
-                        <?php if ((int)$user['id'] === $currentUserId) continue; // Skip logged-in user ?>
-                        <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>" class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>"><?php echo htmlspecialchars($user['username']); ?></a>
-                    <?php endforeach; ?>
-            </nav>
+<nav class="context-navbar">
+
+    <?php if ($isAdmin): ?>
+        <a href="?view_context=all<?= $cycleParam ?>"
+           class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">
+            All Reviews
+        </a>
+    <?php endif; ?>
+
+    <a href="?view_context=mine<?= $cycleParam ?>"
+       class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">
+        My Reviews
+    </a>
+
+    <?php if ($isAdmin): ?>
+        <?php foreach ($allUsers as $user): ?>
+            <?php if ((int)$user['id'] === $currentUserId) continue; ?>
+            <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>"
+               class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>">
+                <?= htmlspecialchars($user['username']); ?>
+            </a>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+</nav>
+
         </div>
 
         <div class="kpi-grid">
