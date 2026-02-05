@@ -115,6 +115,17 @@ $offset      = ($page - 1) * $limit;
 $whereParts = [];
 $params = [];
 
+// ---------------- ROLE BASED CLIENT VISIBILITY ----------------
+$isAdmin = (isset($currentUser['username']) && strtolower($currentUser['username']) === 'admin');
+
+
+if (!$isAdmin) {
+    // Non-admin users can ONLY see their own clients
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = $myId;
+    $params[] = $myId;
+}
+
 // Build WHERE clause
 if ($q !== '') {
     $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
@@ -128,14 +139,31 @@ if ($cycleFilter !== '') {
     $whereParts[] = "c.review_cycle = ?";
     $params[] = $cycleFilter;
 }
-if ($ownerFilter === 'mine') {
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = $myId; $params[] = $myId;
-} elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+
+// --- OWNER FILTER: Only for admin ---
+if ($isAdmin) {
+    if ($ownerFilter === 'mine') {
+        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $params[] = $myId; $params[] = $myId;
+    } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
+        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+    }
 }
+
 $whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+
+// --- DISTINCT CLIENT COUNT FOR NON-ADMIN USERS ---
+$distinctClientCount = 0;
+if (!$isAdmin) {
+    $countStmt = $pdo->prepare("
+        SELECT COUNT(DISTINCT c.name)
+        FROM clients c
+        {$whereClause}
+    ");
+    $countStmt->execute($params);
+    $distinctClientCount = (int)$countStmt->fetchColumn();
+}
 
 // --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
 $cycleTotals = [];
@@ -556,12 +584,17 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h1>Stored Client Reports</h1>
         <div>
-            <?php if (!$deleteMode): ?>
-                <a href="?delete_mode=1<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>" 
-                   class="delete-mode-btn">
-                    <i class="fa-solid fa-trash"></i> Enable Delete Mode
-                </a>
-           <?php else: ?>
+<?php if ($isAdmin): ?>
+    <?php if (!$deleteMode): ?>
+        <a href="?delete_mode=1<?php echo $q ? '&q=' . urlencode($q) : ''; ?>"
+           class="delete-mode-btn">
+            <i class="fa-solid fa-trash"></i> Enable Delete Mode
+        </a>
+    <?php else: ?>
+        <a href="view_saved_reports.php" class="cancel-delete-btn">
+            <i class="fa-solid fa-times"></i> Cancel Delete Mode
+        </a>
+    <?php endif; ?>
     <?php
     $paramString = '';
     $firstParam = true;
@@ -593,6 +626,15 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         </div>
     </div>
 
+    <?php if (!$isAdmin): ?>
+        <div style="margin-bottom:12px; font-weight:600; color:#374151;">
+            Total Clients:
+            <span style="color:#1976d2;">
+                <?= $distinctClientCount ?>
+            </span>
+        </div>
+    <?php endif; ?>
+
 <?php if ($successMessage): ?>
     <div class="alert alert-success" id="successMessage">
         <?php echo htmlspecialchars($successMessage); ?>
@@ -611,72 +653,65 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <?php endif; ?>
 
 
+<form method="get" class="search-box" id="filterForm"
+      style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
 
-    <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
-
-<div style="position:relative; flex:1; max-width:60%;">
-    <input type="text"
-           name="q"
-           id="client-search"
-           placeholder="Search..."
-           value="<?php echo htmlspecialchars($q); ?>"
-           autocomplete="off"
-           style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
-
-    <div id="client-search-dropdown"
-         style="display:none;
-                position:absolute;
-                top:100%;
-                left:0;
-                width:60%;
-                background:#fff;
-                z-index:1000;
-                border:1px solid #e2e8f0;
-                border-top:none;
-                max-height:200px;
-                overflow-y:auto;
-                box-sizing:border-box;">
+    <!-- 🔍 SEARCH (VISIBLE TO ALL) -->
+    <div style="position:relative; flex:1; max-width:60%;">
+        <input type="text"
+               name="q"
+               id="client-search"
+               placeholder="Search..."
+               value="<?php echo htmlspecialchars($q); ?>"
+               autocomplete="off"
+               style="width:100%; padding:10px 14px; font-size:15px;">
+        <div id="client-search-dropdown"></div>
     </div>
-</div>
 
+    <!-- 🔐 ADMIN-ONLY FILTERS -->
+    <?php if ($isAdmin): ?>
 
-
-        <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
+        <select name="cycle_filter">
             <option value="">All Cycles</option>
-            <?php foreach(['RJ', 'RM', 'RF'] as $c): ?>
-                <option value="<?= $c ?>" <?= $cycleFilter === $c ? 'selected' : '' ?>><?= $c ?></option>
-            <?php endforeach; ?>
-        </select>
-
-        <select id="owner-filter" name="owner_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
-            <option value="all">All Owners / Global View</option>
-            <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
-            <?php foreach ($ownerTotals as $uid => $info): ?>
-                <?php if ((int)$uid === (int)$myId) continue; ?>
-                <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($info['username']) ?>
+            <?php foreach(['RJ','RM','RF'] as $c): ?>
+                <option value="<?= $c ?>" <?= $cycleFilter === $c ? 'selected' : '' ?>>
+                    <?= $c ?>
                 </option>
             <?php endforeach; ?>
         </select>
 
-        <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
-            <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
-            <option value="pending" <?= ($filter === 'pending') ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending'] ?? 0 ?>)</option>
-            <option value="draft" <?= ($filter === 'draft') ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft'] ?? 0 ?>)</option>
-            <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready'] ?? 0 ?>)</option>
-            <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
-            <option value="sent" <?= ($filter === 'sent') ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent'] ?? 0 ?>)</option>
+        <select name="owner_filter">
+            <option value="all">All Owners / Global View</option>
+            <option value="mine">My Reports</option>
+            <?php foreach ($ownerTotals as $uid => $info): ?>
+                <option value="<?= $uid ?>"><?= htmlspecialchars($info['username']) ?></option>
+            <?php endforeach; ?>
         </select>
 
-        <button type="submit" style="background-color: #0288D1; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Search</button>
-        <a href="view_saved_reports.php" style="text-decoration: none; background-color: #666; color: white; padding: 8px 15px; border-radius: 4px; font-size: 13px;">Reset Filters</a>
-    </form>
+        <select name="filter">
+            <option value="">All States</option>
+            <option value="pending">Pending</option>
+            <option value="draft">Draft</option>
+            <option value="ready">Ready</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="sent">Sent</option>
+        </select>
+
+        <button type="submit">Search</button>
+        <a href="view_saved_reports.php">Reset Filters</a>
+
+    <?php endif; ?>
+</form>
+
 
     <?php if (!$clients): ?>
         <p style="margin-top: 20px;">No reports found. Try uploading from <a href="upload.php">Upload Page</a>.</p>
     <?php else: ?>
+<!-- Bulk Actions (ADMIN ONLY) -->
+<?php if ($isAdmin): ?>
+
+    <?php if ($deleteMode): ?>
         <!-- Delete Mode Bulk Actions -->
-        <?php if ($deleteMode): ?>
         <form method="post" id="bulkDeleteForm">
             <input type="hidden" name="action_type" value="delete">
             <div class="bulk-actions-bar">
@@ -684,10 +719,14 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 <button type="button" onclick="confirmDelete()" class="delete-btn">
                     <i class="fa-solid fa-trash"></i> Delete Selected
                 </button>
-                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
+                <span id="selectedCount" style="color:#666;font-size:13px;">
+                    0 items selected
+                </span>
             </div>
-        <?php else: ?>
-        <!-- Reassignment Form (only when not in delete mode) -->
+        </form>
+
+    <?php else: ?>
+        <!-- Reassignment Form -->
         <form method="post" id="bulkReassignForm">
             <input type="hidden" name="action_type" value="reassign">
             <div class="bulk-actions-bar">
@@ -695,15 +734,23 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 <select name="new_owner_id" id="newOwnerSelect" required>
                     <option value="">-- Assign to... --</option>
                     <?php foreach ($allUsers as $user): ?>
-                        <option value="<?php echo (int)$user['id']; ?>">
-                            <?php echo htmlspecialchars($user['username']); ?>
+                        <option value="<?= (int)$user['id']; ?>">
+                            <?= htmlspecialchars($user['username']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <button type="submit" style="background-color: #28a745; color: white;">Reassign</button>
-                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
+                <button type="submit"
+                        style="background-color:#28a745;color:white;">
+                    Reassign
+                </button>
+                <span id="selectedCount" style="color:#666;font-size:13px;">
+                    0 items selected
+                </span>
             </div>
-        <?php endif; ?>
+        </form>
+    <?php endif; ?>
+
+<?php endif; ?>
 
             <table>
                 <thead>

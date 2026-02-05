@@ -10,6 +10,15 @@ $userDesignation = $currentUser['designation'] ?? '';
 $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 $currentPage = basename($_SERVER['PHP_SELF']);
 
+
+$username = strtolower($currentUser['username'] ?? '');
+
+if ($username !== 'admin') {
+    http_response_code(403);
+    echo "Access denied.";
+    exit;
+}
+
 $pdo = getPdo();
 $currentUserId = (int)($_SESSION['user_id'] ?? 1);
 

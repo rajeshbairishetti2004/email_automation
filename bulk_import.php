@@ -19,6 +19,13 @@ $currentUser = getCurrentUser();
 $userDesignation = $currentUser['designation'] ?? '';
 $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 
+$username = strtolower($currentUser['username'] ?? '');
+if ($username !== 'admin') {
+    http_response_code(403);
+    echo "Access denied.";
+    exit;
+}
+
 $currentPage = basename($_SERVER['PHP_SELF']);
 
 // Add this for role check

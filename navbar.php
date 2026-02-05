@@ -23,6 +23,14 @@ $navUser = $_SESSION['username'] ??
 $userDesignation = $_SESSION['designation'] ?? 
                    ($currentUser['designation'] ?? 
                    '');
+
+require_once 'auth.php';
+
+$currentUser = getCurrentUser();
+$isAdmin = isset($currentUser['username']) 
+           && strtolower($currentUser['username']) === 'admin';
+
+
 ?>
 
 <style>
@@ -176,9 +184,18 @@ $userDesignation = $_SESSION['designation'] ??
         <div class="nav-links">
             <a href="upload.php" class="<?= ($currentPage === 'upload.php') ? 'active' : '' ?>">Dashboard</a>
             <a href="view_saved_reports.php" class="<?= ($currentPage === 'view_saved_reports.php') ? 'active' : '' ?>">All Reports</a>
-            <a href="bulk_import.php" class="<?= ($currentPage === 'bulk_import.php') ? 'active' : '' ?>">Bulk Allocate</a>
-            <a href="allocation_log.php" class="<?= ($currentPage === 'allocation_log.php') ? 'active' : '' ?>">Allocation Log</a>
-    
+           <?php if ($isAdmin): ?>
+    <a href="bulk_import.php"
+       class="<?= ($currentPage === 'bulk_import.php') ? 'active' : '' ?>">
+       Bulk Allocate
+    </a>
+
+    <a href="allocation_log.php"
+       class="<?= ($currentPage === 'allocation_log.php') ? 'active' : '' ?>">
+       Allocation Log
+    </a>
+<?php endif; ?>
+
         </div>
     </div>
     <div class="nav-user" style="position:relative;">
