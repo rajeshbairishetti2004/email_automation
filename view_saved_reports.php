@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
 // 1. Get Filter Inputs
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all'; // Default to 'all' for admin
 $cycleFilter = isset($_GET['cycle_filter']) ? trim($_GET['cycle_filter']) : '';
 $sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
 $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
@@ -127,6 +127,16 @@ $offset      = ($page - 1) * $limit;
 
 $whereParts = [];
 $params = [];
+
+// Always restrict to clients where the logged-in user is RM or Reviewer (except for admin)
+$isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
+
+// --- FIX: Only restrict for non-admin, do NOT add this clause for admin ---
+if (!$isAdmin) {
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = $myId;
+    $params[] = $myId;
+}
 
 // Build WHERE clause
 if ($q !== '') {
@@ -141,12 +151,15 @@ if ($cycleFilter !== '') {
     $whereParts[] = "c.review_cycle = ?";
     $params[] = $cycleFilter;
 }
-if ($ownerFilter === 'mine') {
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = $myId; $params[] = $myId;
-} elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+// Only apply ownerFilter for admin, for non-admin it's always "mine"
+if ($isAdmin) {
+    if ($ownerFilter === 'mine') {
+        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $params[] = $myId; $params[] = $myId;
+    } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
+        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+    }
 }
 $whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
 
