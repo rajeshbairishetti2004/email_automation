@@ -16,6 +16,81 @@ $allEmails = [
     'sailesh.mulleti@financedoctor.in'
 ];
 
+// Handle auto-save for follow-up email (MUST BE AT TOP OF FILE)
+if (isset($_POST['autosave_followup'])) {
+    // Enable error reporting for debugging
+    error_reporting(E_ALL);
+    ini_set('display_errors', 1);
+    
+    header('Content-Type: application/json');
+    
+    $client_id = $_POST['client_id'] ?? null;
+    $body = $_POST['email_body'] ?? '';
+    
+    // Debug logging
+    error_log("DEBUG: Auto-save called. Client ID: $client_id, Body length: " . strlen($body));
+    
+    if (!$client_id || empty($body)) {
+        error_log("DEBUG: Missing client_id or empty body");
+        echo json_encode(['success' => false, 'error' => 'Missing data']);
+        exit;
+    }
+    
+    try {
+        // Check database connection
+        if (!$pdo) {
+            error_log("DEBUG: Database connection failed");
+            echo json_encode(['success' => false, 'error' => 'Database connection failed']);
+            exit;
+        }
+        
+        // Log the query we're about to execute
+        error_log("DEBUG: Preparing to insert draft for client_id: $client_id");
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO email_logs (client_id, email_body, email_type)
+            VALUES (?, ?, 'followup_draft')
+        ");
+        
+        $result = $stmt->execute([$client_id, $body]);
+        
+        if ($result) {
+            $lastId = $pdo->lastInsertId();
+            error_log("DEBUG: Auto-save successful. Record ID: $lastId for client_id: $client_id");
+            echo json_encode(['success' => true, 'id' => $lastId]);
+        } else {
+            error_log("DEBUG: Auto-save failed. Execute returned false");
+            echo json_encode(['success' => false, 'error' => 'Insert failed']);
+        }
+    } catch (Exception $e) {
+        error_log("DEBUG: Exception during auto-save: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// Load last saved draft for this client
+function loadLastDraft($pdo, $client_id) {
+    if (!$client_id) return '';
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT email_body 
+            FROM email_logs 
+            WHERE client_id = ? AND email_type = 'followup_draft'
+            ORDER BY sent_at DESC 
+            LIMIT 1
+        ");
+        $stmt->execute([$client_id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        return $result ? $result['email_body'] : '';
+    } catch (Exception $e) {
+        error_log("DEBUG: Error loading draft: " . $e->getMessage());
+        return '';
+    }
+}
+
 try {
     $allClientEmails = [];
     $stmt = $pdo->query("SELECT DISTINCT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
@@ -46,7 +121,102 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     echo json_encode($results);
     exit();
 }
+
+// Process form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_email'])) {
+    $client_id = $_POST['client_id'] ?? 0;
+    $recipient_email = $_POST['recipient_email'] ?? '';
+    $cc_emails = $_POST['cc_emails'] ?? '';
+    $from_email = $_POST['from_email'] ?? '';
+    $from_name = $_POST['from_name'] ?? '';
+    $send_second_email = isset($_POST['send_second_email']) ? 1 : 0;
+    $followup_body = $_POST['followup_email_body'] ?? '';
+    
+    // Get client name for second email
+    $client_name = '';
+    if ($client_id > 0) {
+        $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
+        $stmt->execute([$client_id]);
+        $client = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($client) {
+            $client_name = $client['name'];
+        }
+    }
+    
+    // Send first email (existing functionality)
+    // ... existing email sending code ...
+    
+    // If second email checkbox is checked, send the second email
+    if ($send_second_email && !empty($recipient_email) && !empty($client_name)) {
+        sendSecondEmail($recipient_email, $from_email, $from_name, $client_name, $cc_emails, $followup_body, $client_id, $pdo);
+    }
+}
+
+/**
+ * Send the second email (Zoom meeting invitation) - UPDATED VERSION
+ */
+function sendSecondEmail($to, $from_email, $from_name, $client_name, $cc_emails, $body, $client_id, $pdo) {
+    $subject = "Follow-up: Portfolio Review Discussion - Finance Doctor";
+    
+    // Replace [Client Name] placeholder with actual client name
+    $body = str_replace('[Client Name]', $client_name, $body);
+    
+    // Prepare headers
+    $headers = "From: $from_name <$from_email>\r\n";
+    $headers .= "Reply-To: $from_email\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+    
+    // Add CC emails if provided
+    if (!empty($cc_emails)) {
+        $headers .= "CC: " . $cc_emails . "\r\n";
+    }
+    
+    // Send email
+    $mail_sent = mail($to, $subject, $body, $headers);
+    
+    // Log the email sending to database
+    if ($mail_sent) {
+        $stmt = $pdo->prepare("
+            INSERT INTO email_logs 
+            (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'followup_sent')
+        ");
+        $stmt->execute([
+            $client_id,
+            $from_email,
+            $from_name,
+            $to,
+            $client_name,
+            $cc_emails,
+            $body
+        ]);
+        
+        error_log("Second email sent successfully to: $to and saved to database");
+        
+        // Also update any draft records to mark them as sent (optional)
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE email_logs 
+                SET email_type = 'followup_draft_sent' 
+                WHERE client_id = ? AND email_type = 'followup_draft'
+            ");
+            $stmt->execute([$client_id]);
+        } catch (Exception $e) {
+            // Just log error, don't stop execution
+            error_log("Note: Could not update draft records: " . $e->getMessage());
+        }
+    } else {
+        error_log("Failed to send second email to: $to");
+    }
+    
+    return $mail_sent;
+}
+
+// Load last draft for current client
+$lastDraft = loadLastDraft($pdo, $clientId);
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,17 +224,208 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Communication Center</title>
     <link rel="stylesheet" href="public/css/send_email.css">
+    <style>
+        /* Additional styles for second email option */
+        .second-email-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 12px;
+            border: 1px solid #e0e7ff;
+        }
+        
+        .second-email-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .second-email-icon {
+            margin-right: 12px;
+            color: #2E75B6;
+        }
+        
+        .second-email-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2E75B6;
+            margin: 0;
+        }
+        
+        .second-email-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e0e7ff;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .toggle-switch:hover {
+            border-color: #4F7DF3;
+            box-shadow: 0 2px 8px rgba(79, 125, 243, 0.1);
+        }
+        
+        .toggle-switch.active {
+            border-color: #4F7DF3;
+            background: #f0f7ff;
+        }
+        
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .toggle-icon {
+            margin-right: 10px;
+            color: #4F7DF3;
+        }
+        
+        .toggle-switch-control {
+            position: relative;
+            width: 60px;
+            height: 30px;
+        }
+        
+        .toggle-checkbox {
+            display: none;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        .toggle-checkbox:checked + .toggle-slider {
+            background-color: #4F7DF3;
+        }
+        
+        .toggle-checkbox:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+        
+        .second-email-preview-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        
+        .second-email-preview-container.visible {
+            max-height: 500px;
+            transition: max-height 0.5s ease-in;
+        }
+        
+        .info-note {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 6px;
+            padding: 12px 15px;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #856404;
+        }
+        
+        .draft-notice {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 10px 15px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #0c5460;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .auto-save-status {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 8px;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 5px;
+            opacity: 0.8;
+        }
+        
+        .saving {
+            color: #ffc107;
+        }
+        
+        .saved {
+            color: #28a745;
+        }
+        
+        .error {
+            color: #dc3545;
+        }
+        
+        /* Debug panel - only shows when needed */
+        .debug-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            font-size: 12px;
+            font-family: monospace;
+            display: none;
+        }
+        
+        .debug-toggle {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="email-send-container">
-        <form method="post" enctype="multipart/form-data" class="email-form">
+        <form method="post" enctype="multipart/form-data" class="email-form" onsubmit="return validateForm()">
             <input type="hidden" name="send_email" value="1">
             <input type="hidden" name="client_id" value="<?php echo (int)$clientId; ?>">
             <input type="hidden" name="cc_emails" id="cc_emails">
             
             <div class="communication-box-style">
-            
-                
                 <div class="email-fields-container">
                     <div class="form-row">
                         <!-- Send As Dropdown -->
@@ -140,28 +501,18 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                                     </button>
                                 </div>
                                 
-                                <!-- Hidden input for form submission -->
                                 <input type="hidden" name="recipient_email" id="recipient_email_hidden">
-                                
-                                <!-- Smart dropdown for suggestions -->
                                 <div id="recipient_email_list" class="modern-dropdown-list"></div>
-                                
-                                <!-- Typing indicator -->
                                 <div class="typing-indicator" id="typing-indicator">
                                     <div class="loading-spinner-small"></div>
                                     <span>Searching for matching emails...</span>
                                 </div>
-                                
-                                <!-- Email validation message -->
                                 <div class="email-validation" id="email-validation"></div>
-                                
-                                <!-- Smart hint -->
                                 <div class="smart-hint" id="smart-hint">
                                     Start typing to search client directory. You can also enter any email address.
                                 </div>
                             </div>
                             
-                            <!-- Selected Email Display -->
                             <div id="selected_email_display" class="selected-email-display">
                                 <div class="selected-email-header">
                                     <span class="selected-email-label">
@@ -260,6 +611,84 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                         </div>
                     </div>
                     
+                    <!-- Second Email Option Section -->
+                    <div class="second-email-section" id="second-email-section">
+                        <div class="second-email-header">
+                            <div class="second-email-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM19.6 8L12 13L4.4 8H19.6ZM4 18V8.97L12 14L20 8.97V18H4Z" fill="currentColor"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="second-email-title">Additional Follow-up Email</h3>
+                                <p class="second-email-subtitle">Send a follow-up email for Zoom meeting scheduling</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Toggle Switch for Second Email -->
+                        <div class="toggle-switch" id="toggle-switch" onclick="toggleSecondEmail()">
+                            <div class="toggle-label">
+                                <span class="toggle-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM19.6 8L12 13L4.4 8H19.6ZM4 18V8.97L12 14L20 8.97V18H4Z" fill="currentColor"/>
+                                    </svg>
+                                </span>
+                                Send Follow-up Email for Zoom Meeting
+                            </div>
+                            <div class="toggle-switch-control">
+                                <input type="checkbox" name="send_second_email" id="send_second_email" class="toggle-checkbox" value="1">
+                                <span class="toggle-slider"></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Editable Email Body with Auto-save -->
+                        <div class="second-email-preview-container" id="second-email-preview">
+                            <?php if (!empty($lastDraft)): ?>
+                                <div class="draft-notice">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                                    </svg>
+                                    Last saved draft loaded
+                                </div>
+                            <?php endif; ?>
+                            
+                            <textarea id="followup_email_body" name="followup_email_body" 
+                                style="width:100%;height:260px;border:1px solid #ccc;padding:12px;border-radius:8px;font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 14px; line-height: 1.5;"
+                                oninput="autoSaveFollowupEmail()"><?php echo htmlspecialchars($lastDraft ? $lastDraft : 'Dear [Client Name],
+
+I hope you are doing well.
+
+We have sent your quarterly review for this month. It would be good to connect over a Zoom meeting to walk through the review together, understand your current priorities, and discuss the way forward.
+
+Please let me know your convenience, and I will be happy to schedule the meeting accordingly.
+
+Looking forward to speaking with you.
+
+Regards,
+Sailesh Kumar Mulleti
+Head of Investor Services
+Finance Doctor Pvt Ltd
+(O) +91 4046019753
+(M) +91 9949700435'); ?></textarea>
+                            
+                            <div class="auto-save-status" id="auto-save-status">
+                                <i></i> <span>Ready to auto-save</span>
+                            </div>
+                            
+                            <div class="info-note">✍️ This email is editable and auto-saved.</div>
+                            
+                            <!-- Debug button for testing -->
+                            <button type="button" class="debug-toggle" onclick="toggleDebug()">Debug Auto-save</button>
+                            <div class="debug-panel" id="debug-panel">
+                                <div id="debug-content">Debug info will appear here...</div>
+                            </div>
+                        </div>
+                            
+                        <div class="info-note">
+                            <i>ℹ️</i> This follow-up email will be sent to the same recipient as the primary email, requesting a Zoom meeting to discuss the portfolio review.
+                        </div>
+                    </div>
+                    
                     <!-- Submit Button -->
                     <div style="margin-top: 24px; text-align: center;">
                         <button type="submit" class="submit-button">
@@ -267,7 +696,7 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
                                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                             </svg>
-                            Send Email
+                            Send Email(s)
                         </button>
                     </div>
                 </div>
@@ -280,11 +709,16 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     const emailData = <?php echo json_encode($allClientEmails); ?>;
     const ccEmailData = <?php echo json_encode($allEmails); ?>;
     const sendAsProfiles = <?php echo json_encode($sendAsProfiles); ?>;
+    const clientId = <?php echo $clientId; ?>;
     
     // State variables
     let emailSearchTimeout;
     let currentSearchQuery = '';
     let lastValidatedEmail = '';
+    let isSecondEmailEnabled = false;
+    let autoSaveTimeout = null;
+    let isAutoSaving = false;
+    let debugLogs = [];
     
     // Initialize on load
     document.addEventListener('DOMContentLoaded', function() {
@@ -299,7 +733,215 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                 handleEmailInput();
             }
         });
+        
+        // Initialize second email toggle state
+        const toggleCheckbox = document.getElementById('send_second_email');
+        isSecondEmailEnabled = toggleCheckbox.checked;
+        
+        // Show preview if draft exists or toggle is checked
+        if (isSecondEmailEnabled || <?php echo !empty($lastDraft) ? 'true' : 'false'; ?>) {
+            toggleSecondEmail();
+        }
+        
+        // Test auto-save on load
+        logDebug('Page loaded. Client ID: ' + clientId);
+        logDebug('Last draft exists: ' + (<?php echo !empty($lastDraft) ? 'true' : 'false'; ?>));
     });
+    
+    function toggleDebug() {
+        const panel = document.getElementById('debug-panel');
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    }
+    
+    function logDebug(message) {
+        debugLogs.push(new Date().toLocaleTimeString() + ': ' + message);
+        const debugContent = document.getElementById('debug-content');
+        if (debugContent) {
+            debugContent.innerHTML = debugLogs.join('<br>');
+        }
+        console.log('DEBUG:', message);
+    }
+    
+    // Toggle second email option
+    function toggleSecondEmail() {
+        const toggleCheckbox = document.getElementById('send_second_email');
+        const toggleSwitch = document.getElementById('toggle-switch');
+        const previewContainer = document.getElementById('second-email-preview');
+        
+        toggleCheckbox.checked = !toggleCheckbox.checked;
+        isSecondEmailEnabled = toggleCheckbox.checked;
+        
+        if (isSecondEmailEnabled) {
+            toggleSwitch.classList.add('active');
+            previewContainer.classList.add('visible');
+            logDebug('Second email enabled');
+        } else {
+            toggleSwitch.classList.remove('active');
+            previewContainer.classList.remove('visible');
+            logDebug('Second email disabled');
+        }
+        
+        // Update submit button text
+        const submitBtn = document.querySelector('.submit-button');
+        if (submitBtn) {
+            if (isSecondEmailEnabled) {
+                submitBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Send Both Emails';
+            } else {
+                submitBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Send Email';
+            }
+        }
+    }
+    
+    // Auto-save follow-up email
+    function autoSaveFollowupEmail() {
+        const body = document.getElementById('followup_email_body').value;
+        const statusElement = document.getElementById('auto-save-status');
+        
+        logDebug('Typing detected. Body length: ' + body.length);
+        
+        // Update status to saving
+        statusElement.innerHTML = '<i class="saving">⏳</i> <span>Saving...</span>';
+        statusElement.classList.add('saving');
+        statusElement.classList.remove('saved', 'error');
+        
+        // Clear previous timeout
+        if (autoSaveTimeout) {
+            clearTimeout(autoSaveTimeout);
+            logDebug('Cleared previous auto-save timeout');
+        }
+        
+        // Set new timeout for debouncing (save after 2 seconds of inactivity)
+        autoSaveTimeout = setTimeout(() => {
+            performAutoSave(body);
+        }, 2000);
+        
+        logDebug('Set auto-save timeout for 2 seconds');
+    }
+    
+    function performAutoSave(body) {
+        const statusElement = document.getElementById('auto-save-status');
+        
+        logDebug('Attempting auto-save...');
+        
+        // Don't save if empty body
+        if (!body.trim()) {
+            statusElement.innerHTML = '<i></i> <span>Empty - not saved</span>';
+            statusElement.classList.remove('saving', 'saved', 'error');
+            logDebug('Empty body, skipping save');
+            return;
+        }
+        
+        // Don't save if already saving
+        if (isAutoSaving) {
+            logDebug('Already saving, skipping');
+            return;
+        }
+        
+        isAutoSaving = true;
+        logDebug('Making fetch request to server');
+        
+        // Create form data
+        const formData = new URLSearchParams();
+        formData.append('autosave_followup', '1');
+        formData.append('client_id', clientId);
+        formData.append('email_body', body);
+        
+        fetch("send_email.php", {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: formData.toString()
+        })
+        .then(response => {
+            logDebug('Response received. Status: ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            logDebug('Response data: ' + JSON.stringify(data));
+            
+            if (data.success) {
+                statusElement.innerHTML = '<i class="saved">✓</i> <span>Draft saved</span>';
+                statusElement.classList.remove('saving', 'error');
+                statusElement.classList.add('saved');
+                
+                // Show temporary success message
+                setTimeout(() => {
+                    if (statusElement.classList.contains('saved')) {
+                        statusElement.innerHTML = '<i></i> <span>Auto-save ready</span>';
+                        statusElement.classList.remove('saved');
+                    }
+                }, 3000);
+                
+                logDebug('Auto-save successful! Record ID: ' + (data.id || 'N/A'));
+            } else {
+                statusElement.innerHTML = '<i class="error">⚠</i> <span>Save failed: ' + (data.error || 'Unknown error') + '</span>';
+                statusElement.classList.remove('saving', 'saved');
+                statusElement.classList.add('error');
+                logDebug('Auto-save failed: ' + (data.error || 'Unknown error'));
+            }
+            isAutoSaving = false;
+        })
+        .catch(error => {
+            console.error('Auto-save error:', error);
+            statusElement.innerHTML = '<i class="error">⚠</i> <span>Connection error</span>';
+            statusElement.classList.remove('saving', 'saved');
+            statusElement.classList.add('error');
+            logDebug('Fetch error: ' + error.message);
+            isAutoSaving = false;
+        });
+    }
+    
+    // Update second email preview based on selected recipient
+    function updateSecondEmailPreview() {
+        const recipientEmail = document.getElementById('recipient_email_hidden').value;
+        const followupTextarea = document.getElementById('followup_email_body');
+        
+        if (recipientEmail && isSecondEmailEnabled && followupTextarea) {
+            // Extract username from email for placeholder
+            const username = recipientEmail.split('@')[0];
+            const clientName = username.charAt(0).toUpperCase() + username.slice(1);
+            
+            // Replace [Client Name] placeholder in the textarea
+            let currentText = followupTextarea.value;
+            if (currentText.includes('[Client Name]')) {
+                followupTextarea.value = currentText.replace('[Client Name]', clientName);
+                logDebug('Replaced [Client Name] with: ' + clientName);
+                
+                // Auto-save the updated version
+                setTimeout(() => {
+                    autoSaveFollowupEmail();
+                }, 500);
+            }
+        }
+    }
+    
+    // Form validation
+    function validateForm() {
+        const recipientEmail = document.getElementById('recipient_email_hidden').value;
+        const fromEmail = document.getElementById('from_email_hidden').value;
+        const fromName = document.getElementById('from_name_hidden').value;
+        
+        if (!recipientEmail) {
+            alert('Please select or enter a recipient email address');
+            document.getElementById('recipient_email_search').focus();
+            return false;
+        }
+        
+        if (!fromEmail || !fromName) {
+            alert('Please select a sender profile');
+            return false;
+        }
+        
+        if (isSecondEmailEnabled) {
+            const followupBody = document.getElementById('followup_email_body').value;
+            if (!followupBody.trim()) {
+                alert('Follow-up email body cannot be empty');
+                document.getElementById('followup_email_body').focus();
+                return false;
+            }
+        }
+        
+        return true;
+    }
     
     // Handle email input with smart search
     function handleEmailInput() {
@@ -452,6 +1094,7 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         hiddenInput.value = email;
         lastValidatedEmail = email;
         updateSelectedDisplay(email, !isInDatabase);
+        updateSecondEmailPreview();
     }
     
     // Validate email on blur
@@ -771,6 +1414,30 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         
         items[newIndex].classList.add('active');
         items[newIndex].scrollIntoView({ block: 'nearest' });
+    }
+    
+    // Update send as hint
+    function updateSendAsHint() {
+        const sendAsName = document.getElementById('sendAsName');
+        const sendAsRole = document.getElementById('sendAsRole');
+        
+        if (sendAsName.textContent === 'Select sender profile') {
+            const firstProfile = Object.values(sendAsProfiles)[0];
+            if (firstProfile) {
+                document.getElementById('from_email_hidden').value = Object.keys(sendAsProfiles)[0];
+                document.getElementById('from_name_hidden').value = firstProfile.name;
+                document.getElementById('sendAsAvatar').textContent = firstProfile.name.split(' ').map(n => n[0]).join('').slice(0,2);
+                sendAsName.textContent = firstProfile.name;
+                sendAsRole.textContent = firstProfile.designation;
+            }
+        }
+    }
+    
+    // Test auto-save manually
+    function testAutoSave() {
+        const body = document.getElementById('followup_email_body').value;
+        logDebug('Manual test of auto-save with body length: ' + body.length);
+        performAutoSave(body);
     }
     </script>
 </body>
