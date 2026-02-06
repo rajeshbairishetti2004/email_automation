@@ -179,7 +179,11 @@ function renderSlide2Template(array $data = [])
         window.saveSlide = () => {
             const form = new FormData();
             form.append('ajax', 'save');
-            form.append('client_id', '<?= $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? '' ?>');
+            <?php
+            $clientIdNum = (int) str_replace('CLIENT_', '', $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? '');
+            ?>
+            form.append('client_id', '<?= $clientIdNum ?>');
+
 
             document.querySelectorAll('.editable').forEach(e => {
                 form.append(e.dataset.f, e.innerText.trim());
@@ -197,10 +201,12 @@ function renderSlide2Template(array $data = [])
                         alert('Slide saved');
                         const iframe = window.frameElement;
                         if (iframe) {
-                            const u = new URL(iframe.src);
+                            const u = new URL(iframe.src, window.location.origin);
+                            u.searchParams.set('client_id', '<?= $clientIdNum ?>');
                             u.searchParams.set('t', Date.now());
                             iframe.src = u.toString();
                         }
+
                     } else alert(res.error || 'Save failed');
                 })
                 .catch(e => alert(e.message));
@@ -264,7 +270,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ajax'] ?? '') === 'save') 
 /* =========================
    LOAD DATA (SLIDES DB)
 ========================= */
-$client_id = $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? '';
+$client_id = (int) str_replace(
+    'CLIENT_',
+    '',
+    $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? ''
+);
 $fields = [
     'redeem_fund',
     'redeem_amount',

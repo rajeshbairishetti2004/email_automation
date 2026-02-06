@@ -15,7 +15,8 @@ $SLIDE_REGISTRY = [
     2 => [
         'title' => 'Our Recommendations',
         'template' => 'page2.php',
-        'preview' => 'Redeem & replace investment recommendations'
+        'preview' => 'Redeem & replace investment recommendations',
+        'dynamic' => true
     ],
     3 => [
         'title' => 'Impact of our recommendations',
@@ -126,6 +127,11 @@ $current_page = isset($_GET['page']) ? max(1, min(24, intval($_GET['page']))) : 
 
 function storeTemplateSlideIfMissing($client_id, $page, $config)
 {
+    // ❌ Skip DB storage for dynamic slides
+    if (!empty($config['dynamic'])) {
+        return;
+    }
+
     $pages = getClientPages($client_id);
 
     if (!isset($pages[$page])) {

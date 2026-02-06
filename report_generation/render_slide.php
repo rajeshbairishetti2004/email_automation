@@ -5,6 +5,14 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+$page = (int)($_GET['page'] ?? 0);
+
+if ($page === 2) {
+    include __DIR__ . '/slides/page2.php';
+    exit;
+}
+
+
 require_once __DIR__ . '/database.php';
 
 /* ===============================
