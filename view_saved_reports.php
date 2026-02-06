@@ -3,7 +3,7 @@
 // - Lists all stored clients with STATUS Workflow badges
 // - FIX: explicitly selects report_state to ensure badges appear
 // - Added: Bulk reassignment functionality and split owner columns
-// - Added: Delete mode with checkboxes
+// - Added: Delete mode with checkboxes that appear only when clicking action icons
 
 require_once 'auth.php';
 requireAuth();
@@ -18,8 +18,21 @@ $pdo = getPdo();
 $successMessage = '';
 $errorMessage = '';
 
-// Initialize deleteMode variable here
-$deleteMode = isset($_GET['delete_mode']) && $_GET['delete_mode'] === '1';
+// Initialize action mode variables
+$deleteMode = false;
+$reassignMode = false;
+$showCheckboxes = false;
+
+// Check for action modes
+if (isset($_GET['mode'])) {
+    if ($_GET['mode'] === 'delete') {
+        $deleteMode = true;
+        $showCheckboxes = true;
+    } elseif ($_GET['mode'] === 'reassign') {
+        $reassignMode = true;
+        $showCheckboxes = true;
+    }
+}
 
 // Handle POST request for bulk reassignment and delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
@@ -115,17 +128,6 @@ $offset      = ($page - 1) * $limit;
 $whereParts = [];
 $params = [];
 
-// ---------------- ROLE BASED CLIENT VISIBILITY ----------------
-$isAdmin = (isset($currentUser['username']) && strtolower($currentUser['username']) === 'admin');
-
-
-if (!$isAdmin) {
-    // Non-admin users can ONLY see their own clients
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = $myId;
-    $params[] = $myId;
-}
-
 // Build WHERE clause
 if ($q !== '') {
     $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
@@ -139,31 +141,14 @@ if ($cycleFilter !== '') {
     $whereParts[] = "c.review_cycle = ?";
     $params[] = $cycleFilter;
 }
-
-// --- OWNER FILTER: Only for admin ---
-if ($isAdmin) {
-    if ($ownerFilter === 'mine') {
-        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-        $params[] = $myId; $params[] = $myId;
-    } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
-        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-        $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
-    }
+if ($ownerFilter === 'mine') {
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = $myId; $params[] = $myId;
+} elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
+    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
 }
-
 $whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
-
-// --- DISTINCT CLIENT COUNT FOR NON-ADMIN USERS ---
-$distinctClientCount = 0;
-if (!$isAdmin) {
-    $countStmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT c.name)
-        FROM clients c
-        {$whereClause}
-    ");
-    $countStmt->execute($params);
-    $distinctClientCount = (int)$countStmt->fetchColumn();
-}
 
 // --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
 $cycleTotals = [];
@@ -228,7 +213,7 @@ $totalPages = max(1, (int)ceil($totalRows / $limit));
 
 // 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 // Validate sort column to prevent SQL injection
-$allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state'];
+$allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state', 'aum'];
 $sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'updated_at';
 
 // Priority sorting needs special handling for NULL and High/Normal/Low ordering
@@ -240,6 +225,9 @@ if ($sortColumn === 'priority') {
         WHEN 'Normal' THEN 2 
         WHEN 'Low' THEN 3 
         ELSE 4 END {$sortOrder}, c.id DESC";
+} elseif ($sortColumn === 'aum') {
+    // Sort by AUM (numeric sorting)
+    $orderByClause = "ORDER BY CAST(c.aum AS DECIMAL(15,2)) {$sortOrder}, c.id DESC";
 } else {
     $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
 }
@@ -299,283 +287,166 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <title>Stored Client Reports</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/view_saved_reports.css">
+    <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
     <style>
-    /* [PATCH] Meeting Column Styles */
-    .meet-select {
-        padding: 6px 10px;
-        border: 1px solid #ced4da;
-        border-radius: 6px;
-        background-color: #fff;
-        font-size: 13px;
-        color: #495057;
-        cursor: pointer;
-        outline: none;
-        width: 100px;
-    }
-    .meet-select:focus {
-        border-color: #80bdff;
-        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-    }
-
-    .meet-btn {
-        display: inline-block;
-        background-color: #e3f2fd;
-        color: #1976d2;
-        border: 1px solid #90caf9;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        white-space: nowrap;
-    }
-    .meet-btn:hover {
-        background-color: #bbdefb;
-        border-color: #64b5f6;
-        transform: translateY(-1px);
-    }
-
-    /* Delete Mode Styles */
-    .delete-mode-active { 
-        background-color: #fff5f5 !important; 
-    }
-    
-    .delete-btn { 
-        background-color: #e53935; 
-        color: white; 
-        border: none; 
-        padding: 8px 16px; 
-        border-radius: 4px; 
-        cursor: pointer; 
-        font-weight: 600; 
-        display: inline-flex; 
-        align-items: center; 
-        gap: 6px; 
-        margin-left: 10px; 
-        transition: background-color 0.2s; 
-    }
-    
-    .delete-btn:hover { 
-        background-color: #c62828; 
-    }
-    
-    .delete-mode-btn { 
-        background-color: #ffebee; 
-        color: #e53935; 
-        border: 2px solid #e53935; 
-        padding: 8px 16px; 
-        border-radius: 4px; 
-        cursor: pointer; 
-        font-weight: 600; 
-        display: inline-flex; 
-        align-items: center; 
-        gap: 6px; 
-        margin-left: 10px; 
-        transition: all 0.2s; 
-        text-decoration: none;
-    }
-    
-    .delete-mode-btn:hover { 
-        background-color: #e53935; 
-        color: white; 
-    }
-    
-    .cancel-delete-btn { 
-        background-color: #6c757d; 
-        color: white; 
-        border: none; 
-        padding: 8px 16px; 
-        border-radius: 4px; 
-        cursor: pointer; 
-        font-weight: 600; 
-        display: inline-flex; 
-        align-items: center; 
-        gap: 6px; 
-        margin-left: 10px; 
-        text-decoration: none;
-    }
-    
-    .cancel-delete-btn:hover { 
-        background-color: #5a6268; 
-    }
-    
-    .delete-confirm-modal { 
-        display: none; 
-        position: fixed; 
-        top: 0; 
-        left: 0; 
-        width: 100%; 
-        height: 100%; 
-        background: rgba(0,0,0,0.5); 
-        z-index: 10000; 
-        justify-content: center; 
-        align-items: center; 
-    }
-    
-    .delete-confirm-content { 
-        background: white; 
-        padding: 30px; 
-        border-radius: 12px; 
-        width: 500px; 
-        max-width: 90%; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
-    }
-    
-    .warning-icon { 
-        color: #e53935; 
-        font-size: 48px; 
-        text-align: center; 
-        margin-bottom: 20px; 
-    }
-    
-    .client-checkbox { 
-        width: 18px; 
-        height: 18px; 
-        cursor: pointer; 
-    }
-    
-    .select-all-cell { 
-        position: relative; 
-    }
-    
-    .select-all-label { 
-        position: absolute; 
-        top: 50%; 
-        left: 50%; 
-        transform: translate(-50%, -50%); 
-        font-size: 11px; 
-        color: #666; 
-        pointer-events: none; 
-    }
-    
-    .bulk-actions-bar {
-        background: #f8f9fa;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        border: 1px solid #e9ecef;
-    }
-    
-    .bulk-selection-info {
-        font-weight: 600;
-        color: #495057;
-    }
-    
-    .bulk-actions-bar select {
-        padding: 6px 12px;
-        border: 1px solid #ced4da;
-        border-radius: 4px;
-        min-width: 180px;
-    }
-    
-    .bulk-actions-bar button {
-        padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 600;
-    }
-    
-    .alert {
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 16px;
-        border: 1px solid transparent;
-    }
-    
-    .alert-success {
-        background-color: #d4edda;
-        border-color: #c3e6cb;
-        color: #155724;
-    }
-    
-    .alert-error {
-        background-color: #f8d7da;
-        border-color: #f5c6cb;
-        color: #721c24;
-    }
-    
-    .alert-warning {
-        background-color: #fff3cd;
-        border-color: #ffeaa7;
-        color: #856404;
-    }
-
-/* Search box */
-#client-search {
-    width: 70%;
-    padding: 10px 14px;
-    font-size: 15px;
-    box-sizing: border-box;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    outline: none;
-}
-
-#client-search:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-}
-
-/* Dropdown container */
-#client-search-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    width: 70%;
-    background: rgba(255, 255, 255, 0.96); /* slight transparency */
-    z-index: 1000;
-    border: 1px solid #e2e8f0;
-    border-top: none;
-    max-height: 200px;
-    overflow-y: auto;
-    box-sizing: border-box;
-    border-radius: 0 0 8px 8px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-}
-
-/* Dropdown items */
-#client-search-dropdown div {
-    padding: 10px 14px;
-    cursor: pointer;
-    font-size: 14px;
-    color: #334155;
-    transition: background 0.2s ease;
-}
-
-#client-search-dropdown div:hover {
-    background: #f1f5f9;
-}
-
-/* Slim scrollbar */
-#client-search-dropdown::-webkit-scrollbar {
-    width: 6px; /* ↓ scrollbar width */
-}
-
-#client-search-dropdown::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-#client-search-dropdown::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.6);
-    border-radius: 6px;
-}
-
-#client-search-dropdown::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 116, 139, 0.8);
-}
-
-
+        /* Additional CSS for action modes */
+        .action-mode-active .bulk-actions-bar,
+        .action-mode-active .select-all-cell,
+        .action-mode-active .action-checkbox {
+            display: block !important;
+        }
+        
+        .action-mode-active .action-icon-cell {
+            display: none !important;
+        }
+        
+        .action-icons-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .action-icon-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .delete-icon-btn {
+            background-color: #e53935;
+        }
+        
+        .delete-icon-btn:hover {
+            background-color: #c62828;
+            transform: scale(1.05);
+        }
+        
+        .reassign-icon-btn {
+            background-color: #0288D1;
+        }
+        
+        .reassign-icon-btn:hover {
+            background-color: #0277BD;
+            transform: scale(1.05);
+        }
+        
+        .cancel-action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+        
+        .cancel-action-btn:hover {
+            background-color: #5a6268;
+        }
+        
+        .select-all-cell,
+        .action-checkbox {
+            display: none;
+        }
+        
+        .action-checkbox {
+            vertical-align: middle;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .sort-dropdown {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+            min-width: 160px;
+        }
+        
+        .sort-dropdown:focus {
+            outline: none;
+            border-color: #0288D1;
+            box-shadow: 0 0 0 2px rgba(2, 136, 209, 0.2);
+        }
+        
+        .bulk-actions-bar {
+            display: none;
+            background-color: #f8f9fa;
+            padding: 12px 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .bulk-selection-info {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .delete-btn {
+            background-color: #e53935;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .delete-btn:hover {
+            background-color: #c62828;
+        }
+        
+        .reassign-select {
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 180px;
+        }
+        
+        .reassign-submit-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .reassign-submit-btn:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
-<body class="<?php echo $deleteMode ? 'delete-mode-active' : ''; ?>">
+<body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
   
 <?php include 'navbar.php'; ?>
 
@@ -583,57 +454,47 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h1>Stored Client Reports</h1>
-        <div>
-<?php if ($isAdmin): ?>
-    <?php if (!$deleteMode): ?>
-        <a href="?delete_mode=1<?php echo $q ? '&q=' . urlencode($q) : ''; ?>"
-           class="delete-mode-btn">
-            <i class="fa-solid fa-trash"></i> Enable Delete Mode
-        </a>
-    <?php else: ?>
-        <a href="view_saved_reports.php" class="cancel-delete-btn">
-            <i class="fa-solid fa-times"></i> Cancel Delete Mode
-        </a>
-    <?php endif; ?>
-    <?php
-    $paramString = '';
-    $firstParam = true;
-    
-    // Helper function to add parameters
-    function addParam(&$paramString, &$firstParam, $name, $value) {
-        if (!empty($value)) {
-            $paramString .= $firstParam ? '?' : '&';
-            $paramString .= $name . '=' . urlencode($value);
-            $firstParam = false;
-        }
-    }
-    
-    addParam($paramString, $firstParam, 'q', $q);
-    addParam($paramString, $firstParam, 'filter', $filter);
-    addParam($paramString, $firstParam, 'owner_filter', $ownerFilter);
-    addParam($paramString, $firstParam, 'cycle_filter', $cycleFilter);
-    addParam($paramString, $firstParam, 'sort', $sortBy);
-    if ($sortOrder !== 'DESC') {
-        addParam($paramString, $firstParam, 'order', strtolower($sortOrder));
-    }
-    ?>
-    
-    <a href="view_saved_reports.php<?php echo $paramString; ?>" 
-       class="cancel-delete-btn">
-        <i class="fa-solid fa-times"></i> Cancel Delete Mode
-    </a>
-<?php endif; ?>
+        <div class="action-icons-container">
+            <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
+                <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>" 
+                   class="action-btn reassign-btn" title="Reassign Clients">
+                    <i class="fa-solid fa-user-group"></i>
+                    <span>Reassign</span>
+                </a>
+            <?php elseif ($deleteMode || $reassignMode): ?>
+                <?php
+                $paramString = '';
+                $firstParam = true;
+                function addParam(&$paramString, &$firstParam, $name, $value) {
+                    if (!empty($value)) {
+                        $paramString .= $firstParam ? '?' : '&';
+                        $paramString .= $name . '=' . urlencode($value);
+                        $firstParam = false;
+                    }
+                }
+                addParam($paramString, $firstParam, 'q', $q);
+                addParam($paramString, $firstParam, 'filter', $filter);
+                addParam($paramString, $firstParam, 'owner_filter', $ownerFilter);
+                addParam($paramString, $firstParam, 'cycle_filter', $cycleFilter);
+                addParam($paramString, $firstParam, 'sort', $sortBy);
+                if ($sortOrder !== 'DESC') {
+                    addParam($paramString, $firstParam, 'order', strtolower($sortOrder));
+                }
+                ?>
+                <a href="view_saved_reports.php<?php echo $paramString; ?>" 
+                   class="cancel-action-btn">
+                    <i class="fa-solid fa-times"></i> Cancel Action Mode
+                </a>
+            <?php endif; ?>
         </div>
     </div>
 
-    <?php if (!$isAdmin): ?>
-        <div style="margin-bottom:12px; font-weight:600; color:#374151;">
-            Total Clients:
-            <span style="color:#1976d2;">
-                <?= $distinctClientCount ?>
-            </span>
-        </div>
-    <?php endif; ?>
+    <!-- Show filtered row count above search bar -->
+    <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
+        <?php
+            echo "Showing $totalRows row" . ($totalRows !== 1 ? "s" : "") . " for current filters.";
+        ?>
+    </div>
 
 <?php if ($successMessage): ?>
     <div class="alert alert-success" id="successMessage">
@@ -650,68 +511,100 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             <strong><i class="fa-solid fa-exclamation-triangle"></i> Delete Mode Active</strong>
             <p style="margin: 5px 0 0 0;">Select clients using checkboxes, then click "Delete Selected" to remove them.</p>
         </div>
+    <?php elseif ($reassignMode): ?>
+        <div class="alert alert-info">
+            <strong><i class="fa-solid fa-user-group"></i> Reassign Mode Active</strong>
+            <p style="margin: 5px 0 0 0;">Select clients using checkboxes, choose a user from dropdown, then click "Reassign".</p>
+        </div>
     <?php endif; ?>
 
 
-<form method="get" class="search-box" id="filterForm"
-      style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
 
-    <!-- 🔍 SEARCH (VISIBLE TO ALL) -->
-    <div style="position:relative; flex:1; max-width:60%;">
-        <input type="text"
-               name="q"
-               id="client-search"
-               placeholder="Search..."
-               value="<?php echo htmlspecialchars($q); ?>"
-               autocomplete="off"
-               style="width:100%; padding:10px 14px; font-size:15px;">
-        <div id="client-search-dropdown"></div>
+    <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+
+<div style="position:relative; flex:1; max-width:60%;">
+    <input type="text"
+           name="q"
+           id="client-search"
+           placeholder="Search..."
+           value="<?php echo htmlspecialchars($q); ?>"
+           autocomplete="off"
+           style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
+
+    <div id="client-search-dropdown"
+         style="display:none;
+                position:absolute;
+                top:100%;
+                left:0;
+                width:60%;
+                background:#fff;
+                z-index:1000;
+                border:1px solid #e2e8f0;
+                border-top:none;
+                max-height:200px;
+                overflow-y:auto;
+                box-sizing:border-box;">
     </div>
+</div>
 
-    <!-- 🔐 ADMIN-ONLY FILTERS -->
-    <?php if ($isAdmin): ?>
 
-        <select name="cycle_filter">
+
+        <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
             <option value="">All Cycles</option>
-            <?php foreach(['RJ','RM','RF'] as $c): ?>
-                <option value="<?= $c ?>" <?= $cycleFilter === $c ? 'selected' : '' ?>>
-                    <?= $c ?>
-                </option>
+            <?php foreach(['RJ', 'RM', 'RF'] as $c): ?>
+                <option value="<?= $c ?>" <?= $cycleFilter === $c ? 'selected' : '' ?>><?= $c ?></option>
             <?php endforeach; ?>
         </select>
 
-        <select name="owner_filter">
-            <option value="all">All Owners / Global View</option>
-            <option value="mine">My Reports</option>
-            <?php foreach ($ownerTotals as $uid => $info): ?>
-                <option value="<?= $uid ?>"><?= htmlspecialchars($info['username']) ?></option>
-            <?php endforeach; ?>
+       <?php if ($isAdmin): ?>
+    <select id="owner-filter" name="owner_filter"
+            style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
+        <option value="all">All Owners / Global View</option>
+        <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
+
+        <?php foreach ($ownerTotals as $uid => $info): ?>
+            <?php if ((int)$uid === (int)$myId) continue; ?>
+            <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
+                <?= htmlspecialchars($info['username']) ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+<?php endif; ?>
+
+        <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
+            <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
+            <option value="pending" <?= ($filter === 'pending') ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending'] ?? 0 ?>)</option>
+            <option value="draft" <?= ($filter === 'draft') ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft'] ?? 0 ?>)</option>
+            <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready'] ?? 0 ?>)</option>
+            <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
+            <option value="sent" <?= ($filter === 'sent') ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent'] ?? 0 ?>)</option>
         </select>
 
-        <select name="filter">
-            <option value="">All States</option>
-            <option value="pending">Pending</option>
-            <option value="draft">Draft</option>
-            <option value="ready">Ready</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="sent">Sent</option>
+        <select name="sort" class="sort-dropdown">
+            <option value="updated_at" <?php echo $sortBy === 'updated_at' ? 'selected' : ''; ?>>Sort by: Last Updated</option>
+            <option value="id" <?php echo $sortBy === 'id' ? 'selected' : ''; ?>>Sort by: ID</option>
+            <option value="priority" <?php echo $sortBy === 'priority' ? 'selected' : ''; ?>>Sort by: Priority</option>
+            <option value="aum" <?php echo $sortBy === 'aum' ? 'selected' : ''; ?>>Sort by: AUM</option>
+            <option value="name" <?php echo $sortBy === 'name' ? 'selected' : ''; ?>>Sort by: Client Name</option>
+            <option value="report_state" <?php echo $sortBy === 'report_state' ? 'selected' : ''; ?>>Sort by: Status</option>
         </select>
 
-        <button type="submit">Search</button>
-        <a href="view_saved_reports.php">Reset Filters</a>
+        <select name="order" style="padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;">
+            <option value="desc" <?php echo $sortOrder === 'DESC' ? 'selected' : ''; ?>>Descending</option>
+            <option value="asc" <?php echo $sortOrder === 'ASC' ? 'selected' : ''; ?>>Ascending</option>
+        </select>
 
-    <?php endif; ?>
-</form>
+        <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
+        <button type="submit" style="background-color: #0288D1; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Search</button>
+        <a href="view_saved_reports.php" style="text-decoration: none; background-color: #666; color: white; padding: 8px 15px; border-radius: 4px; font-size: 13px;">Reset Filters</a>
+    </form>
 
     <?php if (!$clients): ?>
         <p style="margin-top: 20px;">No reports found. Try uploading from <a href="upload.php">Upload Page</a>.</p>
     <?php else: ?>
-<!-- Bulk Actions (ADMIN ONLY) -->
-<?php if ($isAdmin): ?>
-
-    <?php if ($deleteMode): ?>
         <!-- Delete Mode Bulk Actions -->
+        <?php if ($deleteMode): ?>
         <form method="post" id="bulkDeleteForm">
             <input type="hidden" name="action_type" value="delete">
             <div class="bulk-actions-bar">
@@ -719,84 +612,87 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 <button type="button" onclick="confirmDelete()" class="delete-btn">
                     <i class="fa-solid fa-trash"></i> Delete Selected
                 </button>
-                <span id="selectedCount" style="color:#666;font-size:13px;">
-                    0 items selected
-                </span>
+                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
             </div>
-        </form>
-
-    <?php else: ?>
+        <?php elseif ($reassignMode): ?>
         <!-- Reassignment Form -->
         <form method="post" id="bulkReassignForm">
             <input type="hidden" name="action_type" value="reassign">
             <div class="bulk-actions-bar">
                 <span class="bulk-selection-info">With Selected:</span>
-                <select name="new_owner_id" id="newOwnerSelect" required>
+                <select name="new_owner_id" class="reassign-select" required>
                     <option value="">-- Assign to... --</option>
                     <?php foreach ($allUsers as $user): ?>
-                        <option value="<?= (int)$user['id']; ?>">
-                            <?= htmlspecialchars($user['username']); ?>
+                        <option value="<?php echo (int)$user['id']; ?>">
+                            <?php echo htmlspecialchars($user['username']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <button type="submit"
-                        style="background-color:#28a745;color:white;">
-                    Reassign
-                </button>
-                <span id="selectedCount" style="color:#666;font-size:13px;">
-                    0 items selected
-                </span>
+                <button type="submit" class="reassign-submit-btn">Reassign</button>
+                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
             </div>
-        </form>
-    <?php endif; ?>
-
-<?php endif; ?>
+        <?php else: ?>
+        <!-- Default view (no form needed) -->
+        <?php endif; ?>
 
             <table>
                 <thead>
                     <tr>
-                        <!-- Show checkboxes for both delete and reassign modes -->
+                        <!-- Show checkboxes only in action mode -->
+                        <?php if ($deleteMode || $reassignMode): ?>
                         <th style="width: 40px;" class="select-all-cell">
-                            <input type="checkbox" id="selectAllCheckbox" class="client-checkbox" onclick="toggleSelectAll(this)">
+                            <input type="checkbox" id="selectAllCheckbox" class="action-checkbox" onclick="toggleSelectAll(this)">
                             <span class="select-all-label">All</span>
                         </th>
+                        <?php endif; ?>
+                        
+                        <?php if (!$deleteMode && !$reassignMode): ?>
+                        <th style="width: 40px;" class="action-icon-cell">
+                            <!-- Empty cell for icon column when not in action mode -->
+                        </th>
+                        <?php endif; ?>
+                        
                         <th>
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
                         <th>
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
-                        <th>AUM (Cr)</th>
+                        <th>
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=aum&order=<?php echo ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                                AUM (Cr) <?php if ($sortBy === 'aum') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
+                            </a>
+                        </th>
                         <th>Drafted By</th>
                         <th>RM</th>
                         <th>Cycle</th>
                         <th>Review Assigned to</th>
                         <th>
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
                         <th>
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 Last Updated <?php if ($sortBy === 'updated_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
                         <th>
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
                                 Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
                         <th style="text-align: center; width: 120px;">
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
                                 Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
                         <th style="text-align: center; width: 140px;">
-                            <a href="?<?php echo $deleteMode ? 'delete_mode=1&' : ''; ?>sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
+                            <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
                                 Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
                             </a>
                         </th>
@@ -848,10 +744,17 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     }
 ?>
     <tr>
-        <!-- Show checkboxes for both delete and reassign modes -->
+        <!-- Show checkboxes only in action mode -->
+        <?php if ($deleteMode || $reassignMode): ?>
         <td>
-            <input type="checkbox" class="client-checkbox delete-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
+            <input type="checkbox" class="action-checkbox client-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
         </td>
+        <?php else: ?>
+        <td class="action-icon-cell">
+            <!-- Empty cell for icon column when not in action mode -->
+        </td>
+        <?php endif; ?>
+        
         <td><?php echo (int)$c['id']; ?></td>
         <td>
             <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
@@ -979,7 +882,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     echo "<strong>{$p}</strong> ";
                 } else {
                     $params = ['page' => $p];
-                    if ($deleteMode) $params['delete_mode'] = '1';
+                    if ($deleteMode) $params['mode'] = 'delete';
+                    if ($reassignMode) $params['mode'] = 'reassign';
                     if ($q !== '') $params['q'] = $q;
                     if ($filter !== '') $params['filter'] = $filter;
                     if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
@@ -995,32 +899,10 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <?php endif; ?>
 </div>
 
-<!-- Delete Confirmation Modal -->
-<div id="deleteConfirmModal" class="delete-confirm-modal">
-    <div class="delete-confirm-content">
-        <div class="warning-icon">
-            <i class="fa-solid fa-exclamation-triangle"></i>
-        </div>
-        <h3 style="color: #e53935; text-align: center; margin-bottom: 15px;">Confirm Deletion</h3>
-        <p id="deleteConfirmMessage" style="text-align: center; margin-bottom: 25px;">
-            Are you sure you want to delete <span id="deleteCount">0</span> selected client(s)?
-        </p>
-        <p style="text-align: center; color: #666; font-size: 14px; margin-bottom: 25px;">
-            <i class="fa-solid fa-exclamation-circle"></i> This action cannot be undone. All related data will be permanently deleted.
-        </p>
-        <div style="display: flex; justify-content: center; gap: 15px;">
-            <button type="button" onclick="closeDeleteModal()" style="padding: 10px 24px; border: 1px solid #ced4da; background: #fff; color: #555; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
-            <button type="button" onclick="submitDelete()" style="padding: 10px 24px; border: none; background: #e53935; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">
-                <i class="fa-solid fa-trash"></i> Delete Selected
-            </button>
-        </div>
-    </div>
-</div>
-
 <script>
 // Toggle select all checkboxes
 function toggleSelectAll(checkbox) {
-    const checkboxes = document.querySelectorAll('.delete-checkbox');
+    const checkboxes = document.querySelectorAll('.client-checkbox');
     checkboxes.forEach(cb => {
         cb.checked = checkbox.checked;
     });
@@ -1029,7 +911,7 @@ function toggleSelectAll(checkbox) {
 
 // Update selected count
 function updateSelectedCount() {
-    const checkboxes = document.querySelectorAll('.delete-checkbox');
+    const checkboxes = document.querySelectorAll('.client-checkbox');
     const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
     const selectedCountElem = document.getElementById('selectedCount');
     if (selectedCountElem) {
@@ -1046,7 +928,7 @@ function updateSelectedCount() {
 
 // Show delete confirmation modal
 function confirmDelete() {
-    const checkboxes = document.querySelectorAll('.delete-checkbox');
+    const checkboxes = document.querySelectorAll('.client-checkbox');
     const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
     if (selectedCount === 0) {
         alert('Please select at least one client to delete.');
@@ -1068,25 +950,25 @@ function submitDelete() {
 
 // Update count on page load
 document.addEventListener('DOMContentLoaded', function() {
-    if (document.querySelector('.delete-checkbox')) {
+    if (document.querySelector('.client-checkbox')) {
         updateSelectedCount();
     }
 });
 
 // Add checkbox event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    const checkboxes = document.querySelectorAll('.delete-checkbox');
+    const checkboxes = document.querySelectorAll('.client-checkbox');
     checkboxes.forEach(cb => {
         cb.addEventListener('change', updateSelectedCount);
     });
 });
 
 // Prevent reassignment form submission if no owner selected or no clients selected
-const bulkForm = document.getElementById('bulkReassignForm');
-if (bulkForm) {
-    bulkForm.addEventListener('submit', function(e) {
-        const newOwner = document.getElementById('newOwnerSelect').value;
-        const checkboxes = document.querySelectorAll('.delete-checkbox');
+const bulkReassignForm = document.getElementById('bulkReassignForm');
+if (bulkReassignForm) {
+    bulkReassignForm.addEventListener('submit', function(e) {
+        const newOwner = bulkReassignForm.querySelector('select[name="new_owner_id"]').value;
+        const checkboxes = document.querySelectorAll('.client-checkbox');
         const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
         if (!newOwner) {
             e.preventDefault();
