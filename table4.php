@@ -374,7 +374,7 @@ try {
             <td>
                 <select class="action-dropdown" data-field="action_step" data-scheme-id="<?= $schemeId ?>">
                     <?php
-                    $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation'];
+                    $steps = ['Continue','Drop','Switch','Partially Redeem','Under Observation','SIP Cancellation'];
                     foreach ($steps as $step):
                     ?>
                         <option value="<?= $step ?>" <?= ($s['action_step'] ?? 'Continue') === $step ? 'selected' : '' ?>>
@@ -546,6 +546,18 @@ document.querySelectorAll('#schemeTable').forEach(function(table) {
             const value = select.value;
             const schemeId = select.getAttribute('data-scheme-id') || 0;
             autoSaveSchemeField(schemeId, field, value);
+
+            // --- NEW: If SIP Cancellation selected, copy Present Scheme Name to Scheme Changes ---
+            if (value === 'SIP Cancellation') {
+                const tr = select.closest('tr');
+                const presentSchemeInput = tr.querySelector('input[data-field="scheme_name"]');
+                const schemeChangesTextarea = tr.querySelector('textarea[data-field="recommended_scheme"]');
+                if (presentSchemeInput && schemeChangesTextarea) {
+                    schemeChangesTextarea.value = presentSchemeInput.value;
+                    // Trigger autosave for textarea
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', presentSchemeInput.value);
+                }
+            }
         }
     }, true);
 });
