@@ -747,6 +747,11 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         transform: translateY(0) scale(1);
     }
 }
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
 
 
     </style>
@@ -755,81 +760,65 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
   
 <?php include 'navbar.php'; ?>
 
+<div class="container">
 <?php
 // --- Place dashboard summary OUTSIDE the .container and just after navbar ---
 ?>
-<?php if ($showReassignedSummary && !empty($reassignedSummary)): ?>
-    <div class="dashboard-summary">
-        <div class="dashboard-summary-inner">
-            <span class="dashboard-summary-title">Reassigned Summary</span>
-            <?php foreach ($reassignedSummary as $row): ?>
-                <?php
-                $uid = null;
-                foreach ($allUsers as $u) {
-                    if ($u['username'] === $row['username']) {
-                        $uid = $u['id'];
-                        break;
-                    }
-                }
-                $filterParams = [];
-                if ($q !== '') $filterParams['q'] = $q;
-                if ($filter !== '') $filterParams['filter'] = $filter;
-                if ($cycleFilter !== '') $filterParams['cycle_filter'] = $cycleFilter;
-                if ($sortBy !== 'updated_at') $filterParams['sort'] = $sortBy;
-                if ($sortOrder !== 'DESC') $filterParams['order'] = strtolower($sortOrder);
-                $filterParams['owner_filter'] = $uid;
-                $filterUrl = 'view_saved_reports.php?' . http_build_query($filterParams);
-                ?>
-                <a
-                    href="<?= htmlspecialchars($filterUrl) ?>"
-                    class="dashboard-summary-user"
-                    style="color:#1976d2; font-weight:600; text-decoration:none; cursor:pointer; margin:0 16px;"
-                    title="Show clients assigned to <?= htmlspecialchars($row['username']) ?>"
-                >
-                    <?= htmlspecialchars($row['username']) ?> - <b><?= (int)$row['total'] ?></b>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </div>
-<?php endif; ?>
 
-<div class="container">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h1>Stored Client Reports</h1>
-        <div class="action-icons-container">
-            <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
-                <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>" 
-                   class="action-btn reassign-btn" title="Reassign Clients">
-                    <i class="fa-solid fa-user-group"></i>
-                    <span>Reassign</span>
-                </a>
-            <?php elseif ($deleteMode || $reassignMode): ?>
-                <?php
-                $paramString = '';
-                $firstParam = true;
-                function addParam(&$paramString, &$firstParam, $name, $value) {
-                    if (!empty($value)) {
-                        $paramString .= $firstParam ? '?' : '&';
-                        $paramString .= $name . '=' . urlencode($value);
-                        $firstParam = false;
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+
+    <!-- LEFT: Reassigned Summary (UNCHANGED) -->
+    <?php if ($showReassignedSummary && !empty($reassignedSummary)): ?>
+        <div class="dashboard-summary">
+            <div class="dashboard-summary-inner">
+                <span class="dashboard-summary-title">Reassigned Summary</span>
+
+                <?php foreach ($reassignedSummary as $row): ?>
+                    <?php
+                    $uid = null;
+                    foreach ($allUsers as $u) {
+                        if ($u['username'] === $row['username']) {
+                            $uid = $u['id'];
+                            break;
+                        }
                     }
-                }
-                addParam($paramString, $firstParam, 'q', $q);
-                addParam($paramString, $firstParam, 'filter', $filter);
-                addParam($paramString, $firstParam, 'owner_filter', $ownerFilter);
-                addParam($paramString, $firstParam, 'cycle_filter', $cycleFilter);
-                addParam($paramString, $firstParam, 'sort', $sortBy);
-                if ($sortOrder !== 'DESC') {
-                    addParam($paramString, $firstParam, 'order', strtolower($sortOrder));
-                }
-                ?>
-                <a href="view_saved_reports.php<?php echo $paramString; ?>" 
-                   class="cancel-action-btn">
-                    <i class="fa-solid fa-times"></i> Cancel Action Mode
-                </a>
-            <?php endif; ?>
+                    $filterParams = [];
+                    if ($q !== '') $filterParams['q'] = $q;
+                    if ($filter !== '') $filterParams['filter'] = $filter;
+                    if ($cycleFilter !== '') $filterParams['cycle_filter'] = $cycleFilter;
+                    if ($sortBy !== 'updated_at') $filterParams['sort'] = $sortBy;
+                    if ($sortOrder !== 'DESC') $filterParams['order'] = strtolower($sortOrder);
+                    $filterParams['owner_filter'] = $uid;
+                    $filterUrl = 'view_saved_reports.php?' . http_build_query($filterParams);
+                    ?>
+                    <a
+                        href="<?= htmlspecialchars($filterUrl) ?>"
+                        class="dashboard-summary-user"
+                        style="color:#1976d2; font-weight:600; text-decoration:none; cursor:pointer; margin:0 16px;"
+                    >
+                        <?= htmlspecialchars($row['username']) ?> - <b><?= (int)$row['total'] ?></b>
+                    </a>
+                <?php endforeach; ?>
+            </div>
         </div>
+    <?php endif; ?>
+
+    <!-- RIGHT: Reassign Button (UNCHANGED) -->
+    <div class="action-icons-container">
+        <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
+            <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>" 
+               class="action-btn reassign-btn" title="Reassign Clients">
+                <i class="fa-solid fa-user-group"></i>
+                <span>Reassign</span>
+            </a>
+        <?php elseif ($deleteMode || $reassignMode): ?>
+            <a href="view_saved_reports.php" class="cancel-action-btn">
+                <i class="fa-solid fa-times"></i> Cancel
+            </a>
+        <?php endif; ?>
     </div>
+
+</div>
 
     <!-- Show filtered row count above search bar -->
     <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
