@@ -457,6 +457,245 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         .reassign-submit-btn:hover {
             background-color: #218838;
         }
+      .btn {
+    text-decoration: none;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+
+    transition:
+        background 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.2s ease,
+        filter 0.2s ease;
+}
+
+/* ---------- SEARCH BUTTON ---------- */
+.btn-search {
+    color: #fff;
+    background: linear-gradient(135deg, #039BE5, #0277BD);
+    box-shadow: 0 2px 6px rgba(2, 136, 209, 0.35);
+}
+
+.btn-search:hover {
+    background: linear-gradient(135deg, #03A9F4, #0288D1);
+    box-shadow:
+        0 6px 14px rgba(2, 136, 209, 0.45),
+        inset 0 1px 0 rgba(255,255,255,0.15);
+    transform: translateY(-2px);
+}
+
+.btn-search:active {
+    transform: translateY(0);
+    box-shadow:
+        0 3px 8px rgba(2, 136, 209, 0.4),
+        inset 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Focus (keyboard users) */
+.btn-search:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(2, 136, 209, 0.35),
+        0 4px 10px rgba(2, 136, 209, 0.45);
+}
+
+/* ---------- RESET BUTTON ---------- */
+.btn-reset {
+    color: #fff;
+    background: linear-gradient(135deg, #757575, #616161);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+.btn-reset:hover {
+    background: linear-gradient(135deg, #8E8E8E, #555);
+    box-shadow:
+        0 6px 14px rgba(0,0,0,0.35),
+        inset 0 1px 0 rgba(255,255,255,0.12);
+    transform: translateY(-2px);
+}
+
+.btn-reset:active {
+    transform: translateY(0);
+    box-shadow:
+        0 3px 8px rgba(0,0,0,0.35),
+        inset 0 2px 4px rgba(0,0,0,0.25);
+}
+
+.btn-reset:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(0,0,0,0.3),
+        0 4px 10px rgba(0,0,0,0.35);
+}
+
+
+.meet-select {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    background-color: #fff;
+    min-width: 110px;
+
+    /* remove default arrow */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    /* custom arrow */
+    background-image:
+        linear-gradient(45deg, transparent 50%, #555 50%),
+        linear-gradient(135deg, #555 50%, transparent 50%),
+        linear-gradient(to right, #e0e0e0, #e0e0e0);
+    background-position:
+        calc(100% - 18px) calc(50% - 3px),
+        calc(100% - 13px) calc(50% - 3px),
+        calc(100% - 2.2em) 50%;
+    background-size:
+        5px 5px,
+        5px 5px,
+        1px 1.5em;
+    background-repeat: no-repeat;
+
+    transition: all 0.25s ease;
+}
+
+/* Hover */
+.meet-select:hover {
+    border-color: #0288D1;
+    box-shadow: 0 2px 6px rgba(2, 136, 209, 0.25);
+}
+
+/* Focus */
+.meet-select:focus {
+    outline: none;
+    border-color: #0288D1;
+    box-shadow: 0 0 0 3px rgba(2, 136, 209, 0.25);
+}
+
+/* ---------- Status-based coloring ---------- */
+.meet-select option[value="pending"] {
+    color: #f9a825;
+}
+
+.meet-select option[value="yes"] {
+    color: #2e7d32;
+}
+
+.meet-select option[value="no"] {
+    color: #c62828;
+}
+
+/* Overlay */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Card */
+.modal-card {
+    background: #fff;
+    width: 460px;
+    max-width: 92%;
+    padding: 22px 24px;
+    border-radius: 14px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+    font-family: 'Inter', sans-serif;
+    animation: modalFadeIn 0.25s ease;
+}
+
+/* Header */
+.modal-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.modal-icon {
+    background: linear-gradient(135deg, #1976d2, #42a5f5);
+    color: #fff;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 17px;
+    color: #1f2937;
+}
+
+.modal-header p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+/* Textarea */
+#listModalRemarks {
+    width: 95%;
+    min-height: 110px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+    transition: all 0.25s ease;
+}
+
+#listModalRemarks::placeholder {
+    color: #9ca3af;
+}
+
+#listModalRemarks:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.25);
+}
+
+/* Footer */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Animation */
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+
     </style>
 </head>
 <body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
@@ -609,8 +848,10 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
         <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
-        <button type="submit" style="background-color: #0288D1; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Search</button>
-        <a href="view_saved_reports.php" style="text-decoration: none; background-color: #666; color: white; padding: 8px 15px; border-radius: 4px; font-size: 13px;">Reset Filters</a>
+<button type="submit" class="btn btn-search">Search</button>
+
+<a href="view_saved_reports.php" class="btn btn-reset">Reset Filters</a>
+
     </form>
 
     <?php if (!$clients): ?>
@@ -845,15 +1086,24 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             <?php endif; ?>
         </td>
         <td><?php echo $statusHtml; ?></td>
-        <td style="text-align: center;">
-            <select onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                    class="meet-select"
-                    id="meet_select_<?php echo $c['id']; ?>">
-                <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
-                <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>✅ Yes</option>
-                <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>❌ No</option>
-            </select>
-        </td>
+<td style="text-align: center;">
+    <select
+        onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+        class="meet-select"
+        id="meet_select_<?php echo $c['id']; ?>">
+        
+        <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>
+            ⏳ Pending
+        </option>
+        <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>
+            ✅ Yes
+        </option>
+        <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>
+            ❌ No
+        </option>
+    </select>
+</td>
+
 
         <td style="text-align: center;">
             <button type="button" 
@@ -995,22 +1245,40 @@ if (bulkReassignForm) {
 </script>
 
 <!-- Meeting Remarks Modal -->
-<div id="listMeetingModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;">
-    <div style="background: white; padding: 24px; border-radius: 12px; width: 450px; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.2); font-family: 'Inter', sans-serif;">
-        <h3 style="margin-top: 0; color: #1976d2; font-size: 18px; display: flex; align-items: center; gap: 8px;">
-            <span>📝</span> Meeting Remarks
-        </h3>
-        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">Enter details about the discussion:</p>
+<div id="listMeetingModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
         
-        <input type="hidden" id="current_modal_client_id">
-        <textarea id="listModalRemarks" rows="5" style="width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: 8px; font-family: inherit; margin-bottom: 20px; resize: vertical; font-size: 14px;" placeholder="e.g., Client agreed to increase SIP..."></textarea>
-        
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button type="button" onclick="closeListMeetingModal()" style="padding: 8px 16px; border: 1px solid #ced4da; background: #fff; color: #555; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
-            <button type="button" onclick="saveListMeetingRemarks()" style="padding: 8px 20px; border: none; background: #1976d2; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;">Save Remarks</button>
+        <!-- Header -->
+        <div class="modal-header">
+            <div class="modal-icon">📝</div>
+            <div>
+                <h3>Meeting Remarks</h3>
+                <p>Enter details about the discussion</p>
+            </div>
         </div>
+
+        <!-- Body -->
+        <input type="hidden" id="current_modal_client_id">
+
+        <textarea
+            id="listModalRemarks"
+            rows="5"
+            placeholder="e.g., Client agreed to increase SIP, follow-up next month..."
+        ></textarea>
+
+        <!-- Footer -->
+        <div class="modal-actions">
+            <button type="button" class="btn btn-reset" onclick="closeListMeetingModal()">
+                Cancel
+            </button>
+            <button type="button" class="btn btn-search" onclick="saveListMeetingRemarks()">
+                Save Remarks
+            </button>
+        </div>
+
     </div>
 </div>
+
 
 <script>
     // 1. Handle Dropdown Change
