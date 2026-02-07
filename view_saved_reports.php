@@ -277,6 +277,11 @@ $stmtCount->execute($params);
 $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
+// --- ADD: Count distinct client names for display ---
+$stmtDistinctNames = $pdo->prepare("SELECT COUNT(DISTINCT c.name) FROM clients c {$whereClause}");
+$stmtDistinctNames->execute($params);
+$totalDistinctNames = (int)$stmtDistinctNames->fetchColumn();
+
 // 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 // Validate sort column to prevent SQL injection
 $allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state', 'aum'];
@@ -823,7 +828,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <!-- Show filtered row count above search bar -->
     <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
         <?php
-            echo "Showing $totalRows row" . ($totalRows !== 1 ? "s" : "") . " for current filters.";
+            // Show count of distinct client names, not total rows
+            echo "Showing $totalDistinctNames client" . ($totalDistinctNames !== 1 ? "s" : "") . " for current filters.";
         ?>
     </div>
 
