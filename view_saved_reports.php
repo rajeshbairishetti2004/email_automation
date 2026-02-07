@@ -114,6 +114,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
     }
 }
 
+// --- BEGIN: Reassigned summary logic (admin or logged-in user only) ---
+$showReassignedSummary = false;
+$reassignedSummary = [];
+$isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
+
+// Determine which user's summary to show (for admin, based on owner_filter)
+$summaryUserId = $myId;
+if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'])) {
+    $summaryUserId = (int)$_GET['owner_filter'];
+}
+
+if ($isAdmin || $myId) {
+    $showReassignedSummary = true;
+    // For admin: show summary for selected owner_filter, for user: only their own
+    if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'])) {
+        // Show summary for selected owner
+        $stmtReassigned = $pdo->prepare("
+            SELECT u.username, COUNT(c.id) as total
+            FROM clients c
+            INNER JOIN users u ON u.id = c.review_assigned_to
+            WHERE c.assigned_to = ?
+            GROUP BY u.username
+            ORDER BY u.username
+        ");
+        $stmtReassigned->execute([$summaryUserId]);
+        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($isAdmin && (!isset($_GET['owner_filter']) || $_GET['owner_filter'] === 'all' || $_GET['owner_filter'] === 'mine')) {
+        // Show global summary for all users (admin, no specific owner selected)
+        $stmtReassigned = $pdo->query("
+            SELECT u.username, COUNT(c.id) as total
+            FROM clients c
+            INNER JOIN users u ON u.id = c.review_assigned_to
+            WHERE c.assigned_to <> c.review_assigned_to
+            GROUP BY u.username
+            ORDER BY u.username
+        ");
+        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // For normal user or admin with "mine"
+        $stmtReassigned = $pdo->prepare("
+            SELECT u.username, COUNT(c.id) as total
+            FROM clients c
+            INNER JOIN users u ON u.id = c.review_assigned_to
+            WHERE c.assigned_to = ?
+            GROUP BY u.username
+            ORDER BY u.username
+        ");
+        $stmtReassigned->execute([$myId]);
+        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+// --- END: Reassigned summary logic ---
+
 // 1. Get Filter Inputs
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
@@ -702,8 +755,45 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
   
 <?php include 'navbar.php'; ?>
 
-<div class="container">
+<?php
+// --- Place dashboard summary OUTSIDE the .container and just after navbar ---
+?>
+<?php if ($showReassignedSummary && !empty($reassignedSummary)): ?>
+    <div class="dashboard-summary">
+        <div class="dashboard-summary-inner">
+            <span class="dashboard-summary-title">Reassigned Summary</span>
+            <?php foreach ($reassignedSummary as $row): ?>
+                <?php
+                $uid = null;
+                foreach ($allUsers as $u) {
+                    if ($u['username'] === $row['username']) {
+                        $uid = $u['id'];
+                        break;
+                    }
+                }
+                $filterParams = [];
+                if ($q !== '') $filterParams['q'] = $q;
+                if ($filter !== '') $filterParams['filter'] = $filter;
+                if ($cycleFilter !== '') $filterParams['cycle_filter'] = $cycleFilter;
+                if ($sortBy !== 'updated_at') $filterParams['sort'] = $sortBy;
+                if ($sortOrder !== 'DESC') $filterParams['order'] = strtolower($sortOrder);
+                $filterParams['owner_filter'] = $uid;
+                $filterUrl = 'view_saved_reports.php?' . http_build_query($filterParams);
+                ?>
+                <a
+                    href="<?= htmlspecialchars($filterUrl) ?>"
+                    class="dashboard-summary-user"
+                    style="color:#1976d2; font-weight:600; text-decoration:none; cursor:pointer; margin:0 16px;"
+                    title="Show clients assigned to <?= htmlspecialchars($row['username']) ?>"
+                >
+                    <?= htmlspecialchars($row['username']) ?> - <b><?= (int)$row['total'] ?></b>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
+<div class="container">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h1>Stored Client Reports</h1>
         <div class="action-icons-container">

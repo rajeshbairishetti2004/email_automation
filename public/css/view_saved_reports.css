@@ -299,3 +299,36 @@
     box-shadow: var(--shadow);
     padding: 24px 32px;
 }
+
+/* --- DASHBOARD SUMMARY STYLES --- */
+.dashboard-summary {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 32px;
+    margin-bottom: 10px;
+}
+.dashboard-summary-inner {
+    background: #e3f2fd;
+    border: 1.5px solid #90caf9;
+    border-radius: 12px;
+    padding: 18px 36px;
+    font-size: 17px;
+    color: #1976d2;
+    min-width: 320px;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(25,118,210,0.07);
+    font-weight: 500;
+}
+.dashboard-summary-title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-right: 18px;
+}
+.dashboard-summary-user {
+    margin: 0 16px;
+    font-size: 16px;
+    font-weight: 500;
+}
