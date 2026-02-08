@@ -119,7 +119,11 @@ $showReassignedSummary = false;
 $reassignedSummary = [];
 $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
-// Determine which user's summary to show (for admin, based on owner_filter)
+// Get filter values for summary
+$cycleFilter = isset($_GET['cycle_filter']) ? trim($_GET['cycle_filter']) : '';
+$filter = isset($_GET['filter']) ? trim($_GET['filter']) : '';
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+
 $summaryUserId = $myId;
 if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'])) {
     $summaryUserId = (int)$_GET['owner_filter'];
@@ -127,43 +131,56 @@ if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'
 
 if ($isAdmin || $myId) {
     $showReassignedSummary = true;
-    // For admin: show summary for selected owner_filter, for user: only their own
-    if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'])) {
-        // Show summary for selected owner
-        $stmtReassigned = $pdo->prepare("
-            SELECT u.username, COUNT(c.id) as total
-            FROM clients c
-            INNER JOIN users u ON u.id = c.review_assigned_to
-            WHERE c.assigned_to = ?
-            GROUP BY u.username
-            ORDER BY u.username
-        ");
-        $stmtReassigned->execute([$summaryUserId]);
-        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
-    } elseif ($isAdmin && (!isset($_GET['owner_filter']) || $_GET['owner_filter'] === 'all' || $_GET['owner_filter'] === 'mine')) {
-        // Show global summary for all users (admin, no specific owner selected)
-        $stmtReassigned = $pdo->query("
-            SELECT u.username, COUNT(c.id) as total
-            FROM clients c
-            INNER JOIN users u ON u.id = c.review_assigned_to
-            WHERE c.assigned_to <> c.review_assigned_to
-            GROUP BY u.username
-            ORDER BY u.username
-        ");
-        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
+
+    // Build WHERE clause for reassigned summary
+    $summaryWhereParts = [];
+    $summaryParams = [];
+
+    // Only show reassigned (assigned_to != review_assigned_to)
+    $summaryWhereParts[] = "c.assigned_to <> c.review_assigned_to";
+
+    // Owner filter
+    if ($isAdmin) {
+        if ($ownerFilter === 'mine') {
+            $summaryWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+            $summaryParams[] = $myId;
+            $summaryParams[] = $myId;
+        } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
+            $summaryWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+            $summaryParams[] = (int)$ownerFilter;
+            $summaryParams[] = (int)$ownerFilter;
+        }
     } else {
-        // For normal user or admin with "mine"
-        $stmtReassigned = $pdo->prepare("
-            SELECT u.username, COUNT(c.id) as total
-            FROM clients c
-            INNER JOIN users u ON u.id = c.review_assigned_to
-            WHERE c.assigned_to = ?
-            GROUP BY u.username
-            ORDER BY u.username
-        ");
-        $stmtReassigned->execute([$myId]);
-        $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
+        $summaryWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $summaryParams[] = $myId;
+        $summaryParams[] = $myId;
     }
+
+    // Cycle filter
+    if ($cycleFilter !== '') {
+        $summaryWhereParts[] = "c.review_cycle = ?";
+        $summaryParams[] = $cycleFilter;
+    }
+
+    // State filter
+    if ($filter !== '' && in_array($filter, ['pending','draft','ready','reviewed','sent'])) {
+        $summaryWhereParts[] = "c.report_state = ?";
+        $summaryParams[] = $filter;
+    }
+
+    $summaryWhereClause = $summaryWhereParts ? 'WHERE ' . implode(' AND ', $summaryWhereParts) : '';
+
+    // Show summary for selected owner or global
+    $stmtReassigned = $pdo->prepare("
+        SELECT u.username, COUNT(c.id) as total
+        FROM clients c
+        INNER JOIN users u ON u.id = c.review_assigned_to
+        $summaryWhereClause
+        GROUP BY u.username
+        ORDER BY u.username
+    ");
+    $stmtReassigned->execute($summaryParams);
+    $reassignedSummary = $stmtReassigned->fetchAll(PDO::FETCH_ASSOC);
 }
 // --- END: Reassigned summary logic ---
 
