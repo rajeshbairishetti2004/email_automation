@@ -70,7 +70,7 @@ $imageUrl = "/email_automation/report_generation/extracted/" . basename($imagePa
    SNAPSHOT OCR (PYTHON)
 ===================================================== */
 
-$pythonExe    = "C:\\Users\\Rajesh\\raj\\Scripts\\python.exe";
+$pythonExe    = "C:\\Users\\vigne\\AppData\\Local\\Programs\\Python\\Python314\\python.exe";
 $pythonScript = "C:\\xampp\\htdocs\\email_automation\\report_generation\\snapshot_ocr.py";
 
 if (!file_exists($pythonScript)) {
