@@ -21,7 +21,8 @@ $SLIDE_REGISTRY = [
     3 => [
         'title' => 'Impact of our recommendations',
         'template' => 'page3.php',
-        'preview' => 'Portfolio and Tax impact analysis of recommendations'
+        'preview' => 'Portfolio and Tax impact analysis of recommendations',
+        'dynamic' => true
     ],
     4 => [
         'title' => 'Rationale',
