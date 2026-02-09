@@ -198,7 +198,7 @@ $isAdmin = isset($currentUser['username'])
 
         </div>
     </div>
-    <div class="nav-user" style="position:relative;">
+    <div class="nav-user" id="navUserBtn" style="position:relative;">
         <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
         <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:36px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:100;">
             <div style="font-size: 12px; color: #666; margin-bottom: 5px; border-bottom: 1px solid #eee; padding: 8px 12px 5px;">
@@ -209,15 +209,14 @@ $isAdmin = isset($currentUser['username'])
         </div>
     </div>
     <script>
-        // Simple dropdown toggle
-        const profilePic = document.getElementById('profilePic');
+        // Show dropdown on hover, hide on mouseleave
+        const navUserBtn = document.getElementById('navUserBtn');
         const profileDropdown = document.getElementById('profileDropdown');
-        document.addEventListener('click', function(e) {
-            if (profilePic.contains(e.target)) {
-                profileDropdown.style.display = profileDropdown.style.display === 'block' ? 'none' : 'block';
-            } else if (!profileDropdown.contains(e.target)) {
-                profileDropdown.style.display = 'none';
-            }
+        navUserBtn.addEventListener('mouseenter', function() {
+            profileDropdown.style.display = 'block';
+        });
+        navUserBtn.addEventListener('mouseleave', function() {
+            profileDropdown.style.display = 'none';
         });
     </script>
 </nav>
