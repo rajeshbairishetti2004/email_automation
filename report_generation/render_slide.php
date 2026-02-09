@@ -5,33 +5,36 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$page = (int)($_GET['page'] ?? 0);
+require_once __DIR__ . '/database.php';
 
+$page = (int)($_GET['page'] ?? 0);
+$client_id = $_GET['client_id'] ?? null;
+
+if (!$client_id) {
+    echo "<div style='padding:40px;color:#999;'>Client not specified</div>";
+    exit;
+}
+
+/* ===============================
+   DYNAMIC SLIDES (DIRECT RENDER)
+================================ */
+
+// ✅ Page 2 (already working)
 if ($page === 2) {
     include __DIR__ . '/slides/page2.php';
     exit;
 }
 
-
-require_once __DIR__ . '/database.php';
-
-/* ===============================
-   GET PARAMETERS
-================================ */
-$client_id = $_GET['client_id'] ?? null;
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-
-/* ===============================
-   BASIC VALIDATION
-================================ */
-if (!$client_id) {
-    echo "<div style='padding:40px;font-family:Segoe UI;color:#999;'>Client not specified</div>";
+// ✅ Page 3 (FIX)
+if ($page === 3) {
+    include __DIR__ . '/slides/page3.php';
     exit;
 }
 
 /* ===============================
-   FETCH SLIDE FROM DATABASE
+   STATIC SLIDES (DB RENDER)
 ================================ */
+
 $pages = getClientPages($client_id);
 
 if (!isset($pages[$page])) {
@@ -39,8 +42,4 @@ if (!isset($pages[$page])) {
     exit;
 }
 
-/* ===============================
-   OUTPUT FINAL SLIDE HTML
-   (NO WRAPPERS, NO CSS, NO JS)
-================================ */
 echo $pages[$page]['content'];
