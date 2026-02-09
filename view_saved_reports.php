@@ -552,36 +552,6 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         filter 0.2s ease;
 }
 
-/* ---------- SEARCH BUTTON ---------- */
-.btn-search {
-    color: #fff;
-    background: linear-gradient(135deg, #039BE5, #0277BD);
-    box-shadow: 0 2px 6px rgba(2, 136, 209, 0.35);
-}
-
-.btn-search:hover {
-    background: linear-gradient(135deg, #03A9F4, #0288D1);
-    box-shadow:
-        0 6px 14px rgba(2, 136, 209, 0.45),
-        inset 0 1px 0 rgba(255,255,255,0.15);
-    transform: translateY(-2px);
-}
-
-.btn-search:active {
-    transform: translateY(0);
-    box-shadow:
-        0 3px 8px rgba(2, 136, 209, 0.4),
-        inset 0 2px 4px rgba(0,0,0,0.2);
-}
-
-/* Focus (keyboard users) */
-.btn-search:focus-visible {
-    outline: none;
-    box-shadow:
-        0 0 0 3px rgba(2, 136, 209, 0.35),
-        0 4px 10px rgba(2, 136, 209, 0.45);
-}
-
 /* ---------- RESET BUTTON ---------- */
 .btn-reset {
     color: #fff;
@@ -597,19 +567,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     transform: translateY(-2px);
 }
 
-.btn-reset:active {
-    transform: translateY(0);
-    box-shadow:
-        0 3px 8px rgba(0,0,0,0.35),
-        inset 0 2px 4px rgba(0,0,0,0.25);
-}
 
-.btn-reset:focus-visible {
-    outline: none;
-    box-shadow:
-        0 0 0 3px rgba(0,0,0,0.3),
-        0 4px 10px rgba(0,0,0,0.35);
-}
 
 
 .meet-select {
@@ -874,34 +832,32 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
 
 
+    <!-- Move all filter controls inside the form and add auto-submit on change -->
     <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+        <div style="position:relative; flex:1; max-width:60%;">
+            <input type="text"
+                   name="q"
+                   id="client-search"
+                   placeholder="Search..."
+                   value="<?php echo htmlspecialchars($q); ?>"
+                   autocomplete="off"
+                   style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
 
-<div style="position:relative; flex:1; max-width:60%;">
-    <input type="text"
-           name="q"
-           id="client-search"
-           placeholder="Search..."
-           value="<?php echo htmlspecialchars($q); ?>"
-           autocomplete="off"
-           style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
-
-    <div id="client-search-dropdown"
-         style="display:none;
-                position:absolute;
-                top:100%;
-                left:0;
-                width:60%;
-                background:#fff;
-                z-index:1000;
-                border:1px solid #e2e8f0;
-                border-top:none;
-                max-height:200px;
-                overflow-y:auto;
-                box-sizing:border-box;">
-    </div>
-</div>
-
-
+            <div id="client-search-dropdown"
+                 style="display:none;
+                    position:absolute;
+                    top:100%;
+                    left:0;
+                    width:60%;
+                    background:#fff;
+                    z-index:1000;
+                    border:1px solid #e2e8f0;
+                    border-top:none;
+                    max-height:200px;
+                    overflow-y:auto;
+                    box-sizing:border-box;">
+            </div>
+        </div>
 
         <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
             <option value="">All Cycles</option>
@@ -910,20 +866,20 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             <?php endforeach; ?>
         </select>
 
-       <?php if ($isAdmin): ?>
-    <select id="owner-filter" name="owner_filter"
-            style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
-        <option value="all">All Owners / Global View</option>
-        <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
+        <?php if ($isAdmin): ?>
+        <select id="owner-filter" name="owner_filter"
+                style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:180px;">
+            <option value="all">All Owners / Global View</option>
+            <option value="mine" <?= ($ownerFilter === 'mine') ? 'selected' : '' ?>>My Reports</option>
 
-        <?php foreach ($ownerTotals as $uid => $info): ?>
-            <?php if ((int)$uid === (int)$myId) continue; ?>
-            <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
-                <?= htmlspecialchars($info['username']) ?>
-            </option>
-        <?php endforeach; ?>
-    </select>
-<?php endif; ?>
+            <?php foreach ($ownerTotals as $uid => $info): ?>
+                <?php if ((int)$uid === (int)$myId) continue; ?>
+                <option value="<?= $uid ?>" <?= (string)$ownerFilter === (string)$uid ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($info['username']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php endif; ?>
 
         <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
             <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
@@ -950,10 +906,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
         <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
-<button type="submit" class="btn btn-search">Search</button>
-
-<a href="view_saved_reports.php" class="btn btn-reset">Reset Filters</a>
-
+        <!-- Only Reset button remains -->
+        <a href="view_saved_reports.php" class="btn btn-reset">Reset Filters</a>
     </form>
 
     <?php if (!$clients): ?>
@@ -1543,6 +1497,21 @@ function renderDropdown(names) {
 }
 
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const filterForm = document.getElementById('filterForm');
+    if (!filterForm) return;
+
+    // Auto-submit on dropdown change
+    filterForm.querySelectorAll('select').forEach(select => {
+        select.addEventListener('change', function () {
+            filterForm.submit();
+        });
+    });
+});
+</script>
+
 
 </body>
 </html>
