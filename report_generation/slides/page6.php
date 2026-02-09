@@ -70,8 +70,8 @@ $imageUrl = "/email_automation/report_generation/extracted/" . basename($imagePa
    SNAPSHOT OCR (PYTHON)
 ===================================================== */
 
-$pythonExe    = "C:\\Users\\vigne\\AppData\\Local\\Programs\\Python\\Python314\\python.exe";
-$pythonScript = "C:\\xampp\\htdocs\\email_automation\\report_generation\\snapshot_ocr.py";
+$pythonExe    = $_ENV['PYTHON_EXE'] ?? '';
+$pythonScript = $_ENV['SNAPSHOT_OCR_SCRIPT'] ?? '';
 
 if (!file_exists($pythonScript)) {
     echo "<pre>Python script not found:\n$pythonScript</pre>";
