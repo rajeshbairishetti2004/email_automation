@@ -280,8 +280,13 @@ if ($ownerFilter === 'mine') {
 }
 $whereState = $stateWhereParts ? 'WHERE ' . implode(' AND ', $stateWhereParts) : '';
 
+// --- FIX: Count DISTINCT client names for each state ---
 $statusTotals = [];
-$statusCountStmt = $pdo->prepare("SELECT c.report_state, COUNT(*) as total FROM clients c $whereState GROUP BY c.report_state HAVING total > 0");
+$statusCountStmt = $pdo->prepare("
+    SELECT c.report_state, COUNT(DISTINCT c.name) as total 
+    FROM clients c $whereState 
+    GROUP BY c.report_state HAVING total > 0
+");
 $statusCountStmt->execute($stateParams);
 foreach ($statusCountStmt as $row) {
     $statusTotals[$row['report_state']] = (int)$row['total'];
@@ -566,6 +571,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         inset 0 1px 0 rgba(255,255,255,0.12);
     transform: translateY(-2px);
 }
+
 
 
 
