@@ -1,20 +1,33 @@
 <?php
 // send_email.php
-require_once 'db_config.php';
 
-$domainProfiles = require __DIR__ . '/organization_emails.php';
-$sendAsProfiles = $domainProfiles;
+require_once 'db_config.php';
+require_once 'auth.php';
 $clientId = (int)($clientId ?? 0);
 
-// Fixed list for CC section - only defined once
-$allEmails = [
-    'contact@financedoctor.in',
-    'tanmay.vyas@financedoctor.in',
-    'akshay.krishna@financedoctor.in',
-    'sajid.ali@financedoctor.in',
-    'vivek.sharma@financedoctor.in',
-    'sailesh.mulleti@financedoctor.in'
-];
+// Fetch all active users for the sender dropdown and CC section from users table in clients_reports
+$pdo->query("USE client_reports");
+$users = [];
+$allEmails = [];
+$stmt = $pdo->prepare("SELECT username, email, designation, name FROM users WHERE status = 'active' AND active = 1 ORDER BY name ASC");
+$stmt->execute();
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $users[] = $row;
+    if (!empty($row['email'])) {
+        $allEmails[] = $row['email'];
+    }
+}
+
+// Get logged-in user
+$currentUser = getCurrentUser();
+$defaultSenderEmail = $currentUser['email'] ?? '';
+$defaultUser = null;
+foreach ($users as $user) {
+    if ($user['email'] === $defaultSenderEmail) {
+        $defaultUser = $user;
+        break;
+    }
+}
 
 $clientInfo = [];
 if (!empty($clientId)) {
@@ -93,19 +106,24 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                 <div class="email-fields-container">
                     <div class="form-row">
                         <!-- Send As Dropdown -->
+
                         <div class="email-field-group">
                             <label>Send As</label>
-
                             <div class="sendas-wrapper" id="sendAsWrapper">
                                 <div class="sendas-input" onclick="toggleSendAsDropdown()">
-                                    <div class="sendas-avatar" id="sendAsAvatar">FD</div>
+                                    <div class="sendas-avatar" id="sendAsAvatar">
+                                        <?php echo $defaultUser ? strtoupper(substr($defaultUser['name'] ?: $defaultUser['username'], 0, 2)) : 'FD'; ?>
+                                    </div>
                                     <div class="sendas-text">
-                                        <div class="sendas-name" id="sendAsName">Select sender profile</div>
-                                        <div class="sendas-role" id="sendAsRole">Click to choose</div>
+                                        <div class="sendas-name" id="sendAsName">
+                                            <?php echo $defaultUser ? htmlspecialchars($defaultUser['name'] ?: $defaultUser['username']) : 'Select sender profile'; ?>
+                                        </div>
+                                        <div class="sendas-role" id="sendAsRole">
+                                            <?php echo $defaultUser ? htmlspecialchars($defaultUser['designation']) : 'Click to choose'; ?>
+                                        </div>
                                     </div>
                                     <span class="sendas-arrow">⌄</span>
                                 </div>
-
                                 <div class="sendas-dropdown" id="sendAsDropdown">
                                     <input
                                         type="text"
@@ -113,30 +131,28 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                                         placeholder="Search sender..."
                                         oninput="filterSendAs(this.value)"
                                     >
-
-                                    <?php foreach ($sendAsProfiles as $email => $profile): ?>
+                                    <?php foreach ($users as $user): ?>
                                         <div
-                                            class="sendas-item"
+                                            class="sendas-item<?php if ($user['email'] === $defaultSenderEmail) echo ' selected'; ?>"
                                             onclick="selectSendAs(
-                                                '<?php echo htmlspecialchars($email); ?>',
-                                                '<?php echo htmlspecialchars($profile['name']); ?>',
-                                                '<?php echo htmlspecialchars($profile['designation']); ?>'
+                                                '<?php echo htmlspecialchars($user['email']); ?>',
+                                                '<?php echo htmlspecialchars($user['name'] ?: $user['username']); ?>',
+                                                '<?php echo htmlspecialchars($user['designation']); ?>'
                                             )"
                                         >
                                             <div class="sendas-item-avatar">
-                                                <?php echo strtoupper(substr($profile['name'], 0, 2)); ?>
+                                                <?php echo strtoupper(substr($user['name'] ?: $user['username'], 0, 2)); ?>
                                             </div>
                                             <div class="sendas-item-info">
-                                                <div class="sendas-item-name"><?php echo htmlspecialchars($profile['name']); ?></div>
-                                                <div class="sendas-item-role"><?php echo htmlspecialchars($profile['designation']); ?></div>
+                                                <div class="sendas-item-name"><?php echo htmlspecialchars($user['name'] ?: $user['username']); ?></div>
+                                                <div class="sendas-item-role"><?php echo htmlspecialchars($user['designation']); ?></div>
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
                             </div>
-
-                            <input type="hidden" name="from_email" id="from_email_hidden">
-                            <input type="hidden" name="from_name" id="from_name_hidden">
+                            <input type="hidden" name="from_email" id="from_email_hidden" value="<?php echo htmlspecialchars($defaultSenderEmail); ?>">
+                            <input type="hidden" name="from_name" id="from_name_hidden" value="<?php echo $defaultUser ? htmlspecialchars($defaultUser['name'] ?: $defaultUser['username']) : ''; ?>">
                         </div>
                         
                         <!-- Smart Email Input -->
@@ -411,7 +427,7 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     // Email data from PHP
     const emailData = <?php echo json_encode($allClientEmails); ?>;
     const ccEmailData = <?php echo json_encode($allEmails); ?>;
-    const sendAsProfiles = <?php echo json_encode($sendAsProfiles); ?>;
+    const users = <?php echo json_encode($users); ?>;
     
     // State variables
     let emailSearchTimeout;
@@ -422,7 +438,16 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     document.addEventListener('DOMContentLoaded', function() {
         updateCcSummary();
         updateSmartHint('');
-        updateSendAsHint();
+        // Set default sender if available
+        var defaultSenderEmail = <?php echo json_encode($defaultSenderEmail); ?>;
+        var defaultUser = users.find(u => u.email === defaultSenderEmail);
+        if (defaultUser) {
+            selectSendAs(
+                defaultUser.email,
+                defaultUser.name || defaultUser.username,
+                defaultUser.designation
+            );
+        }
         updateTextCounts();
         
         // Focus management
