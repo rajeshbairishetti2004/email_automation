@@ -154,11 +154,8 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
 <div class="card" style="margin-top: 20px; border-left: 4px solid #17a2b8; position:relative;">
     <label class="card-title" style="display:flex; align-items:center; justify-content:space-between;">
       <span>📂 Report Attachments 
-         <?php if (isset($isLocked) && $isLocked): ?>
-        <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
-    <?php endif; ?>
       </span>
-      <button type="button" id="refreshAttachments" class="refresh-icon-btn" title="Clear attachments" style="margin-left:auto; background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center;" <?= $isLocked ? 'disabled style="opacity:0.5;pointer-events:none;"' : '' ?>>
+      <!-- <button type="button" id="refreshAttachments" class="refresh-icon-btn" title="Clear attachments" style="margin-left:auto; background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center;" <?= $isLocked ? 'disabled style="opacity:0.5;pointer-events:none;"' : '' ?>>
         <span class="refresh-svg-icon" id="refreshAttachmentsIcon">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M23.5 8.5A11 11 0 1 0 27 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
@@ -167,17 +164,23 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
             <polygon points="5,16 9,18.5 9,13.5" fill="#0288D1"/>
           </svg>
         </span>
-      </button>
+      </button> -->
     </label>
 
-    <?php if ($canEditAttachments && !$isLocked): ?>
-        <div style="margin-bottom: 15px; padding: 10px; background: #eefbff; border-radius: 4px;">
-            <input type="file" id="ajax_attachment_upload" multiple style="width: auto;" onchange="uploadAttachment()">
-            <span id="upload_spinner" style="display:none; margin-left: 10px; font-weight: bold; color: #0288D1;">
-                ⏳ Uploading...
-            </span>
-        </div>
-    <?php endif; ?>
+<?php if ($reportState !== 'sent'): ?>
+    <div style="margin-bottom: 15px; padding: 10px; background: #eefbff; border-radius: 4px;">
+        <input type="file"
+               id="ajax_attachment_upload"
+               multiple
+               onchange="uploadAttachment()">
+        <span id="upload_spinner"
+              style="display:none; margin-left: 10px; font-weight: bold; color: #0288D1;">
+            ⏳ Uploading...
+        </span>
+    </div>
+<?php endif; ?>
+
+
 
     <ul id="attachment_list" style="list-style: none; padding: 0;">
         <?php if (empty($existingFiles)): ?>
@@ -186,31 +189,28 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
             <?php foreach ($existingFiles as $file): ?>
                 <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;" data-filename="<?php echo htmlspecialchars($file); ?>">
                     <span>📎 <strong><?php echo htmlspecialchars($file); ?></strong></span>
-                    <?php if ($canEditAttachments && !$isLocked): ?>
-                       <span class="annex-actions">
-<a href="#" class="annex-edit" data-filename="<?php echo htmlspecialchars($file); ?>">
-    <i class="fa-solid fa-pen-to-square"></i> Edit
-</a>
-<a href="#" class="annex-delete" data-filename="<?php echo htmlspecialchars($file); ?>">
-    <i class="fa-solid fa-trash-can"></i> Delete
-</a>
+<span class="annex-actions">
+    <a href="#" class="annex-edit" data-filename="<?php echo htmlspecialchars($file); ?>">
+        <i class="fa-solid fa-pen-to-square"></i> Edit
+    </a>
+    <a href="#" class="annex-delete" data-filename="<?php echo htmlspecialchars($file); ?>">
+        <i class="fa-solid fa-trash-can"></i> Delete
+    </a>
 </span>
-                    <?php else: ?>
-                        <span style="font-size: 11px; color: #999;">(Read Only)</span>
-                    <?php endif; ?>
+
                 </li>
             <?php endforeach; ?>
         <?php endif; ?>
     </ul>
     <p style="font-size: 11px; color: #666;">Note: Files uploaded here will be automatically attached to the final email.</p>
 
-    <style>
+    <!-- <style>
     .refresh-icon-btn .refresh-svg-icon { display:inline-block; vertical-align:middle; }
     .refresh-icon-btn .refresh-svg-icon.rotating { animation: refresh-rotate 0.6s linear; }
     @keyframes refresh-rotate { 100% { transform: rotate(360deg); } }
     .refresh-icon-btn { background:transparent; border:none; outline:none; cursor:pointer; padding:4px; z-index:100; display:flex; align-items:center; justify-content:center; box-shadow:none; border-radius:50%; transition:background 0.15s; }
     .refresh-icon-btn:hover { background:rgba(2,136,209,0.08); }
-    </style>
+    </style> -->
     <!-- Edit Modal HTML -->
     <div id="editAttachmentModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:9999; justify-content:center; align-items:center;">
       <div style="background:#fff; padding:30px 25px; border-radius:8px; min-width:320px; max-width:90vw; box-shadow:0 4px 16px rgba(0,0,0,0.15);">
@@ -233,7 +233,7 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
     const isLocked = <?php echo $isLocked ? 'true' : 'false'; ?>;
 
     function uploadAttachment() {
-        if (isLocked) return;
+    
         const input = document.getElementById('ajax_attachment_upload');
         const spinner = document.getElementById('upload_spinner');
         if (!input.files.length) return;
@@ -266,41 +266,14 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     document.addEventListener('DOMContentLoaded', function() {
         initAttachmentHandlers();
-        if (isLocked) {
-            const refreshBtn = document.getElementById('refreshAttachments');
-            if (refreshBtn) {
-                refreshBtn.disabled = true;
-                refreshBtn.style.opacity = '0.5';
-                refreshBtn.style.pointerEvents = 'none';
-                refreshBtn.title = "Attachments are locked after review.";
-            }
-        }
     });
 
     function initAttachmentHandlers() {
-        const refreshAttachmentsBtn = document.getElementById('refreshAttachments');
-        const refreshAttachmentsIcon = document.getElementById('refreshAttachmentsIcon');
+
         const editModal = document.getElementById('editAttachmentModal');
         const editOldFileName = document.getElementById('editOldAttachmentFileName');
         const editNewFileName = document.getElementById('editNewAttachmentFileName');
         const editCancel = document.getElementById('editAttachmentCancel');
-
-        if (refreshAttachmentsBtn && refreshAttachmentsIcon && !isLocked) {
-            refreshAttachmentsBtn.addEventListener('click', function() {
-                refreshAttachmentsIcon.classList.add('rotating');
-                fetch('delete_attachments.php?client_id=<?php echo (int)$clientId; ?>', { method: 'POST' })
-                    .then(r => r.json())
-                    .then(data => {
-                        const list = document.getElementById('attachment_list');
-                        if (list) list.innerHTML = '<li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>';
-                        const annexList = document.getElementById('annexures_list');
-                        if (annexList) annexList.innerHTML = '<li style="color: #777; font-style: italic;">No annexures available.</li>';
-                    })
-                    .finally(() => {
-                        refreshAttachmentsIcon.classList.remove('rotating');
-                    });
-            });
-        }
 
         document.addEventListener('click', function(e) {
             const target = e.target.closest('a');

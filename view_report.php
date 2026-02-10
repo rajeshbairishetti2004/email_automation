@@ -1969,11 +1969,3 @@ document.getElementById('reportForm').addEventListener('submit', function(e) {
 });
 
 </script>
-
-<!-- Portfolio Tenure radio section (find the label or heading for Portfolio Tenure) -->
-<label for="portfolioTenure" style="font-weight:600;">
-    Portfolio Tenure:
-    <?php if (isset($isLocked) && $isLocked): ?>
-        <span title="Locked" style="margin-left:6px;color:#888;vertical-align:middle;">🔒</span>
-    <?php endif; ?>
-</label>
