@@ -6,241 +6,282 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../database.php';
 
 /* =========================
-   HELPERS
+   CLIENT CONTEXT
 ========================= */
-function num8($v, $default) {
-    return ($v === null || $v === '') ? $default : htmlspecialchars($v);
+$clientKeyRaw = $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? '';
+
+if (preg_match('/(\d+)/', $clientKeyRaw, $m)) {
+    $clientId = (int)$m[1];
+} else {
+    $clientId = 0;
 }
-function txt8($v, $default) {
-    return ($v === null || $v === '') ? $default : htmlspecialchars($v);
+
+if ($clientId <= 0) {
+    echo "Client not found";
+    exit;
+}
+
+$pdo = getSlidesPdo();
+
+/* =========================
+   SAVE (AJAX)
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ajax'] ?? '') === 'save') {
+    foreach ($_POST['recommended'] as $asset => $pct) {
+        $stmt = $pdo->prepare("
+            UPDATE slide8
+            SET recommended_pct = ?
+            WHERE client_id = ?
+              AND asset = ?
+        ");
+        $stmt->execute([
+            (float)$pct,
+            $clientId,
+            $asset
+        ]);
+    }
+
+    if (isset($_POST['interpretation'])) {
+        $_SESSION['slide8_interpretation'][$clientId] = trim($_POST['interpretation']);
+    }
+
+    echo json_encode(['success' => true]);
+    exit;
 }
 
 /* =========================
-   TEMPLATE
+   LOAD DATA
 ========================= */
-function renderSlide8Template(array $d = [])
-{
-    $cl = num8($d['curr_large'], 53.4);
-    $cm = num8($d['curr_mid'],   25.8);
-    $cs = num8($d['curr_small'], 20.8);
+$stmt = $pdo->prepare("
+    SELECT asset, current_pct, recommended_pct
+    FROM slide8
+    WHERE client_id = ?
+    ORDER BY id
+");
+$stmt->execute([$clientId]);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $rl = num8($d['rec_large'], 50.0);
-    $rm = num8($d['rec_mid'],   30.0);
-    $rs = num8($d['rec_small'], 20.0);
+if (!$rows) {
+    echo "No allocation data found";
+    exit;
+}
+
+/* =========================
+   PREPARE DATA
+========================= */
+$labels = [];
+$currentData = [];
+$recommendedData = [];
+
+foreach ($rows as $r) {
+    $labels[] = $r['asset'];
+    $currentData[] = (float)$r['current_pct'];
+    $recommendedData[] = $r['recommended_pct'] !== null
+        ? (float)$r['recommended_pct']
+        : (float)$r['current_pct'];
+}
+
+$interpretation = $_SESSION['slide8_interpretation'][$clientId]
+    ?? 'Different caps have the right percentage ranges. So, no change is recommended.';
+
+/* =========================
+   COLORS (CONSISTENT)
+========================= */
+$baseColors = [
+    '#4f7df3', '#2eb85c', '#f9b115',
+    '#e55353', '#9d5cf2', '#f567a1',
+    '#4fd3d6', '#f99315'
+];
+
+$colors = [];
+for ($i = 0; $i < count($labels); $i++) {
+    $colors[] = $baseColors[$i % count($baseColors)];
+}
 ?>
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Equity MCAP allocation</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-html,body{margin:0;width:100%;height:100%}
-.editable{cursor:pointer}
-.editable.editing{background:#f4f8ff;border-bottom:1px dashed #4F7DF3}
+html,body{margin:0;height:100%;font-family:Calibri}
+.slide{height:100%;position:relative}
+.content{padding:40px 60px}
 
-.slide-root{position:relative;width:100%;height:100%}
-.slide-content{padding:40px 60px;box-sizing:border-box}
-
-.slide-title{
+h1{
     text-align:center;
     color:#4F7DF3;
     font-size:42px;
-    font-weight:600;
-    margin-bottom:30px;
+    margin-bottom:30px
 }
 
 .charts{
     display:grid;
     grid-template-columns:1fr 1fr;
-    gap:80px;
+    gap:80px
+}
+
+.box{text-align:center}
+
+.chart-row{
+    display:flex;
     align-items:center;
+    justify-content:center;
+    gap:30px
 }
 
-.chart-box{text-align:center}
-
-.chart-title{
-    color:#0A3DBA;
-    font-weight:600;
-    margin-bottom:10px;
-}
-
-.donut{
-    width:220px;
-    height:220px;
-    border-radius:50%;
-    margin:0 auto 10px;
-    position:relative;
-}
-.donut::after{
-    content:'';
-    position:absolute;
-    inset:55px;
-    background:#fff;
-    border-radius:50%;
+.chart-wrap{
+    width:240px;
+    height:240px
 }
 
 .legend{
+    text-align:left;
     font-size:14px;
-    color:#0A3DBA;
-    line-height:1.6;
+    color:#0A3DBA
 }
 
-.legend span{display:block}
+.legend-item{
+    display:flex;
+    align-items:center;
+    margin-bottom:8px;
+    white-space:nowrap
+}
+
+.legend-color{
+    width:12px;
+    height:12px;
+    margin-right:8px;
+    border-radius:2px
+}
 
 .interpretation{
-    margin-top:35px;
-    font-size:18px;
-    color:#0A3DBA;
+    margin-top:50px;
+    font-size:22px;
+    color:#0A3DBA
 }
 
-.slide-logo{
+.footer{
+    position:absolute;
+    bottom:0;
+    height:10px;
+    width:100%;
+    background:#4DB6AC
+}
+
+.logo{
     position:absolute;
     right:40px;
-    bottom:28px;
+    bottom:30px
 }
-.slide-logo img{width:130px}
-
-.slide-footer-bar{
-    position:absolute;
-    left:0;right:0;bottom:0;
-    height:10px;
-    background:#4DB6AC;
-}
+.logo img{width:130px}
 </style>
+</head>
 
-<div class="slide-root">
-<div class="slide-content">
+<body>
+<div class="slide">
+<div class="content">
 
-<h1 class="slide-title">Equity MCAP allocation</h1>
+<h1>Equity MCAP allocation</h1>
 
 <div class="charts">
 
-    <!-- CURRENT -->
-    <div class="chart-box">
-        <div class="chart-title">Current</div>
-        <div class="donut"
-             style="background:
-             conic-gradient(
-                #1aff00 0 <?= $cl ?>%,
-                #4d88ff <?= $cl ?>% <?= $cl+$cm ?>%,
-                #ff7a2f <?= $cl+$cm ?>% 100%
-             )">
+<!-- CURRENT -->
+<div class="box">
+    <div style="font-weight:600;color:#0A3DBA;font-size:20px;margin-bottom:12px;">Current</div>
+
+    <div class="chart-row">
+        <div class="chart-wrap">
+            <canvas id="currentChart"></canvas>
         </div>
 
         <div class="legend">
-            <span class="editable" data-f="curr_large">Large Cap <?= $cl ?>%</span>
-            <span class="editable" data-f="curr_mid">Mid Cap <?= $cm ?>%</span>
-            <span class="editable" data-f="curr_small">Small Cap <?= $cs ?>%</span>
+            <?php foreach ($labels as $i => $a): ?>
+                <div class="legend-item">
+                    <span class="legend-color" style="background:<?= $colors[$i] ?>"></span>
+                    <?= htmlspecialchars($a) ?> <?= number_format($currentData[$i],2) ?>%
+                </div>
+            <?php endforeach; ?>
         </div>
     </div>
+</div>
 
-    <!-- RECOMMENDED -->
-    <div class="chart-box">
-        <div class="chart-title">Recommended</div>
-        <div class="donut"
-             style="background:
-             conic-gradient(
-                #1aff00 0 <?= $rl ?>%,
-                #4d88ff <?= $rl ?>% <?= $rl+$rm ?>%,
-                #ff7a2f <?= $rl+$rm ?>% 100%
-             )">
+<!-- RECOMMENDED -->
+<div class="box">
+    <div style="font-weight:600;color:#0A3DBA;font-size:20px;margin-bottom:12px;">Recommended</div>
+
+    <div class="chart-row">
+        <div class="chart-wrap">
+            <canvas id="recommendedChart"></canvas>
         </div>
 
         <div class="legend">
-            <span class="editable" data-f="rec_large">Large Cap <?= $rl ?>%</span>
-            <span class="editable" data-f="rec_mid">Mid Cap <?= $rm ?>%</span>
-            <span class="editable" data-f="rec_small">Small Cap <?= $rs ?>%</span>
+            <?php foreach ($labels as $i => $a): ?>
+                <div class="legend-item">
+                    <span class="legend-color" style="background:<?= $colors[$i] ?>"></span>
+                    <?= htmlspecialchars($a) ?> <?= number_format($recommendedData[$i],2) ?>%
+                </div>
+            <?php endforeach; ?>
         </div>
     </div>
+</div>
 
 </div>
 
 <div class="interpretation">
     <strong>Finance Doctor’s interpretation:</strong><br>
-    <span class="editable" data-f="interpretation">
-        <?= txt8(
-            $d['interpretation'],
-            'Different caps have the right percentage ranges. So, no change is recommended.'
-        ) ?>
-    </span>
+    <?= htmlspecialchars($interpretation) ?>
 </div>
 
 </div>
 
-<div class="slide-logo">
-    <img src="/email_automation/image.png" alt="Finance Doctor">
+<div class="logo">
+    <img src="/email_automation/image.png">
 </div>
-<div class="slide-footer-bar"></div>
+<div class="footer"></div>
 </div>
 
 <script>
-window.enableEdit = () => {
-    document.querySelectorAll('.editable').forEach(e=>{
-        e.contentEditable=true;
-        e.classList.add('editing');
-    });
-};
+const labels = <?= json_encode($labels) ?>;
+const currentData = <?= json_encode($currentData) ?>;
+const recommendedData = <?= json_encode($recommendedData) ?>;
+const colors = <?= json_encode($colors) ?>;
 
-window.saveSlide = () => {
-    const f = new FormData();
-    f.append('ajax','save');
-    f.append('client_id','<?= $_GET['client_id'] ?? $_SESSION['current_client_id'] ?? '' ?>');
-
-    document.querySelectorAll('.editable').forEach(e=>{
-        const val = e.innerText.replace(/[^\d.]/g,'') || e.innerText;
-        f.append(e.dataset.f,val.trim());
-        e.contentEditable=false;
-        e.classList.remove('editing');
+function renderDonut(canvasId, data) {
+    return new Chart(document.getElementById(canvasId), {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: colors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            cutout: '55%',
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label(ctx) {
+                            return `${ctx.label}: ${ctx.raw.toFixed(2)}%`;
+                        }
+                    }
+                }
+            }
+        }
     });
+}
 
-    fetch('/email_automation/report_generation/slides/page8.php',{method:'POST',body:f})
-    .then(r=>r.json())
-    .then(res=>{
-        if(res.success){
-            const i=window.frameElement;
-            if(i){const u=new URL(i.src);u.searchParams.set('t',Date.now());i.src=u}
-            alert('Slide saved');
-        } else alert(res.error||'Save failed');
-    });
-};
+renderDonut('currentChart', currentData);
+renderDonut('recommendedChart', recommendedData);
 </script>
-<?php }
 
-/* =========================
-   SAVE
-========================= */
-if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['ajax']??'')==='save') {
-    $pdo = getSlidesPdo();
-    $fields=[
-        'curr_large','curr_mid','curr_small',
-        'rec_large','rec_mid','rec_small',
-        'interpretation'
-    ];
-
-    $cid=$_POST['client_id']??'';
-    if(!$cid){echo json_encode(['success'=>false]);exit;}
-
-    $data=[];
-    foreach($fields as $f){
-        $data[$f]=trim($_POST[$f]??null);
-    }
-
-    $sql="
-    INSERT INTO slide8 (client_id,".implode(',',$fields).",updated_at)
-    VALUES (:client_id,:".implode(',:',$fields).",NOW())
-    ON DUPLICATE KEY UPDATE
-    ".implode(',',array_map(fn($f)=>"$f=VALUES($f)",$fields)).",
-    updated_at=NOW()
-    ";
-    $pdo->prepare($sql)->execute(array_merge(['client_id'=>$cid],$data));
-    echo json_encode(['success'=>true]);exit;
-}
-
-/* =========================
-   LOAD
-========================= */
-$cid=$_GET['client_id']??$_SESSION['current_client_id']??'';
-$data=[];
-if($cid){
-    $pdo=getSlidesPdo();
-    $s=$pdo->prepare("SELECT * FROM slide8 WHERE client_id=?");
-    $s->execute([$cid]);
-    if($r=$s->fetch()) $data=$r;
-}
-
-renderSlide8Template($data);
+</body>
+</html>

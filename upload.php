@@ -9,6 +9,8 @@ require_once 'parsers.php';
 require_once 'renderers.php';
 require_once 'env_loader.php';
 
+use PhpOffice\PhpSpreadsheet\IOFactory;
+
 
 requireAuth();
 $currentReviewPeriod = date('F Y');
@@ -30,6 +32,7 @@ function safePercent($num, $den)
 /**
  * Get the latest AUM for a client from previous reviews
  */
+$pdoSlides = getSlidesPdo();
 function getLatestAumForClient(PDO $pdo, string $clientName): float
 {
     $stmt = $pdo->prepare("
@@ -43,6 +46,60 @@ function getLatestAumForClient(PDO $pdo, string $clientName): float
     $stmt->execute([':name' => $clientName]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return (float)($result['aum'] ?? 0);
+}
+
+function extractSubCategoryAllocation(string $filePath): array
+{
+    $spreadsheet = IOFactory::load($filePath);
+
+    foreach ($spreadsheet->getSheetNames() as $i => $name) {
+        if (stripos($name, 'sub') !== false && stripos($name, 'category') !== false) {
+
+            $sheet = $spreadsheet->getSheet($i);
+            $rows  = $sheet->toArray(null, true, true, true);
+
+            // Detect header row
+            $headerRow = null;
+            foreach ($rows as $rIdx => $row) {
+                foreach ($row as $cell) {
+                    if (stripos($cell, 'category') !== false) {
+                        $headerRow = $rIdx;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$headerRow) return [];
+
+            $header = $rows[$headerRow];
+            $catCol = null;
+            $pctCol = null;
+
+            foreach ($header as $col => $val) {
+                if (stripos($val, 'category') !== false) $catCol = $col;
+                if (stripos($val, 'share') !== false || stripos($val, '%') !== false) $pctCol = $col;
+            }
+
+            if (!$catCol || !$pctCol) return [];
+
+            $out = [];
+            for ($i = $headerRow + 1; $i <= count($rows); $i++) {
+                $cat = trim($rows[$i][$catCol] ?? '');
+                $pct = trim($rows[$i][$pctCol] ?? '');
+
+                if ($cat === '' || !is_numeric($pct)) continue;
+
+                $out[] = [
+                    'asset' => $cat,
+                    'pct'   => (float)$pct
+                ];
+            }
+
+            return $out;
+        }
+    }
+
+    return [];
 }
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
@@ -61,7 +118,7 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
         $params[] = (int)$context;
         $params[] = (int)$context;
     }
-    
+
     // Add cycle filter if set
     if ($cycleFilter !== '') {
         $baseWhere .= " AND review_cycle = ?";
@@ -111,12 +168,12 @@ function fetchTeamStats(PDO $pdo): array
 
     $stmt = $pdo->query($sql);
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
     foreach ($result as &$row) {
         $row['high_priority'] = $row['high_pri'];
         unset($row['high_pri']);
     }
-    
+
     return $result;
 }
 
@@ -201,6 +258,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ps  = [];
         $pdfGoal     = [];
         $attachments = [];
+        $allocationExcelPath = null;
+
 
         $fileCount = count($_FILES['client_files']['name']);
         for ($i = 0; $i < $fileCount; $i++) {
@@ -231,6 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (strpos($nameLower, 'valuation') !== false) {
                         mergeClientArrays($pv, parsePortfolioValuation($destPath));
                     } elseif (strpos($nameLower, 'allocation') !== false) {
+                        $allocationExcelPath = $destPath;   // 👈 STORE THIS
                         mergeClientArrays($aa, parseAllocationAnalysis($destPath));
                     } elseif (strpos($nameLower, 'running') !== false || strpos($nameLower, 'systematic') !== false || strpos($nameLower, 'sip') !== false) {
                         mergeClientArrays($rst, parseRunningSystematicTransactions($destPath));
@@ -252,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // NEW: Get current month_year for the review
         $currentMonthYear = date('F Y');
-        
+
         // Check for existing client with same name/email in the SAME month
         $checkExistingReview = $pdo->prepare('
             SELECT id, review_attempt 
@@ -262,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ORDER BY review_attempt DESC 
             LIMIT 1
         ');
-        
+
         // Update previous versions to mark them as not latest
         $markPreviousAsNotLatest = $pdo->prepare('
             UPDATE clients 
@@ -270,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE name = :name 
             AND month_year = :month_year
         ');
-        
+
         $insertClient = $pdo->prepare('INSERT INTO clients
             (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
              total_goal_current, total_goal_target, total_sip,
@@ -315,15 +375,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':month_year' => $currentMonthYear
             ]);
             $existingReview = $checkExistingReview->fetch(PDO::FETCH_ASSOC);
-            
+
             // Calculate review attempt number
             $reviewAttempt = 1;
             $previousVersionId = null;
-            
+
             if ($existingReview) {
                 $reviewAttempt = (int)$existingReview['review_attempt'] + 1;
                 $previousVersionId = $existingReview['id'];
-                
+
                 // Mark all previous versions for this month as not latest
                 $markPreviousAsNotLatest->execute([
                     ':name' => $clientName,
@@ -335,18 +395,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $summary = $clientData['current']['summary'] ?? null;
 
             $totalAmount    = $totals['current'] ?? 0;
-            
+
             // --- AUM CARRY-FORWARD LOGIC ---
             // 1. Get latest AUM from previous reviews for this client
             $latestAum = getLatestAumForClient($pdo, $clientName);
-            
+
             // 2. Calculate AUM: Carry forward if exists, otherwise calculate from total_amount
             if ($latestAum > 0) {
                 $aum = $latestAum; // Carry forward existing AUM
             } else {
                 $aum = $totalAmount > 0 ? ($totalAmount / 10000000) : 0; // Calculate from portfolio
             }
-            
+
             $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
             $cagr           = $totals['cagr_weighted'] ?? 0;
             $xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
@@ -356,7 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allocation = $clientData['allocation'] ?? [];
             $schemes    = $clientData['schemes'] ?? [];
             $asOn       = $clientData['as_on'] ?? '';
-            
+
             // Determine review cycle (you might need to add this logic)
             $reviewCycle = $_POST['review_cycle'] ?? 'RJ'; // Default or from form
 
@@ -398,6 +458,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
+            // ======================================
+            // SLIDE 8 – SUB CATEGORY ALLOCATION
+            // ======================================
+            if ($allocationExcelPath && file_exists($allocationExcelPath)) {
+
+                // Clear old slide8 rows for this client
+                $pdoSlides->prepare("DELETE FROM slide8 WHERE client_id = ?")
+                    ->execute([$clientId]);
+
+                $subCats = extractSubCategoryAllocation($allocationExcelPath);
+
+                foreach ($subCats as $row) {
+
+                    $assetRaw = trim($row['asset']);
+
+                    // ❗ Skip Grand Total row
+                    if (stripos($assetRaw, 'grand total') !== false) {
+                        continue;
+                    }
+
+                    $asset = $assetRaw;              // EXACT Excel category
+                    $pct   = (float)$row['pct'];     // EXACT value, no rounding
+                    $asset = ucwords($row['asset']);
+
+                    $pct = (float)$row['pct'];
+
+                    $stmt = $pdoSlides->prepare("
+            INSERT INTO slide8
+            (client_id, asset, current_pct, recommended_pct, updated_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+
+                    $stmt->execute([
+                        $clientId,
+                        $asset,
+                        $pct,
+                        $pct   // recommended = current initially
+                    ]);
+                }
+            }
+
 
             if ($firstClientId === 0 && $clientId > 0) {
                 $firstClientId = $clientId;
@@ -492,6 +593,7 @@ $userDesignation = $currentUser['designation'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -501,183 +603,186 @@ $userDesignation = $currentUser['designation'] ?? '';
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-3hT1sJQdT9v+0kz+1vZ1tcHTul3e8DqRL3OjaxAg/P6MqxsVXni4eWh05rq6ArtyTcwxH8333Adxpv8vS1TukA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
+
 <body>
-  <?php include 'navbar.php'; ?>
-        <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
-            <div class="wrap">
-        <div class="page-header">
-            <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
-                <h1 style="margin:0;">Quarterly Review of <?php echo date('F Y'); ?></h1>
-                <div style="display: flex; align-items: center; gap: 0;">
-                    <form method="get" id="cycleForm" style="margin:15px;">
-                        <select name="cycle_filter" onchange="this.form.submit()" style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
-                            <option value="" <?php if($cycleFilter==='') echo 'selected'; ?>>All Cycles</option>
-                            <option value="RJ" <?php if($cycleFilter==='RJ') echo 'selected'; ?>>RJ</option>
-                            <option value="RM" <?php if($cycleFilter==='RM') echo 'selected'; ?>>RM</option>
-                            <option value="RF" <?php if($cycleFilter==='RF') echo 'selected'; ?>>RF</option>
-                        </select>
-                        <!-- Preserve view_context in the form if present -->
-                        <?php if (isset($_GET['view_context'])): ?>
-                            <input type="hidden" name="view_context" value="<?php echo htmlspecialchars($_GET['view_context']); ?>">
-                        <?php endif; ?>
-                    </form>
-                    <?php $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>
-                    <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
-                        <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
-                        <div style="font-size: 22px; font-weight: 800; color: #1e293b;">
-                            ₹<?= number_format($totalAum / 10000000, 2); ?>
-                            <span style="font-size: 13px;">Cr</span>
+    <?php include 'navbar.php'; ?>
+    <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
+        <div class="wrap">
+            <div class="page-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
+                    <h1 style="margin:0;">Quarterly Review of <?php echo date('F Y'); ?></h1>
+                    <div style="display: flex; align-items: center; gap: 0;">
+                        <form method="get" id="cycleForm" style="margin:15px;">
+                            <select name="cycle_filter" onchange="this.form.submit()" style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+                                <option value="" <?php if ($cycleFilter === '') echo 'selected'; ?>>All Cycles</option>
+                                <option value="RJ" <?php if ($cycleFilter === 'RJ') echo 'selected'; ?>>RJ</option>
+                                <option value="RM" <?php if ($cycleFilter === 'RM') echo 'selected'; ?>>RM</option>
+                                <option value="RF" <?php if ($cycleFilter === 'RF') echo 'selected'; ?>>RF</option>
+                            </select>
+                            <!-- Preserve view_context in the form if present -->
+                            <?php if (isset($_GET['view_context'])): ?>
+                                <input type="hidden" name="view_context" value="<?php echo htmlspecialchars($_GET['view_context']); ?>">
+                            <?php endif; ?>
+                        </form>
+                        <?php $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>
+                        <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
+                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
+                            <div style="font-size: 22px; font-weight: 800; color: #1e293b;">
+                                ₹<?= number_format($totalAum / 10000000, 2); ?>
+                                <span style="font-size: 13px;">Cr</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <nav class="context-navbar">
+                <nav class="context-navbar">
                     <a href="?view_context=all<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">All Reviews</a>
                     <a href="?view_context=mine<?php echo $cycleParam; ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
                     <?php foreach ($allUsers as $user): ?>
-                        <?php if ((int)$user['id'] === $currentUserId) continue; // Skip logged-in user ?>
+                        <?php if ((int)$user['id'] === $currentUserId) continue; // Skip logged-in user 
+                        ?>
                         <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>" class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>"><?php echo htmlspecialchars($user['username']); ?></a>
                     <?php endforeach; ?>
-            </nav>
-        </div>
+                </nav>
+            </div>
 
-        <div class="kpi-grid">
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>" class="stats-card card-blue">
-                <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
-                <div class="label">Total Assigned</div>
-                <div class="number"><?php echo (int)$viewStats['total']; ?></div>
-            </a>
+            <div class="kpi-grid">
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>" class="stats-card card-blue">
+                    <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
+                    <div class="label">Total Assigned</div>
+                    <div class="number"><?php echo (int)$viewStats['total']; ?></div>
+                </a>
 
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending" class="stats-card card-red-outline">
-                <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
-                <div class="label">Review Not Started</div>
-                <div class="number"><?php echo (int)$viewStats['count_pending']; ?></div>
-            </a>
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending" class="stats-card card-red-outline">
+                    <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
+                    <div class="label">Review Not Started</div>
+                    <div class="number"><?php echo (int)$viewStats['count_pending']; ?></div>
+                </a>
 
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=draft" class="stats-card card-grey">
-                <span class="card-icon"><i class="fa-regular fa-pen-to-square"></i></span>
-                <div class="label">Draft</div>
-                <div class="number"><?php echo (int)$viewStats['count_draft']; ?></div>
-            </a>
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=draft" class="stats-card card-grey">
+                    <span class="card-icon"><i class="fa-regular fa-pen-to-square"></i></span>
+                    <div class="label">Draft</div>
+                    <div class="number"><?php echo (int)$viewStats['count_draft']; ?></div>
+                </a>
 
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready" class="stats-card card-yellow">
-                <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
-                <div class="label">Ready</div>
-                <div class="number"><?php echo (int)$viewStats['count_ready']; ?></div>
-            </a>
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready" class="stats-card card-yellow">
+                    <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
+                    <div class="label">Ready</div>
+                    <div class="number"><?php echo (int)$viewStats['count_ready']; ?></div>
+                </a>
 
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed" class="stats-card card-teal">
-                <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                <div class="label">Reviewed</div>
-                <div class="number"><?php echo (int)$viewStats['count_reviewed']; ?></div>
-            </a>
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed" class="stats-card card-teal">
+                    <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
+                    <div class="label">Reviewed</div>
+                    <div class="number"><?php echo (int)$viewStats['count_reviewed']; ?></div>
+                </a>
 
-            <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=sent" class="stats-card card-green">
-                <span class="card-icon"><i class="fa-solid fa-paper-plane"></i></span>
-                <div class="label">Sent</div>
-                <div class="number"><?php echo (int)$viewStats['count_sent']; ?></div>
-            </a>
-        </div>
+                <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=sent" class="stats-card card-green">
+                    <span class="card-icon"><i class="fa-solid fa-paper-plane"></i></span>
+                    <div class="label">Sent</div>
+                    <div class="number"><?php echo (int)$viewStats['count_sent']; ?></div>
+                </a>
+            </div>
 
-        <div class="upload-section" style="position:relative;">
-            <?php if (!empty($_GET['auto_search'])): ?>
-                <div class="client-static-header" style="margin-bottom: 15px;">
-                    <h3 style="margin: 0; color: #0288D1;">
-                        Client Name: <span style="color: #333;"><?php echo htmlspecialchars($_GET['auto_search']); ?></span>
-                    </h3>
-                    <input type="hidden" id="clientSearch" value="<?php echo htmlspecialchars($_GET['auto_search']); ?>">
-                </div>
-            <?php else: ?>
-                
-            <?php endif; ?>
-                        <button type="button" id="refreshFiles" class="refresh-icon-btn" title="Clear selected files">
-                                <span class="refresh-svg-icon" id="refreshSvgIcon">
-                                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M23.5 8.5A11 11 0 1 0 27 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-                                        <polygon points="27,16 23,13.5 23,18.5" fill="#0288D1"/>
-                                        <path d="M8.5 23.5A11 11 0 1 0 5 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-                                        <polygon points="5,16 9,18.5 9,13.5" fill="#0288D1"/>
-                                    </svg>
-                                </span>
-                        </button>
-            <h3>Upload & Generate Reports</h3>
-         <p>Attach Excel and PDF files. We will parse and build the reports.</p>
-
-            <?php if ($uploadError !== ''): ?>
-                <div class="flash-error">Error: <?php echo htmlspecialchars($uploadError); ?></div>
-            <?php endif; ?>
-            <form method="post" enctype="multipart/form-data">
-                <div class="upload-zone" id="uploadZone">
-                    <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                    <p style="margin: 0; font-weight: 600; color: var(--text-strong);">Drag & drop files here</p>
-                    <!-- Hide the default file input completely -->
-                    <input type="file" name="client_files[]" id="client_files" class="file-input" multiple required style="display:none;">
-                    <label for="client_files" class="btn-ash" style="margin-top:10px; display:inline-block; cursor:pointer;">
-                        <i class="fa-solid fa-file-import"></i> Choose Files
-                    </label>
-                    <div id="fileList" style="margin-top: 16px; display: none; text-align: left; width: 100%;">
-                        <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--text-strong);">Selected Files:</h4>
-                        <ul id="selectedFiles" style="margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--text);"></ul>
+            <div class="upload-section" style="position:relative;">
+                <?php if (!empty($_GET['auto_search'])): ?>
+                    <div class="client-static-header" style="margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #0288D1;">
+                            Client Name: <span style="color: #333;"><?php echo htmlspecialchars($_GET['auto_search']); ?></span>
+                        </h3>
+                        <input type="hidden" id="clientSearch" value="<?php echo htmlspecialchars($_GET['auto_search']); ?>">
                     </div>
-                </div>
-                <div style="margin-top:16px;">
-                    <button type="submit" class="btn-primary">Generate Reports</button>
-                </div>
-            </form>
-            <script>
-                // Auto-fill client search input from URL param 'auto_search'
-                (function() {
-                    function getQueryParam(name) {
-                        const url = new URL(window.location.href);
-                        return url.searchParams.get(name) || '';
-                    }
-                    var autoSearch = getQueryParam('auto_search');
-                    if (autoSearch) {
-                        var input = document.getElementById('clientSearchInput');
-                        if (input) input.value = autoSearch;
-                    }
-                })();
-                // Only one button will be visible now
-                const fileInput = document.getElementById('client_files');
-                const fileList = document.getElementById('fileList');
-                const selectedFiles = document.getElementById('selectedFiles');
-                const refreshBtn = document.getElementById('refreshFiles');
-                const refreshSvgIcon = document.getElementById('refreshSvgIcon');
+                <?php else: ?>
 
-                fileInput.addEventListener('change', function() {
-                    selectedFiles.innerHTML = '';
-                    const files = Array.from(this.files);
-                    if (files.length > 0) {
-                        files.forEach((file, index) => {
-                            const li = document.createElement('li');
-                            li.style.padding = '6px 0';
-                            li.style.borderBottom = '1px solid #e2e8f0';
-                            li.textContent = (index + 1) + '. ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-                            selectedFiles.appendChild(li);
-                        });
-                        fileList.style.display = 'block';
-                    } else {
-                        fileList.style.display = 'none';
-                    }
-                });
+                <?php endif; ?>
+                <button type="button" id="refreshFiles" class="refresh-icon-btn" title="Clear selected files">
+                    <span class="refresh-svg-icon" id="refreshSvgIcon">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M23.5 8.5A11 11 0 1 0 27 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round" />
+                            <polygon points="27,16 23,13.5 23,18.5" fill="#0288D1" />
+                            <path d="M8.5 23.5A11 11 0 1 0 5 16" stroke="#0288D1" stroke-width="2.2" fill="none" stroke-linecap="round" />
+                            <polygon points="5,16 9,18.5 9,13.5" fill="#0288D1" />
+                        </svg>
+                    </span>
+                </button>
+                <h3>Upload & Generate Reports</h3>
+                <p>Attach Excel and PDF files. We will parse and build the reports.</p>
 
-                refreshBtn.addEventListener('click', function() {
-                    // Start rotation
-                    refreshSvgIcon.classList.add('rotating');
-                    // Simulate clearing files
-                    setTimeout(function() {
-                        fileInput.value = '';
+                <?php if ($uploadError !== ''): ?>
+                    <div class="flash-error">Error: <?php echo htmlspecialchars($uploadError); ?></div>
+                <?php endif; ?>
+                <form method="post" enctype="multipart/form-data">
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                        <p style="margin: 0; font-weight: 600; color: var(--text-strong);">Drag & drop files here</p>
+                        <!-- Hide the default file input completely -->
+                        <input type="file" name="client_files[]" id="client_files" class="file-input" multiple required style="display:none;">
+                        <label for="client_files" class="btn-ash" style="margin-top:10px; display:inline-block; cursor:pointer;">
+                            <i class="fa-solid fa-file-import"></i> Choose Files
+                        </label>
+                        <div id="fileList" style="margin-top: 16px; display: none; text-align: left; width: 100%;">
+                            <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--text-strong);">Selected Files:</h4>
+                            <ul id="selectedFiles" style="margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--text);"></ul>
+                        </div>
+                    </div>
+                    <div style="margin-top:16px;">
+                        <button type="submit" class="btn-primary">Generate Reports</button>
+                    </div>
+                </form>
+                <script>
+                    // Auto-fill client search input from URL param 'auto_search'
+                    (function() {
+                        function getQueryParam(name) {
+                            const url = new URL(window.location.href);
+                            return url.searchParams.get(name) || '';
+                        }
+                        var autoSearch = getQueryParam('auto_search');
+                        if (autoSearch) {
+                            var input = document.getElementById('clientSearchInput');
+                            if (input) input.value = autoSearch;
+                        }
+                    })();
+                    // Only one button will be visible now
+                    const fileInput = document.getElementById('client_files');
+                    const fileList = document.getElementById('fileList');
+                    const selectedFiles = document.getElementById('selectedFiles');
+                    const refreshBtn = document.getElementById('refreshFiles');
+                    const refreshSvgIcon = document.getElementById('refreshSvgIcon');
+
+                    fileInput.addEventListener('change', function() {
                         selectedFiles.innerHTML = '';
-                        fileList.style.display = 'none';
-                        // Stop rotation
-                        refreshSvgIcon.classList.remove('rotating');
-                    }, 600); // Duration of rotation (ms)
-                });
-            </script>
-        </div> <!-- end .wrap main content -->
+                        const files = Array.from(this.files);
+                        if (files.length > 0) {
+                            files.forEach((file, index) => {
+                                const li = document.createElement('li');
+                                li.style.padding = '6px 0';
+                                li.style.borderBottom = '1px solid #e2e8f0';
+                                li.textContent = (index + 1) + '. ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+                                selectedFiles.appendChild(li);
+                            });
+                            fileList.style.display = 'block';
+                        } else {
+                            fileList.style.display = 'none';
+                        }
+                    });
 
-            </div> <!-- end .wrap -->
-        </div> <!-- end .main-scroll-container -->
+                    refreshBtn.addEventListener('click', function() {
+                        // Start rotation
+                        refreshSvgIcon.classList.add('rotating');
+                        // Simulate clearing files
+                        setTimeout(function() {
+                            fileInput.value = '';
+                            selectedFiles.innerHTML = '';
+                            fileList.style.display = 'none';
+                            // Stop rotation
+                            refreshSvgIcon.classList.remove('rotating');
+                        }, 600); // Duration of rotation (ms)
+                    });
+                </script>
+            </div> <!-- end .wrap main content -->
+
+        </div> <!-- end .wrap -->
+    </div> <!-- end .main-scroll-container -->
 </body>
+
 </html>
