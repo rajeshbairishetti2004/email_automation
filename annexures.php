@@ -15,8 +15,51 @@ if (!function_exists('formatAnnexureLabel')) {
     }
 }
 
-$attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
-$hasFiles = false;
+// Database connection
+require_once 'db_config.php';
+$pdo = getPdo();
+
+// Get files from database
+$stmt = $pdo->prepare("SELECT file_name FROM report_attachments WHERE client_id = :client_id ORDER BY uploaded_at DESC, id DESC");
+$stmt->execute([':client_id' => $clientId]);
+$existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+// If no files in database, check filesystem for backward compatibility
+if (empty($existingFiles)) {
+    $attDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+    
+    if (is_dir($attDir)) {
+        $files = scandir($attDir);
+        $fileSystemFiles = [];
+        
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') continue;
+            if (strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'pdf') {
+                $fileSystemFiles[] = $file;
+                
+                // Insert into database for future consistency
+                try {
+                    $checkStmt = $pdo->prepare("SELECT id FROM report_attachments WHERE client_id = :client_id AND file_name = :file_name");
+                    $checkStmt->execute([':client_id' => $clientId, ':file_name' => $file]);
+                    
+                    if (!$checkStmt->fetch()) {
+                        $insertStmt = $pdo->prepare("INSERT INTO report_attachments (client_id, file_name) VALUES (:client_id, :file_name)");
+                        $insertStmt->execute([':client_id' => $clientId, ':file_name' => $file]);
+                    }
+                } catch (Exception $e) {
+                    // Silently continue if there's an error
+                }
+            }
+        }
+        
+        // If we found files in filesystem, use them
+        if (!empty($fileSystemFiles)) {
+            $existingFiles = $fileSystemFiles;
+        }
+    }
+}
+
+$hasFiles = !empty($existingFiles);
 ?>
 <style>
 /* --- ANNEXURE ACTION BUTTONS --- */
@@ -62,15 +105,11 @@ $hasFiles = false;
 
 <ul id="annexures_list" style="list-style:none; padding:0;">
 <?php
-if (is_dir($attDir)) {
-    $files = scandir($attDir);
+if ($hasFiles) {
     $sortedFiles = [];
     $inceptionFile = null;
 
-    foreach ($files as $file) {
-        if ($file === '.' || $file === '..') continue;
-        $hasFiles = true;
-
+    foreach ($existingFiles as $file) {
         $lower = strtolower($file);
         if (preg_match('/portfolio.*performance.*inception/i', $lower)) {
             $inceptionFile = $file;
@@ -105,9 +144,7 @@ if (is_dir($attDir)) {
               </span>';
         echo '</li>';
     }
-}
-
-if (!$hasFiles) {
+} else {
     echo '<li style="color:#777;">No annexures available.</li>';
 }
 ?>
@@ -132,9 +169,10 @@ if (!$hasFiles) {
 <script>
 const clientId = <?php echo (int)$clientId; ?>;
 
-// DELETE
-function deleteAttachment(fileName) {
+// DELETE function
+function deleteAnnexure(fileName) {
     if (!confirm('Delete ' + fileName + '?')) return;
+    
     fetch('report_attachments.php', {
         method: 'POST',
         headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -144,31 +182,47 @@ function deleteAttachment(fileName) {
             file_name: fileName
         })
     })
-.then(d => {
-    if (!d.success) return;
-
-    const newName = d.new_name;
-    const newLabel = newName.replace(/\.pdf$/i, '');
-
-    // Update ALL annexures + attachments safely
-    document.querySelectorAll('li[data-filename]').forEach(li => {
-        if (li.dataset.filename === oldName) {
-            li.dataset.filename = newName;
-
-            const strong = li.querySelector('strong');
-            if (strong) strong.textContent = newLabel;
-
-            li.querySelectorAll('a').forEach(a => {
-                a.dataset.filename = newName;
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remove from annexures list
+            document.querySelectorAll('#annexures_list li[data-filename="'+fileName+'"]').forEach(li => {
+                li.remove();
             });
+            
+            // Also remove from attachments list if it exists
+            const attachmentList = document.getElementById('attachment_list');
+            if (attachmentList) {
+                attachmentList.querySelectorAll('li[data-filename="'+fileName+'"]').forEach(li => {
+                    li.remove();
+                });
+                
+                // Update "No attachments" message if needed
+                if (attachmentList.children.length === 0 || 
+                    (attachmentList.children.length === 1 && 
+                     attachmentList.children[0].textContent.includes('No attachments'))) {
+                    attachmentList.innerHTML = '<li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>';
+                }
+            }
+            
+            // Update "No annexures" message if needed
+            const annexList = document.getElementById('annexures_list');
+            if (annexList.children.length === 0 || 
+                (annexList.children.length === 1 && 
+                 annexList.children[0].textContent.includes('No annexures'))) {
+                annexList.innerHTML = '<li style="color:#777;">No annexures available.</li>';
+            }
+        } else {
+            alert('Delete failed: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(error => {
+        alert('Delete error: ' + error.message);
     });
-});
-
 }
 
-// RENAME
-function renameAttachment(oldName, newName) {
+// RENAME function
+function renameAnnexure(oldName, newName) {
     fetch('report_attachments.php', {
         method: 'POST',
         headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -179,15 +233,40 @@ function renameAttachment(oldName, newName) {
             new_name: newName
         })
     })
-    .then(r => r.json())
-    .then(d => {
-        if (d.success) {
-            document.querySelectorAll('[data-filename="'+oldName+'"]').forEach(li => {
-                li.dataset.filename = d.new_name;
-                li.querySelector('strong').textContent = d.new_name.replace(/\.pdf$/i,'');
-                li.querySelectorAll('a').forEach(a => a.dataset.filename = d.new_name);
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const newFileName = data.new_name;
+            const newLabel = newFileName.replace(/\.pdf$/i, '');
+            
+            // Update in annexures list
+            document.querySelectorAll('#annexures_list li[data-filename="'+oldName+'"]').forEach(li => {
+                li.dataset.filename = newFileName;
+                const strong = li.querySelector('strong');
+                if (strong) strong.textContent = newLabel;
+                li.querySelectorAll('a').forEach(a => {
+                    a.dataset.filename = newFileName;
+                });
             });
+            
+            // Also update in attachments list if it exists
+            const attachmentList = document.getElementById('attachment_list');
+            if (attachmentList) {
+                attachmentList.querySelectorAll('li[data-filename="'+oldName+'"]').forEach(li => {
+                    li.dataset.filename = newFileName;
+                    const strong = li.querySelector('strong');
+                    if (strong) strong.textContent = newFileName;
+                    li.querySelectorAll('a').forEach(a => {
+                        a.dataset.filename = newFileName;
+                    });
+                });
+            }
+        } else {
+            alert('Rename failed: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(error => {
+        alert('Rename error: ' + error.message);
     });
 }
 
@@ -198,7 +277,7 @@ document.addEventListener('click', function(e) {
 
     if (a.classList.contains('annex-delete')) {
         e.preventDefault();
-        deleteAttachment(a.dataset.filename);
+        deleteAnnexure(a.dataset.filename);
     }
 
     if (a.classList.contains('annex-edit')) {
@@ -216,8 +295,19 @@ editAnnexureForm.onsubmit = function(e) {
     e.preventDefault();
     let oldName = editOldFileName.value;
     let newName = editNewFileName.value.trim();
+    if (!newName) {
+        alert('Please enter a new name');
+        return;
+    }
     if (!newName.endsWith('.pdf')) newName += '.pdf';
-    renameAttachment(oldName, newName);
+    
+    // Check for invalid characters
+    if (/[\/\\:*?"<>|]/.test(newName)) {
+        alert('Filename contains invalid characters.');
+        return;
+    }
+    
+    renameAnnexure(oldName, newName);
     editAnnexureModal.style.display = 'none';
 };
 </script>
