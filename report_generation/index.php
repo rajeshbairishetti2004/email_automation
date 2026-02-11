@@ -56,6 +56,13 @@ $SLIDE_REGISTRY = [
         'template' => 'page11.php',
         'preview' => 'Performance of Funds and its Risks'
     ],
+    12 => [
+    'title' => 'Current Schemes',
+    'template' => 'page12.php',
+    'preview' => 'List of current schemes and values',
+    'editable' => false
+],
+
     13 => [
         'title' => 'Strategic Rebalancing',
         'template' => 'page13.php',
@@ -130,11 +137,10 @@ $current_page = isset($_GET['page']) ? max(1, min(24, intval($_GET['page']))) : 
 
 function storeTemplateSlideIfMissing($client_id, $page, $config)
 {
-
-if (!empty($config['dynamic']) && empty($config['editable'])) {
-    return;
-}
-
+    // Skip DB storage ONLY for pure dynamic slides
+    if (!empty($config['dynamic']) && empty($config['template'])) {
+        return;
+    }
 
     $pages = getClientPages($client_id);
 
@@ -152,6 +158,7 @@ if (!empty($config['dynamic']) && empty($config['editable'])) {
         );
     }
 }
+
 
 foreach ($SLIDE_REGISTRY as $page => $config) {
     storeTemplateSlideIfMissing($client_id, $page, $config);

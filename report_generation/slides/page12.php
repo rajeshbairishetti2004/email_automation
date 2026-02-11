@@ -1,34 +1,117 @@
+<?php
+// slides/page12.php
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+/**
+ * db_config.php location:
+ * C:\xampp\htdocs\email_automation\db_config.php
+ * slides/page12.php → ../../db_config.php
+ */
+require_once __DIR__ . '/../../db_config.php';
+
+$pdo = getDbConnection();
+
+// Normalize client_id: CLIENT_15392 → 15392
+$clientIdRaw = $_SESSION['current_client_id'] ?? '';
+$clientId    = (int) str_replace('CLIENT_', '', $clientIdRaw);
+
+if ($clientId <= 0) {
+    echo '<div class="page"><p style="color:red;">Invalid Client ID</p></div>';
+    return;
+}
+
+// Fetch schemes (current_value stored in RUPEES)
+$stmt = $pdo->prepare("
+    SELECT scheme_name, current_value
+    FROM client_reports.client_schemes
+    WHERE client_id = :client_id
+    ORDER BY scheme_name ASC
+");
+$stmt->execute(['client_id' => $clientId]);
+$schemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Split schemes into two columns
+$total = count($schemes);
+$half  = (int) ceil($total / 2);
+
+$leftSchemes  = array_slice($schemes, 0, $half);
+$rightSchemes = array_slice($schemes, $half);
+?>
+
 <div class="page">
-    <div class="section-title">Asset Allocation - Current</div>
-    
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px;">
-        <div>
-            <h3 style="color: #2E75B6; margin-bottom: 20px;">Current Allocation</h3>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <div class="list-item"><strong>Indian Equity:</strong> XX% (Large Cap, Mid Cap, Small Cap)</div>
-                <div class="list-item"><strong>Debt/Fixed Income:</strong> XX%</div>
-                <div class="list-item"><strong>Gold/Precious Metals:</strong> Minimal</div>
-                <div class="list-item"><strong>International Equity:</strong> Minimal</div>
-                <div class="list-item"><strong>Cash/Liquid:</strong> XX%</div>
-                <div class="list-item"><strong>Alternative Assets:</strong> XX%</div>
-            </div>
-        </div>
-        
-        <div>
-            <h3 style="color: #2E75B6; margin-bottom: 20px;">Current vs Recommended</h3>
-            <div style="background: #FFF2CC; padding: 20px; border-radius: 8px;">
-                <p><strong>Observation:</strong> Portfolio heavily weighted towards Indian equities</p>
-                <p><strong>Recommendation:</strong> Reduce Indian equity allocation slightly and reinvest in global equity</p>
-                <p><strong>Action:</strong> Initiate global wealth building through GIFT City route</p>
-                <p><strong>Timeline:</strong> Gradual implementation over next 2-3 quarters</p>
-            </div>
-        </div>
+
+    <h1 style="text-align:center; color:#4F81BD; font-size:32px; margin-bottom:30px;">
+        Current Schemes
+    </h1>
+
+    <div style="display:flex; justify-content:center; gap:40px;">
+
+        <!-- LEFT TABLE -->
+        <table style="width:45%; border-collapse:collapse; font-size:14px;">
+            <tr style="background:#B4C7E7;">
+                <th style="border:1px solid #000; padding:8px;">Scheme Name</th>
+                <th style="border:1px solid #000; padding:8px;">Current Value</th>
+            </tr>
+
+            <?php if (empty($leftSchemes)): ?>
+                <tr>
+                    <td colspan="2" style="border:1px solid #000; padding:8px; text-align:center;">
+                        No schemes available
+                    </td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($leftSchemes as $row): ?>
+                    <tr>
+                        <td style="border:1px solid #000; padding:8px;">
+                            <?= htmlspecialchars($row['scheme_name']) ?>
+                        </td>
+                        <td style="border:1px solid #000; padding:8px; text-align:right;">
+                            <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </table>
+
+        <!-- RIGHT TABLE -->
+        <table style="width:45%; border-collapse:collapse; font-size:14px;">
+            <tr style="background:#B4C7E7;">
+                <th style="border:1px solid #000; padding:8px;">Scheme Name</th>
+                <th style="border:1px solid #000; padding:8px;">Current Value</th>
+            </tr>
+
+            <?php if (empty($rightSchemes)): ?>
+                <tr>
+                    <td colspan="2" style="border:1px solid #000; padding:8px;">&nbsp;</td>
+                </tr>
+            <?php else: ?>
+                <?php foreach ($rightSchemes as $row): ?>
+                    <tr>
+                        <td style="border:1px solid #000; padding:8px;">
+                            <?= htmlspecialchars($row['scheme_name']) ?>
+                        </td>
+                        <td style="border:1px solid #000; padding:8px; text-align:right;">
+                            <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </table>
+
     </div>
-    
-    <div class="interpretation" style="margin-top: 30px;">
-        <h3 style="color: #00B050; margin-bottom: 10px;">Finance Doctor's Interpretation</h3>
-        <p>"To build up global wealth & precious metals. To be moving gradually towards the recommended allocation. As a first step, reduce Indian equity allocation slightly and reinvest in global equity."</p>
+
+    <!-- INTERPRETATION -->
+    <div style="margin-top:40px;">
+        <h3 style="color:#1F4E79;">Finance Doctor's interpretation:</h3>
+        <p style="font-style:italic; color:#1F4E79; line-height:1.6;">
+            In a fast growing economy, there is a lot of sector and cap rotation and therefore,
+            we have selected mostly the best schemes in flexi cap, focused, multi cap and
+            large + midcap categories
+        </p>
     </div>
-    
+
     <div class="page-number">Page 12 of 23</div>
 </div>
