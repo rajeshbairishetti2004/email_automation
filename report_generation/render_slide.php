@@ -15,9 +15,22 @@ if (!$client_id || $page <= 0) {
     exit;
 }
 
+// Set client_id in session for slides that expect it
+$_SESSION['current_client_id'] = $client_id;
+
 /* ===============================
    DYNAMIC SLIDES (DIRECT RENDER)
 ================================ */
+
+// Check if this is an AJAX request
+$isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+          strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
+
+// Page 12 – Custom slide with AJAX save
+if ($page === 12) {
+    include __DIR__ . '/slides/page12.php';
+    exit;
+}
 
 // Page 2 – Dynamic
 if ($page === 2) {
