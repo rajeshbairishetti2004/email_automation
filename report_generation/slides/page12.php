@@ -5,11 +5,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-/**
- * db_config.php location:
- * C:\xampp\htdocs\email_automation\db_config.php
- * slides/page12.php → ../../db_config.php
- */
 require_once __DIR__ . '/../../db_config.php';
 
 $pdo = getDbConnection();
@@ -23,7 +18,7 @@ if ($clientId <= 0) {
     return;
 }
 
-// Fetch schemes (current_value stored in RUPEES)
+// Fetch schemes
 $stmt = $pdo->prepare("
     SELECT scheme_name, current_value
     FROM client_reports.client_schemes
@@ -33,73 +28,78 @@ $stmt = $pdo->prepare("
 $stmt->execute(['client_id' => $clientId]);
 $schemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Split schemes into two columns
+/**
+ * SPLITTING LOGIC
+ * - Up to 20 rows → max 8 on left
+ * - More than 20 rows → split evenly
+ */
 $total = count($schemes);
-$half  = (int) ceil($total / 2);
 
-$leftSchemes  = array_slice($schemes, 0, $half);
-$rightSchemes = array_slice($schemes, $half);
+if ($total <= 20) {
+    $leftCount = min(8, $total);
+} else {
+    $leftCount = (int) ceil($total / 2);
+}
+
+$leftSchemes  = array_slice($schemes, 0, $leftCount);
+$rightSchemes = array_slice($schemes, $leftCount);
 ?>
 
-<div class="page">
+<div class="page" style="padding:40px 50px;">
 
     <h1 style="text-align:center; color:#4F81BD; font-size:32px; margin-bottom:30px;">
         Current Schemes
     </h1>
 
-    <div style="display:flex; justify-content:center; gap:40px;">
+    <div style="display:flex; justify-content:center; gap:40px; align-items:flex-start;">
 
         <!-- LEFT TABLE -->
         <table style="width:45%; border-collapse:collapse; font-size:14px;">
             <tr style="background:#B4C7E7;">
-                <th style="border:1px solid #000; padding:8px;">Scheme Name</th>
-                <th style="border:1px solid #000; padding:8px;">Current Value</th>
+                <th style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
+                    Scheme Name
+                </th>
+                <th style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
+                    Current Value
+                </th>
             </tr>
 
-            <?php if (empty($leftSchemes)): ?>
+            <?php foreach ($leftSchemes as $row): ?>
                 <tr>
-                    <td colspan="2" style="border:1px solid #000; padding:8px; text-align:center;">
-                        No schemes available
+                    <td style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
+                        <?= htmlspecialchars($row['scheme_name']) ?>
+                    </td>
+                    <td style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px; text-align:right;">
+                        <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
                     </td>
                 </tr>
-            <?php else: ?>
-                <?php foreach ($leftSchemes as $row): ?>
-                    <tr>
-                        <td style="border:1px solid #000; padding:8px;">
-                            <?= htmlspecialchars($row['scheme_name']) ?>
-                        </td>
-                        <td style="border:1px solid #000; padding:8px; text-align:right;">
-                            <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
+            <?php endforeach; ?>
         </table>
 
-        <!-- RIGHT TABLE -->
-        <table style="width:45%; border-collapse:collapse; font-size:14px;">
-            <tr style="background:#B4C7E7;">
-                <th style="border:1px solid #000; padding:8px;">Scheme Name</th>
-                <th style="border:1px solid #000; padding:8px;">Current Value</th>
-            </tr>
-
-            <?php if (empty($rightSchemes)): ?>
-                <tr>
-                    <td colspan="2" style="border:1px solid #000; padding:8px;">&nbsp;</td>
+        <!-- RIGHT TABLE (ONLY IF DATA EXISTS) -->
+        <?php if (!empty($rightSchemes)): ?>
+            <table style="width:45%; border-collapse:collapse; font-size:14px;">
+                <tr style="background:#B4C7E7;">
+                    <th style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
+                        Scheme Name
+                    </th>
+                    <th style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
+                        Current Value
+                    </th>
                 </tr>
-            <?php else: ?>
+
                 <?php foreach ($rightSchemes as $row): ?>
                     <tr>
-                        <td style="border:1px solid #000; padding:8px;">
+                        <td style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px;">
                             <?= htmlspecialchars($row['scheme_name']) ?>
                         </td>
-                        <td style="border:1px solid #000; padding:8px; text-align:right;">
+                        <td style="border:1px solid #000; padding:4px 8px; height:26px; line-height:26px; text-align:right;">
                             <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
                         </td>
                     </tr>
                 <?php endforeach; ?>
-            <?php endif; ?>
-        </table>
+            </table>
+        <?php endif; ?>
 
     </div>
 
@@ -113,5 +113,4 @@ $rightSchemes = array_slice($schemes, $half);
         </p>
     </div>
 
-    <div class="page-number">Page 12 of 23</div>
 </div>
