@@ -20,6 +20,7 @@ $clientId = (int)str_replace('CLIENT_', '', $clientKey);
 /* =====================================================
    AJAX HANDLER SECTION - MUST BE AT THE TOP
 ===================================================== */
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // IMPORTANT: We need to output ONLY JSON and exit
     header('Content-Type: application/json');
@@ -44,8 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             }
 
             try {
-                $delete = $slidesPdo->prepare("DELETE FROM slide8 WHERE id = ? AND client_id = ?");
+                $delete = $slidesPdo->prepare("
+    UPDATE slide8
+    SET recommended_pct = 0, updated_at = NOW()
+    WHERE id = ? AND client_id = ?
+");
                 $delete->execute([$id, $ajaxClientId]);
+
                 $response = ['success' => true];
             } catch (Exception $e) {
                 $response = ['success' => false, 'message' => 'Failed to delete asset'];
@@ -211,6 +217,7 @@ $colors = [];
 for ($i = 0; $i < count($assetOrder); $i++) {
     $colors[] = $baseColors[$i % count($baseColors)];
 }
+
 
 // Get interpretation
 $interpretation = $_SESSION['slide8_interpretation'][$clientId]
@@ -671,43 +678,46 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
         }
 
         function updateRecommendedChart() {
-            const ctx = document.getElementById('recommendedChart').getContext('2d');
+    const ctx = document.getElementById('recommendedChart').getContext('2d');
 
-            if (recommendedChartInstance) {
-                recommendedChartInstance.destroy();
-            }
+    if (recommendedChartInstance) {
+        recommendedChartInstance.destroy();
+    }
 
-            recommendedChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: recommendedData,
-                        backgroundColor: colors,
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    cutout: '55%',
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.raw || 0;
-                                    return `${label}: ${value.toFixed(1)}%`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+    // FILTER OUT 0% VALUES
+    const filteredLabels = [];
+    const filteredData = [];
+    const filteredColors = [];
+
+    labels.forEach((label, i) => {
+        if (recommendedData[i] > 0) {
+            filteredLabels.push(label);
+            filteredData.push(recommendedData[i]);
+            filteredColors.push(colors[i]);
         }
+    });
+
+    recommendedChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: filteredLabels,
+            datasets: [{
+                data: filteredData,
+                backgroundColor: filteredColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            cutout: '55%',
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
 
         // Initial chart creation
         updateCurrentChart();
@@ -821,11 +831,12 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
 
                 // TMP ROW → UI only
                 if (id.toString().startsWith('tmp_')) {
-                    labels.splice(index, 1);
+
                     rowIds.splice(index, 1);
                     currentData.splice(index, 1);
                     recommendedData.splice(index, 1);
                     colors.splice(index, 1);
+                    labels.splice(index, 1);
 
                     updateCurrentChart();
                     updateRecommendedChart();
@@ -859,21 +870,18 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                     const result = await response.json();
 
                     if (result.success) {
-                        // Remove from arrays
-                        labels.splice(index, 1);
-                        rowIds.splice(index, 1);
-                        currentData.splice(index, 1);
-                        recommendedData.splice(index, 1);
-                        colors.splice(index, 1);
 
-                        // Update charts
-                        updateCurrentChart();
-                        updateRecommendedChart();
+                        // Only zero recommended
+                        recommendedData[index] = 0;
 
-                        // Update legends
+                        if (recommendedChartInstance) {
+                            recommendedChartInstance.data.datasets[0].data = recommendedData;
+                            recommendedChartInstance.update();
+                        }
+
                         updateLegends();
 
-                        alert('Category deleted successfully!');
+                        alert('Category removed from recommended allocation!');
                     } else {
                         alert(result.message || 'Failed to delete category');
                     }
@@ -1050,6 +1058,7 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
             currentLegend.innerHTML = '';
 
             labels.forEach((asset, i) => {
+
                 const row = document.createElement('div');
                 row.className = 'legend-item';
                 row.innerHTML = `
@@ -1063,7 +1072,10 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
             const recommendedLegend = document.getElementById('recommendedLegend');
             recommendedLegend.innerHTML = '';
 
-            labels.forEach((asset, i) => {
+           labels.forEach((asset, i) => {
+
+    if (recommendedData[i] <= 0) return; // HIDE 0% rows
+
                 const row = document.createElement('div');
                 row.className = 'legend-row';
                 row.innerHTML = `
@@ -1092,7 +1104,7 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
             // Re-attach event listeners for the new inputs
             attachEventListeners();
         }
-
+                            
         // Attach event listeners to inputs
         function attachEventListeners() {
             document.querySelectorAll('.rec-input').forEach(input => {
