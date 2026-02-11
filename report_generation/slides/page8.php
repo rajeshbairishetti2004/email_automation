@@ -25,75 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
 
     // Get client ID from POST or GET
-    $ajaxClientKey = '';
+    $ajaxClientId = $clientId;
 
-    if (!empty($_POST['client_id'])) {
-        $ajaxClientKey = $_POST['client_id'];
-    } elseif (!empty($_GET['client_id'])) {
-        $ajaxClientKey = $_GET['client_id'];
-    } elseif (!empty($_SESSION['current_client_id'])) {
-        $ajaxClientKey = $_SESSION['current_client_id'];
-    }
-    $ajaxClientId = 0;
-    if (preg_match('/(\d+)/', $ajaxClientKey, $m)) {
+    if (!empty($_POST['client_id']) && preg_match('/(\d+)/', $_POST['client_id'], $m)) {
         $ajaxClientId = (int)$m[1];
     }
 
     $response = ['success' => false, 'message' => 'Unknown action'];
 
     switch ($_POST['action']) {
-        case 'add_asset':
-            $assetName = trim($_POST['asset_name'] ?? '');
-            $recommendedPct = (float)($_POST['recommended_pct'] ?? 0);
-
-            if (empty($assetName)) {
-                $response = ['success' => false, 'message' => 'Asset name is required'];
-                break;
-            }
-
-            if ($ajaxClientId <= 0) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Client context lost. Please reload the page.'
-                ]);
-                exit;
-            }
-
-
-            try {
-                // Check if asset already exists
-                $checkStmt = $slidesPdo->prepare("SELECT id FROM slide8 WHERE client_id = ? AND LOWER(asset) = LOWER(?)");
-                $checkStmt->execute([$ajaxClientId, $assetName]);
-
-                if ($checkStmt->rowCount() > 0) {
-                    $response = ['success' => false, 'message' => 'Asset "' . $assetName . '" already exists'];
-                    break;
-                }
-
-                // Add only to recommended (current will remain 0)
-                $insert = $slidesPdo->prepare("
-                    INSERT INTO slide8 
-                    (client_id, asset, current_pct, recommended_pct, updated_at)
-                    VALUES (?, ?, 0, ?, NOW())
-                ");
-                $insert->execute([
-                    $ajaxClientId,
-                    ucfirst(strtolower($assetName)),
-                    $recommendedPct
-                ]);
-
-                $newId = $slidesPdo->lastInsertId();
-                $response = [
-                    'success' => true,
-                    'id' => $newId,
-                    'asset' => ucfirst(strtolower($assetName)),
-                    'current_pct' => 0,
-                    'recommended_pct' => $recommendedPct
-                ];
-            } catch (Exception $e) {
-                $response = ['success' => false, 'message' => 'Failed to add asset: ' . $e->getMessage()];
-            }
-            break;
 
         case 'delete_asset':
             $id = (int)($_POST['id'] ?? 0);
@@ -141,49 +81,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 
         case 'save_recommended':
+
             $rows = json_decode($_POST['data'] ?? '[]', true);
-            if (!is_array($rows)) {
-                $response = ['success' => false, 'message' => 'Invalid data format'];
-                break;
-            }
-
-            $interpretation = trim($_POST['interpretation'] ?? '');
             $newAssets = json_decode($_POST['new_assets'] ?? '[]', true);
-
-            if (!empty($newAssets)) {
-                $insert = $slidesPdo->prepare("
-        INSERT INTO slide8
-        (client_id, asset, current_pct, recommended_pct, updated_at)
-        VALUES (?, ?, 0, ?, NOW())
-    ");
-
-                foreach ($newAssets as $a) {
-                    $insert->execute([
-                        $ajaxClientId,
-                        $a['asset'],
-                        (float)$a['recommended']
-                    ]);
-                }
-            }
-
+            $interpretation = trim($_POST['interpretation'] ?? '');
 
             $slidesPdo->beginTransaction();
             try {
-                // Update recommended percentages
-                $update = $slidesPdo->prepare("
-                    UPDATE slide8
-                    SET recommended_pct = ?, updated_at = NOW()
-                    WHERE id = ?
-                ");
 
-                foreach ($rows as $r) {
-                    $update->execute([
-                        (float)$r['value'],
-                        (int)$r['id']
-                    ]);
+                /* INSERT NEW ASSETS */
+                if (!empty($newAssets)) {
+                    $insert = $slidesPdo->prepare("
+                INSERT INTO slide8
+                (client_id, asset, current_pct, recommended_pct, updated_at)
+                VALUES (?, ?, 0, ?, NOW())
+            ");
+
+                    foreach ($newAssets as $a) {
+                        $insert->execute([
+                            $ajaxClientId,
+                            $a['asset'],
+                            (float)$a['recommended']
+                        ]);
+                    }
                 }
 
-                // Save interpretation to session
+                /* UPDATE RECOMMENDED VALUES */
+                if (!empty($rows)) {
+                    $update = $slidesPdo->prepare("
+                UPDATE slide8
+                SET recommended_pct = ?, updated_at = NOW()
+                WHERE id = ? AND client_id = ?
+            ");
+
+                    foreach ($rows as $r) {
+                        if (!is_numeric($r['id'])) continue;
+
+                        $update->execute([
+                            (float)$r['value'],
+                            (int)$r['id'],
+                            $ajaxClientId
+                        ]);
+                    }
+                }
+
                 if ($interpretation !== '') {
                     $_SESSION['slide8_interpretation'][$ajaxClientId] = $interpretation;
                 }
@@ -192,8 +133,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $response = ['success' => true];
             } catch (Exception $e) {
                 $slidesPdo->rollBack();
-                $response = ['success' => false, 'message' => 'Failed to save changes: ' . $e->getMessage()];
+                $response = ['success' => false, 'message' => $e->getMessage()];
             }
+
             break;
     }
 
@@ -214,7 +156,8 @@ $seedCheck = $slidesPdo->prepare(
 );
 $seedCheck->execute([$clientId]);
 
-if ($seedCheck->fetchColumn() == 0) {
+$count = $seedCheck->fetchColumn();
+if ($count == 0 && $clientId > 0) {
     // Default sample data for MCAP allocation
     $defaultAssets = [
         'Large Cap' => 40.0,
@@ -832,14 +775,10 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
 
 
         // Add New Asset
-        submitAssetBtn.onclick = async () => {
+        submitAssetBtn.onclick = () => {
+
             const assetName = document.getElementById('assetName').value.trim();
             const recommendedPct = parseFloat(document.getElementById('recommendedPct').value) || 0;
-
-            console.log('Add Asset:', {
-                assetName,
-                recommendedPct
-            });
 
             if (!assetName) {
                 alert('Please enter a category name');
@@ -851,102 +790,37 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                 return;
             }
 
-            const urlParams = new URLSearchParams(window.location.search);
-            const clientId = urlParams.get('client_id');
+            labels.push(assetName);
+            rowIds.push('tmp_' + Date.now());
+            currentData.push(0);
+            recommendedData.push(recommendedPct);
 
-            console.log('Client ID:', clientId);
+            const baseColors = ['#4f7df3', '#2eb85c', '#f9b115', '#e55353', '#9d5cf2', '#f567a1', '#4fd3d6', '#f99315'];
+            colors.push(baseColors[(labels.length - 1) % baseColors.length]);
 
-            const formData = new FormData();
-            formData.append('action', 'add_asset');
-            formData.append('asset_name', assetName);
-            formData.append('recommended_pct', recommendedPct);
+            updateCurrentChart();
+            updateRecommendedChart();
+            updateLegends();
 
-            if (clientId) {
-                formData.append('client_id', clientId);
-            }
-
-            try {
-                // Use the current page URL for AJAX
-                console.log('Sending POST to:', getAjaxUrl());
-
-                const response = await fetch(getAjaxUrl(), {
-                    method: 'POST',
-                    body: formData
-                });
-
-
-                console.log('Response status:', response.status);
-
-                // Check if response is JSON
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const result = await response.json();
-                    console.log('Parsed result:', result);
-
-                    if (result.success) {
-                        // Add to arrays
-                        labels.push(result.asset);
-                        const tempId = 'tmp_' + Date.now();
-                        rowIds.push(tempId);
-
-                        currentData.push(0);
-                        recommendedData.push(result.recommended_pct);
-
-                        // Add a new color
-                        const baseColors = ['#4f7df3', '#2eb85c', '#f9b115', '#e55353', '#9d5cf2', '#f567a1', '#4fd3d6', '#f99315'];
-                        colors.push(baseColors[(labels.length - 1) % baseColors.length]);
-
-                        // Update charts
-                        updateCurrentChart();
-                        updateRecommendedChart();
-
-                        // Update legends
-                        updateLegends();
-
-                        // Close modal
-                        modal.style.display = 'none';
-
-                        alert('Category added successfully!');
-                    } else {
-                        alert(result.message || 'Failed to add category');
-                    }
-                } else {
-                    // Not JSON - probably HTML
-                    const text = await response.text();
-                    console.error('Server returned HTML instead of JSON');
-                    console.error('Response (first 500 chars):', text.substring(0, 500));
-
-                    // Check if we can find error messages in the HTML
-                    const errorMatch = text.match(/<b>.*?error<\/b>:(.*?)<br/i) ||
-                        text.match(/error:(.*?)</i) ||
-                        text.match(/message['"]?\s*:\s*['"](.*?)['"]/i);
-
-                    if (errorMatch && errorMatch[1]) {
-                        throw new Error('Server error: ' + errorMatch[1].trim());
-                    } else {
-                        throw new Error('Server returned HTML instead of JSON. The AJAX handler might not be working.');
-                    }
-                }
-            } catch (error) {
-                console.error('Error adding category:', error);
-                alert('Error adding category: ' + error.message);
-            }
+            modal.style.display = 'none';
         };
 
         // Delete Asset
         document.addEventListener('click', async (e) => {
             if (e.target.classList.contains('delete-asset-btn')) {
+
                 if (!confirm('Are you sure you want to delete this category?')) {
                     return;
                 }
 
                 const id = e.target.dataset.id;
-                const index = rowIds.indexOf(id);
+
+                const index = rowIds.findIndex(r => r.toString() === id.toString());
 
                 if (index === -1) return;
 
-                // 🔥 UNSAVED ROW → UI ONLY
-                if (id.startsWith('tmp_')) {
+                // TMP ROW → UI only
+                if (id.toString().startsWith('tmp_')) {
                     labels.splice(index, 1);
                     rowIds.splice(index, 1);
                     currentData.splice(index, 1);
@@ -958,6 +832,8 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                     updateLegends();
                     return;
                 }
+
+                // SAVED ROW → DELETE FROM DB
 
                 // SAVED ROW → DELETE FROM DB
 
@@ -974,6 +850,7 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                 }
 
                 try {
+
                     const response = await fetch(getAjaxUrl(), {
                         method: 'POST',
                         body: formData
@@ -1082,47 +959,43 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
 
         // Save Recommended Allocations
         saveBtn.onclick = async () => {
+
             // Validate total is 100%
-            const total = [...document.querySelectorAll('.rec-input')]
-                .reduce((s, i) => s + (parseFloat(i.value) || 0), 0);
+            const total = recommendedData.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
 
             if (Math.abs(total - 100) > 0.1) {
                 alert(`Recommended allocation must total 100% (Current: ${total.toFixed(1)}%)`);
                 return;
             }
 
-            // Prepare payload for percentages
             const payload = [];
-            document.querySelectorAll('.rec-input').forEach(input => {
-                payload.push({
-                    id: parseInt(input.dataset.id),
-                    value: parseFloat(input.value) || 0
-                });
+            const newAssets = [];
+
+            rowIds.forEach((id, i) => {
+
+                if (id.toString().startsWith('tmp_')) {
+                    newAssets.push({
+                        asset: labels[i],
+                        recommended: recommendedData[i]
+                    });
+                } else {
+                    payload.push({
+                        id: parseInt(id),
+                        value: recommendedData[i]
+                    });
+                }
+
             });
 
-            // Get interpretation text
             const newInterpretation = interpretationEdit.value.trim();
 
             const urlParams = new URLSearchParams(window.location.search);
             const clientId = urlParams.get('client_id');
 
-            // Save to database
             const formData = new FormData();
-            const newAssets = [];
-
-            rowIds.forEach((id, i) => {
-                if (id.startsWith('tmp_')) {
-                    newAssets.push({
-                        asset: labels[i],
-                        recommended: recommendedData[i]
-                    });
-                }
-            });
-            formData.append('new_assets', JSON.stringify(newAssets));
-
-
             formData.append('action', 'save_recommended');
             formData.append('data', JSON.stringify(payload));
+            formData.append('new_assets', JSON.stringify(newAssets));
             formData.append('interpretation', newInterpretation);
 
             if (clientId) {
@@ -1138,19 +1011,22 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                 const result = await response.json();
 
                 if (result.success) {
-                    // Update interpretation display
-                    interpretationText.textContent = newInterpretation;
+
+                    // Update recommended chart
+                    if (recommendedChartInstance) {
+                        recommendedChartInstance.data.datasets[0].data = recommendedData;
+                        recommendedChartInstance.update();
+                    }
 
                     // Exit edit mode
                     editMode = false;
+
                     const inputs = document.querySelectorAll('.rec-input, .asset-name-input');
                     const deleteBtns = document.querySelectorAll('.delete-asset-btn');
 
                     inputs.forEach(i => i.disabled = true);
                     deleteBtns.forEach(btn => btn.style.display = 'none');
 
-                    interpretationText.style.display = 'block';
-                    interpretationEdit.style.display = 'none';
                     editBtn.style.display = 'inline-block';
                     addAssetBtn.style.display = 'inline-block';
                     saveBtn.style.display = 'none';
@@ -1159,11 +1035,13 @@ $interpretation = $_SESSION['slide8_interpretation'][$clientId]
                 } else {
                     alert(result.message || 'Failed to save changes');
                 }
+
             } catch (error) {
                 console.error('Error saving changes:', error);
                 alert('Error saving changes: ' + error.message);
             }
         };
+
 
         // Function to update legends
         function updateLegends() {
