@@ -177,6 +177,53 @@ function fetchTeamStats(PDO $pdo): array
     return $result;
 }
 
+function extractGlobalEquityFromScriptSheet(string $filePath): float
+{
+    $spreadsheet = IOFactory::load($filePath);
+
+    foreach ($spreadsheet->getSheetNames() as $i => $sheetName) {
+
+        if (stripos($sheetName, 'scheme') !== false &&
+            stripos($sheetName, 'scrip') !== false) {
+
+            $sheet = $spreadsheet->getSheet($i);
+            $rows  = $sheet->toArray(null, true, true, true);
+
+            $shareCol = null;
+
+            // Find SHARE column
+            foreach ($rows as $row) {
+                foreach ($row as $col => $val) {
+                    if (stripos($val, 'share') !== false) {
+                        $shareCol = $col;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$shareCol) return 0;
+
+            // Find "Equity: Global Total" row ONLY
+            foreach ($rows as $row) {
+
+                $rowText = implode(' ', $row);
+
+                if (
+                    stripos($rowText, 'equity') !== false &&
+                    stripos($rowText, 'global') !== false &&
+                    stripos($rowText, 'total') !== false
+                ) {
+                    return (float)($row[$shareCol] ?? 0);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+
 function mergeClientArrays(array &$target, array $source): void
 {
     foreach ($source as $client => $data) {
@@ -461,9 +508,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ======================================
             // SLIDE 8 – SUB CATEGORY ALLOCATION
             // ======================================
+            // ======================================
+            // SLIDE 8 – SUB CATEGORY ALLOCATION
+            // ======================================
             if ($allocationExcelPath && file_exists($allocationExcelPath)) {
 
-                // Clear old slide8 rows for this client
+                // Clear old slide8 rows
                 $pdoSlides->prepare("DELETE FROM slide8 WHERE client_id = ?")
                     ->execute([$clientId]);
 
@@ -473,16 +523,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $assetRaw = trim($row['asset']);
 
-                    // ❗ Skip Grand Total row
                     if (stripos($assetRaw, 'grand total') !== false) {
                         continue;
                     }
 
-                    $asset = $assetRaw;              // EXACT Excel category
-                    $pct   = (float)$row['pct'];     // EXACT value, no rounding
                     $asset = ucwords($row['asset']);
-
-                    $pct = (float)$row['pct'];
+                    $pct   = (float)$row['pct'];
 
                     $stmt = $pdoSlides->prepare("
             INSERT INTO slide8
@@ -494,10 +540,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $clientId,
                         $asset,
                         $pct,
-                        $pct   // recommended = current initially
+                        $pct
                     ]);
                 }
+
+                // ======================================
+                // SLIDE 10 – GLOBAL EQUITY
+                // ======================================
+
+                $globalPct = extractGlobalEquityFromScriptSheet($allocationExcelPath);
+
+                // Remove old slide10 record
+                $pdoSlides->prepare("DELETE FROM slide10 WHERE client_id = ?")
+                    ->execute([$clientId]);
+
+                $pdoSlides->prepare("
+        INSERT INTO slide10
+        (client_id, current_pct, recommended_pct, updated_at)
+        VALUES (?, ?, ?, NOW())
+    ")->execute([
+                    $clientId,
+                    $globalPct,
+                    0
+                ]);
             }
+
+
 
 
             if ($firstClientId === 0 && $clientId > 0) {

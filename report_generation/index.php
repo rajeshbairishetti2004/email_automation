@@ -51,6 +51,12 @@ $SLIDE_REGISTRY = [
         'template' => 'page8.php',
         'preview' => 'Equity MCAP allocation'
     ],
+    10 => [
+        'title' => 'Global Equity % in Portfolio',
+        'template' => 'page10.php',
+        'preview' => 'Global Equity % in Portfolio Global wealth',
+        'dynamic' => true
+    ],
     11 => [
         'title' => 'Fund Performance & Risk Metrics',
         'template' => 'page11.php',
@@ -312,6 +318,8 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                                     echo "investment journey graph";
                                 }elseif ($i == 8) {
                                      echo "Equity MCAP allocation";
+                                }elseif ($i == 10) {
+                                    echo "Global wealth allocation";
                                 }elseif ($i == 11) {
                                     echo "Performance & Risk Metrics";
                                 }elseif ($i == 13) {
