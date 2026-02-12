@@ -141,5 +141,6 @@ yarn-error.log*
 .env
 /vendor
 /uploads
+/report_generation/extracted
 /uploads
 .DS_Store
