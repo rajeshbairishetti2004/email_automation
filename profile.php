@@ -1,11 +1,12 @@
 <?php
-require_once 'auth.php'; 
+require_once 'auth.php';
 require_once 'db_config.php';
 
 requireAuth();
 
 $pdo = getPdo();
 $currentUser = getCurrentUser();
+
 $userId = $currentUser['id'];
 $message = '';
 $error = '';
@@ -17,13 +18,18 @@ if (isset($_SESSION['pwd_success'])) {
     unset($_SESSION['pwd_success']);
 }
 
+// Fetch all unique designations from users table
+$stmtDesignations = $pdo->query("SELECT DISTINCT designation FROM users ORDER BY designation ASC");
+$designationsList = $stmtDesignations->fetchAll(PDO::FETCH_COLUMN);
+
+
 // AJAX handler for real-time password verification
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_verify_password'])) {
     $oldPwd = $_POST['old_password'] ?? '';
     $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
     $stmt->execute([$userId]);
     $storedHash = $stmt->fetchColumn();
-    
+
     if (empty($oldPwd)) {
         echo "empty";
     } elseif (!password_verify($oldPwd, $storedHash)) {
@@ -40,7 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $name = trim($_POST['name']);
     $email = trim($_POST['email']);
     $mobile = trim($_POST['mobile']);
-    $designation = trim($_POST['designation']);
+    if ($currentUser['designation'] === 'Admin') {
+        $designation = trim($_POST['designation']);
+    } else {
+        $designation = $currentUser['designation'];
+    }
+
     $company_name = trim($_POST['company_name']);
     $website_url = trim($_POST['website_url']);
 
@@ -104,33 +115,154 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>My Profile</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
     <style>
-        body { background: #f8fafc; font-family: 'Inter', sans-serif; padding-top: 20px; }
-        .profile-container { max-width: 480px; margin: 48px auto; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 36px 32px; position: relative; }
-        .profile-title { font-size: 2rem; font-weight: 800; color: #2563eb; margin-bottom: 18px; text-align: center; }
-        .form-group { margin-bottom: 18px; position: relative; }
-        .form-group label { display: block; font-weight: 600; color: #334155; margin-bottom: 6px; font-size: 15px; }
-        .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; background: #f8fafc; box-sizing: border-box; }
-        .nav-button { background: #2563eb; color: #fff; padding: 10px 22px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; width: 100%; margin-top: 10px; }
-        .nav-button:disabled { background: #94a3b8; cursor: not-allowed; }
-        .flash-success { background: #dcfce7; color: #166534; padding: 10px; border-radius: 8px; margin-bottom: 14px; text-align: center; font-weight: 600; }
-        .flash-error { background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; margin-bottom: 14px; text-align: center; font-weight: 600; }
-        .status-msg { font-size: 13px; margin-top: 5px; display: block; font-weight: 600; }
-        .invalid { color: #dc2626; }
-        .valid { color: #16a34a; }
-        .divider { border: none; border-top: 1px solid #e2e8f0; margin: 32px 0 24px; }
-        .pwd-toggle-btn { background: none; border: none; color: #2563eb; font-weight: 600; cursor: pointer; font-size: 15px; }
-        .toggle-eye { position: absolute; right: 12px; top: 38px; cursor: pointer; color: #64748b; }
-        .back-dashboard-btn { position: absolute; top: 20px; left: 20px; background: #64748b; color: #fff; padding: 8px 16px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        body {
+            background: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            padding-top: 20px;
+        }
+
+        .profile-container {
+            max-width: 480px;
+            margin: 48px auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+            padding: 36px 32px;
+            position: relative;
+        }
+
+        .profile-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #2563eb;
+            margin-bottom: 18px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #f8fafc;
+            box-sizing: border-box;
+        }
+
+        .nav-button {
+            background: #2563eb;
+            color: #fff;
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .nav-button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .flash-success {
+            background: #dcfce7;
+            color: #166534;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .flash-error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .status-msg {
+            font-size: 13px;
+            margin-top: 5px;
+            display: block;
+            font-weight: 600;
+        }
+
+        .invalid {
+            color: #dc2626;
+        }
+
+        .valid {
+            color: #16a34a;
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 32px 0 24px;
+        }
+
+        .pwd-toggle-btn {
+            background: none;
+            border: none;
+            color: #2563eb;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        .toggle-eye {
+            position: absolute;
+            right: 12px;
+            top: 38px;
+            cursor: pointer;
+            color: #64748b;
+        }
+
+        .back-dashboard-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: #64748b;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 700;
+            text-decoration: none;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
+
 <body>
     <a href="upload.php" class="back-dashboard-btn"><i class="fa fa-arrow-left"></i> Dashboard</a>
-    
+
     <div class="profile-container">
         <div class="profile-title">My Profile</div>
 
@@ -143,24 +275,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
             <div class="form-group"><label>Full Name</label><input type="text" name="name" value="<?= htmlspecialchars($currentUser['name']) ?>" required></div>
             <div class="form-group"><label>Email Address</label><input type="email" name="email" value="<?= htmlspecialchars($currentUser['email']) ?>" required></div>
             <div class="form-group"><label>Mobile</label><input type="text" name="mobile" value="<?= htmlspecialchars($currentUser['mobile']) ?>" required></div>
-            <div class="form-group"><label>Designation</label>
-                <select name="designation">
-                    <option value="Relationship Manager" <?= $currentUser['designation']=='Relationship Manager'?'selected':'' ?>>RM</option>
-                    <option value="Associate Relationship Manager" <?= $currentUser['designation']=='Associate Relationship Manager'?'selected':'' ?>>ARM</option>
-                </select>
+            <div class="form-group">
+                <label>Designation</label>
+
+                <input type="text" value="<?= htmlspecialchars($currentUser['designation']) ?>" readonly>
+                <input type="hidden" name="designation" value="<?= htmlspecialchars($currentUser['designation']) ?>">
+
             </div>
+
             <!-- Add Company Name and Website URL fields -->
             <div class="form-group">
                 <label>Company Name</label>
                 <input type="text" name="company_name"
-                       value="<?= htmlspecialchars($currentUser['company_name'] ?? '') ?>"
-                       class="form-control">
+                    value="<?= htmlspecialchars($currentUser['company_name'] ?? '') ?>"
+                    class="form-control">
             </div>
             <div class="form-group">
                 <label>Website URL</label>
                 <input type="text" name="website_url"
-                       value="<?= htmlspecialchars($currentUser['website_url'] ?? '') ?>"
-                       class="form-control">
+                    value="<?= htmlspecialchars($currentUser['website_url'] ?? '') ?>"
+                    class="form-control">
             </div>
             <div class="form-group" style="border-top:1px solid #eee; padding-top:15px;">
             </div>
@@ -170,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
         <hr class="divider">
 
         <button class="pwd-toggle-btn" type="button" onclick="togglePwdForm()">Change Password <i class="fa fa-key"></i></button>
-        
+
         <form method="POST" id="pwdForm" style="display: <?= $pwdMessage ? 'block' : 'none' ?>; margin-top:15px;">
             <div class="form-group">
                 <label>Old Password</label>
@@ -204,8 +338,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                 </div>
                 <div class="form-group">
                     <label>Designation</label>
-                    <input type="text" name="designation" value="<?= htmlspecialchars($currentUser['designation'] ?? '') ?>" required>
+
+                    <?php if ($currentUser['designation'] === 'Admin'): ?>
+
+                        <select name="designation">
+                            <?php foreach ($designationsList as $role): ?>
+                                <option value="<?= htmlspecialchars($role) ?>"
+                                    <?= $currentUser['designation'] == $role ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($role) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                    <?php else: ?>
+
+                        <input type="text" value="<?= htmlspecialchars($currentUser['designation']) ?>" readonly>
+                        <input type="hidden" name="designation" value="<?= htmlspecialchars($currentUser['designation']) ?>">
+
+                    <?php endif; ?>
                 </div>
+
                 <div class="form-group">
                     <label>Company Name</label>
                     <input type="text" name="company_name" value="<?= htmlspecialchars($currentUser['company_name'] ?? '') ?>" required>
@@ -238,10 +390,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
         // Verify Old Password via AJAX
         let oldTimeout = null;
+
         function verifyOldPwd(val) {
             clearTimeout(oldTimeout);
             const status = document.getElementById('oldPwdStatus');
-            if(!val) { status.textContent = ""; isOldValid = false; updateSubmitButton(); return; }
+            if (!val) {
+                status.textContent = "";
+                isOldValid = false;
+                updateSubmitButton();
+                return;
+            }
 
             oldTimeout = setTimeout(() => {
                 const xhr = new XMLHttpRequest();
@@ -251,10 +409,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
                     if (xhr.readyState === 4 && xhr.status === 200) {
                         const resp = xhr.responseText.trim();
                         if (resp === "valid") {
-                            status.textContent = "✓ Correct"; status.className = "status-msg valid";
+                            status.textContent = "✓ Correct";
+                            status.className = "status-msg valid";
                             isOldValid = true;
                         } else {
-                            status.textContent = "✗ Incorrect"; status.className = "status-msg invalid";
+                            status.textContent = "✗ Incorrect";
+                            status.className = "status-msg invalid";
                             isOldValid = false;
                         }
                         updateSubmitButton();
@@ -270,16 +430,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
             const p2 = document.getElementById('confirm_pwd_input').value;
             const status = document.getElementById('matchStatus');
 
-            if(!p1 || !p2) { status.textContent = ""; isMatchValid = false; }
-            else if(p1 === p2) {
-                status.textContent = "✓ Passwords match"; status.className = "status-msg valid";
+            if (!p1 || !p2) {
+                status.textContent = "";
+                isMatchValid = false;
+            } else if (p1 === p2) {
+                status.textContent = "✓ Passwords match";
+                status.className = "status-msg valid";
                 isMatchValid = true;
             } else {
-                status.textContent = "✗ Passwords do not match"; status.className = "status-msg invalid";
+                status.textContent = "✗ Passwords do not match";
+                status.className = "status-msg invalid";
                 isMatchValid = false;
             }
             updateSubmitButton();
         }
     </script>
 </body>
+
 </html>
