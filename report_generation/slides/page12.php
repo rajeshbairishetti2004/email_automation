@@ -116,6 +116,16 @@ $leftSchemes  = array_slice($schemes, 0, $leftCount);
 $rightSchemes = array_slice($schemes, $leftCount);
 ?>
 
+<?php
+function formatCurrentValue($value) {
+    if ($value >= 100000) {
+        return number_format($value / 100000, 2) . ' lakhs';
+    }
+    return number_format($value, 2);
+}
+?>
+
+
 <div class="page" style="padding:40px 50px;">
 
     <h1 style="text-align:center; color:#4F81BD; font-size:32px; margin-bottom:30px;">
@@ -136,7 +146,8 @@ $rightSchemes = array_slice($schemes, $leftCount);
                         <?= htmlspecialchars($row['scheme_name']) ?>
                     </td>
                     <td style="border:1px solid #000; padding:4px; text-align:right;">
-                        <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
+                       <?= formatCurrentValue((float)$row['current_value']) ?>
+
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -155,7 +166,8 @@ $rightSchemes = array_slice($schemes, $leftCount);
                             <?= htmlspecialchars($row['scheme_name']) ?>
                         </td>
                         <td style="border:1px solid #000; padding:4px; text-align:right;">
-                            <?= number_format($row['current_value'] / 100000, 2) ?> lakhs
+                           <?= formatCurrentValue((float)$row['current_value']) ?>
+
                         </td>
                     </tr>
                 <?php endforeach; ?>
