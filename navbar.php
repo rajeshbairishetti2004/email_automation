@@ -5,6 +5,13 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once 'auth.php';
+
+$currentUser = getCurrentUser();
+$isAdmin = isset($currentUser['designation']) 
+           && $currentUser['designation'] === 'Admin';
+
+
 // Debug mode - set to true to see session data
 $debug_navbar = false;
 if ($debug_navbar) {
@@ -95,8 +102,10 @@ $userDesignation = $_SESSION['designation'] ?? '';
 
             <a href="profile.php" style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">My Profile</a>
             <?php if ($isAdmin): ?>
-                <a href="profile_management.php">Profile Management</a>
-            <?php endif; ?>
+                <a href="<?php echo getNavLink('profile_management.php'); ?>" 
+               class="<?= ($currentPage === 'profile_management.php') ? 'active' : '' ?>">
+                Profile Management
+            </a><?php endif; ?>
             <a href="logout.php" class="logout-link" style="display:block; padding:8px 12px; text-align:right;">Logout</a>
         </div>
     </div>

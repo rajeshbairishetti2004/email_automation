@@ -699,7 +699,18 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="public/css/view_report.css">
-    
+    <link rel="stylesheet" href="public/css/navbar.css">
+    <style>
+        /* Ensure scrollbar is at the extreme right of the screen */
+        html, body {
+            height: 100%;
+            overflow-y: auto;
+        }
+        .main-content {
+            max-height: none;
+            overflow: visible;
+        }
+    </style>
 </head>
 <body>
   <?php include 'navbar.php'; ?>
@@ -750,18 +761,25 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
 
 <div class="main-content">
     <!-- ADD NAVIGATION BUTTONS HERE -->
-    <div class="nav-bar" style="margin-bottom: 20px;">
-        <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
-        <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
-        <?php if ($prevId): ?>
-            <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
-        <?php endif; ?>
-        <?php if ($nextId): ?>
-            <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
-        <?php endif; ?>
-        <button type="button" onclick="window.print()" class="nav-button">Print</button>
-    </div>
-    <!-- ...existing code... -->
+    <!-- In view_report.php, add this button with the navigation buttons -->
+<!-- In view_report.php, update the Generate Report button -->
+<div class="nav-bar" style="margin-bottom: 20px;">
+    <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
+    <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
+    <!-- UPDATE THIS BUTTON WITH FULL PATH -->
+    <a href="report_generation/index.php?client_id=CLIENT_<?php echo (int)$clientId; ?>" 
+       class="nav-button" 
+       target="_blank">
+       📊 Generate Report
+    </a>
+    <?php if ($prevId): ?>
+        <a href="view_report.php?id=<?php echo (int)$prevId; ?>" class="nav-button">&larr; Previous</a>
+    <?php endif; ?>
+    <?php if ($nextId): ?>
+        <a href="view_report.php?id=<?php echo (int)$nextId; ?>" class="nav-button">Next &rarr;</a>
+    <?php endif; ?>
+    <button type="button" onclick="window.print()" class="nav-button">Print</button>
+</div><!-- ...existing code... -->
     <div class="client-report" data-client-id="<?php echo (int)$clientId; ?>">
         <!-- Show send_email.php only if reviewed and not rejected -->
         <?php if ($reportState === 'reviewed' && $reviewNotOk === 0): ?>
@@ -1723,10 +1741,8 @@ function submitWorkflow(action) {
         document.getElementById('reportForm').appendChild(saveReportInput);
     }
 
-    // Force save rationale before submitting the form
-    forceSaveRationaleBeforeSubmit().finally(() => {
-        document.getElementById('reportForm').submit();
-    });
+    // Submit the form
+    document.getElementById('reportForm').submit();
 }
 
 // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
@@ -1764,6 +1780,8 @@ function closeRejectModal() {
     document.getElementById('rejectModal').style.display = 'none';
 }
 function submitRejection() {
+    const comment = document.getElementById('rejectComment').value.trim();
+    if (!comment) {
         alert("Comment is required for rejection.");
         return;
     }

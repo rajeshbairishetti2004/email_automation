@@ -509,3 +509,26 @@ if (!function_exists('deleteUserRationaleTemplate')) {
 	}
 }
 
+/* ---------- SLIDES DATABASE CONNECTION ---------- */
+
+function getSlidesPdo(): PDO {
+    static $pdo = null;
+
+    if ($pdo === null) {
+        $dbName = getEnvVar('SLIDES_DB_NAME', 'slides');
+        $portSegment = DB_PORT ? ';port=' . DB_PORT : '';
+
+        $dsn = 'mysql:host=' . DB_HOST . $portSegment . ';dbname=' . $dbName . ';charset=utf8mb4';
+
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+
+        // Force IST timezone (same as main DB)
+        $pdo->exec("SET time_zone = '+05:30';");
+    }
+
+    return $pdo;
+}

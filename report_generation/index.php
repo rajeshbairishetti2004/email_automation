@@ -6,23 +6,211 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once 'database.php';
 
-$current_page = isset($_GET['page']) ? max(1, min(23, intval($_GET['page']))) : 1;
-$client_id = 'MS_MUKTA_DUTTA';
+$SLIDE_REGISTRY = [
+    1 => [
+        'title' => 'Portfolio Review',
+        'template' => 'page1.php',
+        'preview' => 'Client overview and portfolio summary'
+    ],
+    2 => [
+        'title' => 'Our Recommendations',
+        'template' => 'page2.php',
+        'preview' => 'Redeem & replace investment recommendations',
+        'dynamic' => true
+    ],
+    3 => [
+        'title' => 'Impact of our recommendations',
+        'template' => 'page3.php',
+        'preview' => 'Portfolio and Tax impact analysis of recommendations',
+        'dynamic' => true
+    ],
+    4 => [
+        'title' => 'Rationale',
+        'template' => 'page4.php',
+        'preview' => 'rationale behind our recommendations'
+    ],
+5 => [
+    'title' => 'Portfolio at a Glance',
+    'template' => 'page5.php',
+    'preview' => 'Current portfolio value and goal report',
+    'editable' => true 
+],
+
+    6 => [
+        'title' => 'Investment Journey',
+        'template' => 'page6.php',
+        'preview' => 'Investment journey graph'
+    ],
+    7 => [
+        'title' => 'Asset Allocation',
+        'template' => 'page7.php',
+        'preview' => 'Current vs recommended asset allocation'
+    ],
+    8 => [
+        'title' => 'Equity MCAP allocation',
+        'template' => 'page8.php',
+        'preview' => 'Equity MCAP allocation'
+    ],
+    10 => [
+        'title' => 'Global Equity % in Portfolio',
+        'template' => 'page10.php',
+        'preview' => 'Global Equity % in Portfolio Global wealth',
+        'dynamic' => true
+    ],
+    11 => [
+        'title' => 'Fund Performance & Risk Metrics',
+        'template' => 'page11.php',
+        'preview' => 'Performance of Funds and its Risks'
+    ],
+    12 => [
+    'title' => 'Current Schemes',
+    'template' => 'page12.php',
+    'preview' => 'List of current schemes and values',
+    'editable' => false
+],
+
+    13 => [
+        'title' => 'Strategic Rebalancing',
+        'template' => 'page13.php',
+        'preview' => 'Strategic rebalancing strategies'
+    ],
+    14 => [
+        'title' => 'Tax-Smart Rebalancing',
+        'template' => 'page14.php',
+        'preview' => 'Tax efficient rebalancing strategies'
+    ],
+    16 => [
+        'title' => 'Your Support Team',
+        'template' => 'page16.php',
+        'preview' => 'Meet your support team'
+    ],
+    21 => [
+        'title' => 'Our recommendations this quarter',
+        'template' => 'page21.php',
+        'preview' => 'Our recommendations this quarter'
+    ],
+    22 => [
+        'title' => 'Rationale',
+        'template' => 'page22.php',
+        'preview' => 'Rationale'
+    ],
+    23 => [
+        'title' => 'Strategic & Tax-Smart Rebalancing',
+        'template' => 'page23.php',
+        'preview' => 'Strategic & Tax-Smart Rebalancing'
+    ],
+
+    // add up to 24 slides here later
+];
+
+
+// Get client_id from URL parameter or from referrer
+$client_id = isset($_GET['client_id']) ? $_GET['client_id'] : '';
+
+// If no client_id in URL, try to get it from session or referrer
+if (empty($client_id)) {
+    // Check if there's a referrer from view_report.php
+    $referrer = $_SERVER['HTTP_REFERER'] ?? '';
+    if (strpos($referrer, 'view_report.php') !== false) {
+        // Parse the client ID from the referrer URL
+        $url_parts = parse_url($referrer);
+        if (isset($url_parts['query'])) {
+            parse_str($url_parts['query'], $query_params);
+            if (isset($query_params['id'])) {
+                $client_id = 'CLIENT_' . $query_params['id'];
+            }
+        }
+    }
+
+    // Fallback: Get from session or default
+    if (empty($client_id)) {
+        $client_id = isset($_SESSION['current_client_id']) ? $_SESSION['current_client_id'] : 'CLIENT_1';
+    }
+}
+
+// Store client_id in session for future use
+$_SESSION['current_client_id'] = $client_id;
+
+$current_page = isset($_GET['page']) ? max(1, min(24, intval($_GET['page']))) : 1;
 
 // Get pages and client info using functions from database.php
-$pages = getClientPages($client_id);
+
+
+// ===============================
+// INITIALIZE STATIC TEMPLATE SLIDES
+// ===============================
+
+
+function storeTemplateSlideIfMissing($client_id, $page, $config)
+{
+    // Skip DB storage ONLY for pure dynamic slides
+    if (!empty($config['dynamic']) && empty($config['template'])) {
+        return;
+    }
+
+    $pages = getClientPages($client_id);
+
+    if (!isset($pages[$page])) {
+        ob_start();
+        include __DIR__ . "/slides/{$config['template']}";
+        $html = ob_get_clean();
+
+        savePageToDatabase(
+            $client_id,
+            $page,
+            $html,
+            $config['title'],
+            $config['preview']
+        );
+    }
+}
+
+
+foreach ($SLIDE_REGISTRY as $page => $config) {
+    storeTemplateSlideIfMissing($client_id, $page, $config);
+}
+
+
+$pages = getClientPages($client_id); // reload
+
+
+
+
 $clientInfo = getClientInfo($client_id);
 
-// Provide safe defaults to avoid undefined array key warnings
-$client_name = isset($clientInfo['client_name']) && $clientInfo['client_name'] !== null ? $clientInfo['client_name'] : 'Client';
+// Get client name from database - fetch from clients table instead
+$client_name = 'Client';
+$actual_client_id = 0;
+$client_details = null;
+
+if (strpos($client_id, 'CLIENT_') === 0) {
+    $client_number = str_replace('CLIENT_', '', $client_id);
+    if (is_numeric($client_number)) {
+        $pdo = getDbConnection();
+        $stmt = $pdo->prepare("SELECT name, id FROM clients WHERE id = ?");
+        $stmt->execute([$client_number]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($row) {
+            $client_name = $row['name'];
+            $actual_client_id = (int)$row['id'];
+            $clientInfo['client_name'] = $client_name;
+        }
+    }
+}
+
+// Provide safe defaults
 $risk_profile = isset($clientInfo['risk_profile']) && $clientInfo['risk_profile'] !== null ? $clientInfo['risk_profile'] : '';
 $investment_horizon = isset($clientInfo['investment_horizon']) && $clientInfo['investment_horizon'] !== null ? $clientInfo['investment_horizon'] : '';
 $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfolio_value'] !== null ? $clientInfo['portfolio_value'] : '';
+
+// Check if we have slides for this client, if not create first slide
 
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,43 +220,137 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
     <link rel="stylesheet" href="../public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.ckeditor.com/ckeditor5/41.0.0/classic/ckeditor.js"></script>
+    <style>
+        /* Additional styles for better client display */
+        .client-name-display {
+            font-size: 22px;
+            font-weight: 600;
+            color: #2E75B6;
+            margin-bottom: 5px;
+        }
+
+        .client-id-display {
+            font-size: 12px;
+            color: #666;
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        .back-to-report {
+            display: inline-block;
+            background: #2E75B6;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .back-to-report:hover {
+            background: #1e5a96;
+        }
+    </style>
 </head>
+
 <body>
     <?php include '../navbar.php'; ?>
-    
+
     <div class="powerpoint-container">
         <!-- LEFT: PowerPoint style slide thumbnails -->
         <div class="powerpoint-sidebar">
             <div class="sidebar-header">
-                <h2><?php echo htmlspecialchars($client_name); ?></h2>
-                <div class="client-subtitle-sidebar">Portfolio Review Q1 2026</div>
+                <div class="client-name-display"><?php echo htmlspecialchars($client_name); ?></div>
+                <?php if ($actual_client_id): ?>
+                    <div class="client-id-display">Client ID: <?php echo $actual_client_id; ?></div>
+                <?php endif; ?>
+                <div class="client-subtitle-sidebar">Portfolio Review - <?php echo date('F Y'); ?></div>
                 <div class="client-meta-mini">
-                    <!-- <div class="meta-mini-item">
-                        <i class="fas fa-chart-line fa-xs"></i> <?php echo htmlspecialchars($risk_profile); ?>
-                    </div>
-                    <div class="meta-mini-item">
-                        <i class="fas fa-calendar-alt fa-xs"></i> <?php echo htmlspecialchars($investment_horizon); ?>
-                    </div> -->
+                    <?php if ($risk_profile): ?>
+                        <div class="meta-mini-item">
+                            <i class="fas fa-chart-line fa-xs"></i> <?php echo htmlspecialchars($risk_profile); ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($investment_horizon): ?>
+                        <div class="meta-mini-item">
+                            <i class="fas fa-calendar-alt fa-xs"></i> <?php echo htmlspecialchars($investment_horizon); ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
+                <?php if ($actual_client_id > 0): ?>
+                    <a href="../view_report.php?id=<?php echo $actual_client_id; ?>" class="back-to-report">
+                        <i class="fas fa-arrow-left"></i> Back to Report
+                    </a>
+                <?php endif; ?>
             </div>
-            
+
             <div class="slide-thumbnails-container" id="slideThumbnails">
-                <?php for($i = 1; $i <= 23; $i++): ?>
-                    <div class="slide-thumbnail <?php if($i == $current_page) echo 'active'; ?>" 
-                         onclick="goToSlide(<?php echo $i; ?>)">
+                <?php for ($i = 1; $i <= 24; $i++): ?>
+                    <div class="slide-thumbnail <?php if ($i == $current_page) echo 'active'; ?>"
+                        onclick="window.location.href='?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $i; ?>'">
                         <div class="slide-number"><?php echo $i; ?></div>
                         <div class="slide-preview-content">
-                            <?php if (isset($pages[$i])): ?>
-                                <?php 
-                                $content = strip_tags(html_entity_decode($pages[$i]['content']));
-                                $preview = strlen($content) > 100 ? substr($content, 0, 100) . '...' : $content;
+                            <div class="slide-preview-title">
+                                <?php
+                                if (isset($staticSlides[$i])) {
+                                    echo $staticSlides[$i];
+                                } elseif (isset($pages[$i]) && !empty($pages[$i]['title'])) {
+                                    echo htmlspecialchars($pages[$i]['title']);
+                                } else {
+                                    echo "Slide " . $i;
+                                }
+
                                 ?>
-                                <div class="slide-preview-title">Slide <?php echo $i; ?></div>
-                                <div class="slide-preview-text"><?php echo htmlspecialchars($preview); ?></div>
-                            <?php else: ?>
-                                <div class="slide-preview-title">Slide <?php echo $i; ?></div>
-                                <div class="slide-preview-text">Click to edit this slide...</div>
-                            <?php endif; ?>
+                            </div>
+                            <div class="slide-preview-text">
+                                <?php
+                                if ($i == 2) {
+                                    // Slide 2 is data-driven, not HTML-driven
+                                    echo "Redeem & Replace investment recommendations";
+                                } elseif ($i == 3) {
+                                    echo "Portfolio & Tax impact of recommendations";
+                                } elseif ($i == 4) {
+                                    echo "Rationale behind our recommendations";
+                                }elseif ($i == 6) {
+                                    echo "investment journey graph";
+                                }elseif ($i == 8) {
+                                     echo "Equity MCAP allocation";
+                                }elseif ($i == 10) {
+                                    echo "Global wealth allocation";
+                                }elseif ($i == 11) {
+                                    echo "Performance & Risk Metrics";
+                                }elseif ($i == 13) {
+                                    echo "Strategic Rebalancing";
+                                }elseif ($i == 14) {
+                                    echo "Tax -Smart Rebalancing";
+                                }elseif ($i == 16) {
+                                    echo "Your Support Team";
+                                }elseif ($i == 21) {
+                                    echo "Our Recommendations This Quater ";}
+                                elseif ($i == 22) {
+                                    echo "Rationale";
+                                }elseif ($i == 23) {
+                                    echo "Strategic & Tax -Smart Rebalancing";
+                                }
+
+                                elseif (isset($pages[$i]) && !empty(trim($pages[$i]['content']))) {
+                                    if (!empty($pages[$i]['preview_text'])) {
+                                        echo htmlspecialchars($pages[$i]['preview_text']);
+                                    } else {
+                                        echo 'No preview available';
+                                    }
+                                } elseif (isset($staticSlides[$i])) {
+                                    echo "Template slide";
+                                } else {
+                                    echo "No content";
+                                }
+
+
+                                ?>
+                            </div>
                         </div>
                         <?php if (isset($pages[$i])): ?>
                             <div class="slide-status" title="Saved">
@@ -79,259 +361,82 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
                 <?php endfor; ?>
             </div>
         </div>
-        
-        <!-- CENTER: Main slide editing area -->
+
+        <!-- CENTER: Main slide area with iframe -->
         <div class="powerpoint-main">
             <!-- PowerPoint Style Toolbar -->
-            <div class="ppt-toolbar" id="toolbar" style="display: none;">
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="toggleEditMode()" id="editToggleBtn">
-                        <i class="fas fa-edit"></i> Edit
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="saveSlide()" id="saveBtn" disabled>
-                        <i class="fas fa-save"></i> Save
-                    </button>
-                </div>
-                
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="insertImage()">
-                        <i class="fas fa-image"></i> Image
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="insertTable()">
-                        <i class="fas fa-table"></i> Table
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="insertChart()">
-                        <i class="fas fa-chart-bar"></i> Chart
-                    </button>
-                </div>
-                
-                <div class="ppt-toolbar-group">
-                    <button class="ppt-toolbar-btn" onclick="formatText('bold')">
-                        <i class="fas fa-bold"></i>
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="formatText('italic')">
-                        <i class="fas fa-italic"></i>
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="formatText('underline')">
-                        <i class="fas fa-underline"></i>
-                    </button>
-                    <select class="property-select" style="width: 120px;" onchange="formatHeading(this.value)">
-                        <option value="">Text Style</option>
-                        <option value="h1">Title</option>
-                        <option value="h2">Heading</option>
-                        <option value="h3">Subheading</option>
-                        <option value="p">Normal</option>
-                    </select>
-                    <input type="color" id="colorPicker" onchange="changeColor(this.value)" value="#2E75B6" 
-                           style="width: 30px; height: 30px; border: none; cursor: pointer;" title="Text Color">
-                </div>
-                
-                <div class="ppt-toolbar-group" style="margin-left: auto;">
-                    <button class="ppt-toolbar-btn" onclick="previewSlide()">
-                        <i class="fas fa-eye"></i> Preview
-                    </button>
-                    <button class="ppt-toolbar-btn btn-success" onclick="downloadPPT()">
-                        <i class="fas fa-file-powerpoint"></i> Export PPT
-                    </button>
-                    <button class="ppt-toolbar-btn" onclick="window.print()">
-                        <i class="fas fa-print"></i> Print
-                    </button>
-                </div>
+            <!-- Add this button to your toolbar groups -->
+            <div class="ppt-toolbar-group">
+                <button class="ppt-toolbar-btn btn-success" onclick="downloadPPT()">
+                    <i class="fas fa-file-powerpoint"></i> Export PPT
+                </button>
+                <!-- Add this new button -->
+                <!-- In your toolbar section, replace the PDF button with: -->
+                <button class="ppt-toolbar-btn btn-primary" onclick="downloadPDF()">
+                    <i class="fas fa-file-pdf"></i> Export PDF
+                </button>
+                <button class="ppt-toolbar-btn" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                <button class="ppt-toolbar-btn" onclick="editCurrentSlide()">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="ppt-toolbar-btn btn-success" onclick="saveCurrentSlide()">
+                    <i class="fas fa-save"></i> Save
+                </button>
+
+
             </div>
-            
-            <!-- Slide Area -->
+
+            <div id="slide7Warning"
+                style="
+        display:none;
+        background:#fff3cd;
+        color:#856404;
+        border-bottom:1px solid #ffeeba;
+        padding:10px 16px;
+        font-size:14px;
+        font-weight:500;
+     ">
+                ⚠ Recommended allocation must total <b>100%</b> to be saved
+            </div>
+
             <div class="ppt-slide-area">
                 <div class="slide-frame">
-                    <div class="slide-header">
-                        <h1>Slide <?php echo $current_page; ?></h1>
-                        <div class="slide-header-controls">
-                            <button class="slide-header-btn" onclick="prevSlide()" 
-                                    <?php if($current_page == 1) echo 'disabled'; ?>>
-                                <i class="fas fa-chevron-left"></i>
-                            </button>
-                            <button class="slide-header-btn" onclick="nextSlide()" 
-                                    <?php if($current_page == 23) echo 'disabled'; ?>>
-                                <i class="fas fa-chevron-right"></i>
+
+
+
+                    <?php if (
+                        $current_page === 1 ||
+                        $current_page === 2 ||
+                        $current_page === 3 ||
+                        isset($pages[$current_page])
+                    ): ?>
+                        <iframe
+                            id="slideIframe"
+                            src="render_slide.php?client_id=<?php echo urlencode($client_id); ?>&page=<?php echo $current_page; ?>"
+                            style="width:100%;height:100%;border:none;background:white;"
+                            title="Slide <?php echo $current_page; ?>">
+                        </iframe>
+                    <?php else: ?>
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; background: #f9f9f9;">
+                            <i class="fas fa-file-alt fa-4x" style="color: #ccc; margin-bottom: 20px;"></i>
+                            <h3 style="color: #999;">No slide content yet</h3>
+                            <p style="color: #aaa; margin-top: 10px;">Click Edit to create this slide</p>
+                            <button class="btn btn-primary" onclick="toggleEditMode()" style="margin-top: 20px;">
+                                <i class="fas fa-edit"></i> Edit Slide
                             </button>
                         </div>
-                    </div>
-                    
-                    <div class="slide-content-container">
-                        <div class="slide-editable-content" id="editableContent" contenteditable="false">
-                            <?php if (isset($pages[$current_page])): ?>
-                                <?php 
-                                $content = htmlspecialchars_decode($pages[$current_page]['content']);
-                                // Remove any existing image containers from content
-                                $content = preg_replace('/<div class="slide-image-container"[^>]*>.*?<\/div>/s', '', $content);
-                                echo $content;
-                                ?>
-                                
-                                <!-- Slide Images -->
-                                <?php if (!empty($pages[$current_page]['images'])): ?>
-                                    <?php $images = json_decode($pages[$current_page]['images'], true); ?>
-                                    <?php foreach ($images as $index => $image): 
-                                        $position = isset($image['position']) ? json_decode($image['position'], true) : ['top' => ($index * 20 + 20) . 'px', 'left' => ($index * 20 + 20) . 'px'];
-                                        $zIndex = isset($image['zIndex']) ? $image['zIndex'] : 100 + $index;
-                                        $width = isset($image['saved_width']) ? $image['saved_width'] . 'px' : ($image['width'] ?? '300px');
-                                        $height = isset($image['saved_height']) ? $image['saved_height'] . 'px' : ($image['height'] ?? 'auto');
-                                    ?>
-                                        <div class="slide-image-container" 
-                                             data-image-id="<?php echo $image['id']; ?>"
-                                             style="position: absolute; 
-                                                    top: <?php echo $position['top'] ?? '20px'; ?>; 
-                                                    left: <?php echo $position['left'] ?? '20px'; ?>; 
-                                                    z-index: <?php echo $zIndex; ?>;
-                                                    width: <?php echo $width; ?>;">
-                                            <img src="uploads/<?php echo $image['filename']; ?>" 
-                                                 alt="<?php echo $image['alt']; ?>"
-                                                 style="width: 100%; height: auto;">
-                                            <div class="image-controls">
-                                                <button class="image-control-btn" onclick="adjustImageSize(<?php echo $image['id']; ?>, 'increase', event)">
-                                                    <i class="fas fa-search-plus"></i>
-                                                </button>
-                                                <button class="image-control-btn" onclick="adjustImageSize(<?php echo $image['id']; ?>, 'decrease', event)">
-                                                    <i class="fas fa-search-minus"></i>
-                                                </button>
-                                                <button class="image-control-btn" onclick="deleteImage(<?php echo $image['id']; ?>, event)">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            <?php else: ?>
-                                <div style="padding: 40px; text-align: center; color: #666;">
-                                    <h2>Slide <?php echo $current_page; ?></h2>
-                                    <p style="margin-top: 20px;">Click the Edit button to start editing this slide.</p>
-                                    <p style="margin-top: 10px; font-size: 14px; color: #999;">
-                                        Use the toolbar to add text, images, tables, and charts.
-                                    </p>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
+                    <?php endif; ?>
+
                 </div>
-                
-                <!-- <div class="slide-navigation">
-                    <button class="nav-btn" onclick="prevSlide()" <?php if($current_page == 1) echo 'disabled'; ?>>
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                     <div class="slide-counter">
-                        <span id="currentSlide"><?php echo $current_page; ?></span> / 23
-                    </div>
-                    <button class="nav-btn" onclick="nextSlide()" <?php if($current_page == 23) echo 'disabled'; ?>>
-                        <i class="fas fa-chevron-right"></i>
-                    </button> 
-                </div> -->
             </div>
-            
+
             <!-- PowerPoint Style Status Bar -->
-            <div class="ppt-status-bar">
-                <div class="status-bar-left">
-                    <div class="status-item">
-                        <i class="fas fa-user"></i>
-                        <span><?php echo htmlspecialchars($client_name); ?></span>
-                    </div>
-                    <div class="status-separator"></div>
-                    <div class="status-item">
-                        <i class="fas fa-file-alt"></i>
-                        <span>Portfolio Review</span>
-                    </div>
-                </div>
-                <div class="status-bar-right">
-                    <div class="status-item">
-                        <span id="saveStatus">Ready</span>
-                    </div>
-                    <div class="status-separator"></div>
-                    <div class="status-item">
-                        <i class="fas fa-clock"></i>
-                        <span id="currentTime"><?php echo date('H:i'); ?></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- RIGHT: Properties and Notes Panel -->
-        <div class="powerpoint-properties">
-            <div class="properties-tabs">
-                <button class="properties-tab active" onclick="switchTab('properties')">Properties</button>
-                <button class="properties-tab" onclick="switchTab('notes')">Notes</button>
-                <button class="properties-tab" onclick="switchTab('messages')">Messages</button>
-            </div>
-            
-            <div class="properties-content" id="propertiesTab">
-                <div class="properties-section">
-                    <h3>Slide Properties</h3>
-                    <div class="property-item">
-                        <label class="property-label">Slide Title</label>
-                        <input type="text" class="property-input" id="slideTitle" 
-                               value="Slide <?php echo $current_page; ?>" 
-                               onchange="updateSlideTitle(this.value)">
-                    </div>
-                    <div class="property-item">
-                        <label class="property-label">Background Color</label>
-                        <input type="color" class="property-input" id="slideBgColor" 
-                               value="#ffffff" style="height: 40px; padding: 2px;">
-                    </div>
-                </div>
-                
-                <div class="properties-section">
-                    <h3>Image Properties</h3>
-                    <div class="property-item">
-                        <label class="property-label">Selected Image</label>
-                        <div id="selectedImageInfo" style="font-size: 12px; color: #999; padding: 8px; background: #f5f5f5; border-radius: 3px;">
-                            No image selected
-                        </div>
-                    </div>
-                    <div class="property-item">
-                        <label class="property-label">Image Size</label>
-                        <div style="display: flex; gap: 5px;">
-                            <input type="number" class="property-input" id="imageWidth" placeholder="Width" style="flex: 1;">
-                            <input type="number" class="property-input" id="imageHeight" placeholder="Height" style="flex: 1;">
-                        </div>
-                    </div>
-                    <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" 
-                            onclick="insertImage()">
-                        <i class="fas fa-plus"></i> Insert Image
-                    </button>
-                </div>
-                
-                <div class="properties-section">
-                    <h3>Client Information</h3>
-                    <button class="btn" style="width: 100%;" onclick="showClientInfo()">
-                        <i class="fas fa-user-edit"></i> Edit Client Info
-                    </button>
-                </div>
-            </div>
-            
-            <div class="properties-content" id="notesTab" style="display: none;">
-                <div class="properties-section">
-                    <h3>Slide Notes</h3>
-                    <textarea class="property-input" id="slideNotes" rows="10" 
-                              placeholder="Add notes for this slide..."></textarea>
-                    <button class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-                        <i class="fas fa-save"></i> Save Notes
-                    </button>
-                </div>
-            </div>
-            
-            <div class="properties-content" id="messagesTab" style="display: none;">
-                <div class="properties-section">
-                    <h3>Messages</h3>
-                    <div class="messages-panel" id="messagesPanel">
-                        <div style="text-align: center; padding: 20px; color: #999;">
-                            <i class="fas fa-comments fa-2x"></i>
-                            <p style="margin-top: 10px;">No messages yet</p>
-                        </div>
-                    </div>
-                    <button class="btn" style="width: 100%; margin-top: 10px;" onclick="clearMessages()">
-                        <i class="fas fa-trash"></i> Clear Messages
-                    </button>
-                </div>
-            </div>
+
         </div>
     </div>
-    
+
     <!-- Loading overlay -->
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="loading-content">
@@ -339,513 +444,593 @@ $portfolio_value = isset($clientInfo['portfolio_value']) && $clientInfo['portfol
             <p id="loadingMessage" style="margin-top: 15px;">Processing...</p>
         </div>
     </div>
-    
-    <script>
-    // --- POWERPOINT STYLE EDITOR LOGIC ---
-    let editMode = false;
-    let editor = null;
-    let currentSlide = <?php echo $current_page; ?>;
-    const CLIENT_ID = '<?php echo $client_id; ?>';
-    const CLIENT_NAME = '<?php echo addslashes($clientInfo['client_name'] ?? 'Client'); ?>';
-    let activeImageId = null;
-    let messageCounter = 0;
-    
-    // Update current time in status bar
-    function updateCurrentTime() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        document.getElementById('currentTime').textContent = timeString;
-    }
-    setInterval(updateCurrentTime, 60000);
-    updateCurrentTime();
-    
-    // Tab switching
-    function switchTab(tabName) {
-        // Hide all tabs
-        document.getElementById('propertiesTab').style.display = 'none';
-        document.getElementById('notesTab').style.display = 'none';
-        document.getElementById('messagesTab').style.display = 'none';
-        
-        // Remove active class from all tabs
-        document.querySelectorAll('.properties-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        
-        // Show selected tab
-        document.getElementById(tabName + 'Tab').style.display = 'block';
-        
-        // Add active class to clicked tab
-        event.target.classList.add('active');
-    }
-    
-    // Navigation functions
-    function goToSlide(slideNumber) {
-        if (slideNumber >= 1 && slideNumber <= 23 && slideNumber !== currentSlide) {
-            showMessage('Navigating', `Loading slide ${slideNumber}...`, 'info');
-            window.location.href = '?page=' + slideNumber;
-        }
-    }
-    
-    function prevSlide() {
-        if (currentSlide > 1) {
-            goToSlide(currentSlide - 1);
-        }
-    }
-    
-    function nextSlide() {
-        if (currentSlide < 23) {
-            goToSlide(currentSlide + 1);
-        }
-    }
-    
-    // Edit mode toggle
-    function toggleEditMode() {
-        editMode = !editMode;
-        const editToggleBtn = document.getElementById('editToggleBtn');
-        const saveBtn = document.getElementById('saveBtn');
-        const toolbar = document.getElementById('toolbar');
-        
-        if (editMode) {
-            // Enter edit mode
-            editToggleBtn.innerHTML = '<i class="fas fa-times"></i> Exit Edit';
-            editToggleBtn.classList.add('active');
-            saveBtn.disabled = false;
-            toolbar.style.display = 'flex';
-            document.getElementById('editableContent').contentEditable = 'true';
-            
-            // Initialize CKEditor
-            ClassicEditor
-                .create(document.querySelector('#editableContent'), {
-                    toolbar: [
-                        'heading', '|', 'bold', 'italic', 'underline', 'fontColor', '|',
-                        'bulletedList', 'numberedList', '|', 'insertTable', 'link', '|',
-                        'undo', 'redo'
-                    ],
-                    heading: {
-                        options: [
-                            { model: 'paragraph', title: 'Paragraph', class: 'ck-heading_paragraph' },
-                            { model: 'heading1', view: 'h1', title: 'Title', class: 'ck-heading_heading1' },
-                            { model: 'heading2', view: 'h2', title: 'Heading', class: 'ck-heading_heading2' },
-                            { model: 'heading3', view: 'h3', title: 'Subheading', class: 'ck-heading_heading3' }
-                        ]
-                    }
-                })
-                .then(newEditor => {
-                    editor = newEditor;
-                    editor.model.document.on('change:data', () => {
-                        document.getElementById('saveBtn').disabled = false;
-                        document.getElementById('saveStatus').textContent = 'Unsaved changes';
-                        document.getElementById('saveStatus').style.color = '#f59e0b';
-                    });
-                })
-                .catch(error => {
-                    console.error('CKEditor initialization error:', error);
-                });
-            
-            showMessage('Edit Mode Enabled', 'You can now edit the slide content.', 'success');
-        } else {
-            // Exit edit mode
-            editToggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit';
-            editToggleBtn.classList.remove('active');
-            saveBtn.disabled = true;
-            toolbar.style.display = 'none';
-            document.getElementById('editableContent').contentEditable = 'false';
-            
-            if (editor) {
-                editor.destroy().then(() => {
-                    editor = null;
-                });
-            }
-            
-            showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
-        }
-    }
-    
-    // Save slide
-    function saveSlide() {
-        showLoading('Saving slide...');
-        
-        const content = editor ? editor.getData() : document.getElementById('editableContent').innerHTML;
-        
-        fetch('save_page.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                client_id: CLIENT_ID,
-                page_number: currentSlide,
-                content: content,
-                title: document.getElementById('slideTitle').value
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            hideLoading();
-            if (data.success) {
-                showMessage('Slide Saved', 'Slide saved successfully!', 'success');
-                document.getElementById('saveBtn').disabled = true;
-                document.getElementById('saveStatus').textContent = 'Saved';
-                document.getElementById('saveStatus').style.color = '#10b981';
-                
-                // Update thumbnail status
-                const currentThumb = document.querySelector(`.slide-thumbnail:nth-child(${currentSlide})`);
-                if (currentThumb) {
-                    const statusIcon = currentThumb.querySelector('.slide-status');
-                    if (!statusIcon) {
-                        const statusDiv = document.createElement('div');
-                        statusDiv.className = 'slide-status';
-                        statusDiv.title = 'Saved';
-                        statusDiv.innerHTML = '<i class="fas fa-check-circle"></i>';
-                        currentThumb.appendChild(statusDiv);
-                    }
-                }
-            } else {
-                showMessage('Save Failed', data.error || 'Failed to save slide.', 'error');
-            }
-        })
-        .catch(err => {
-            hideLoading();
-            showMessage('Error', 'Error saving slide: ' + err.message, 'error');
-        });
-    }
-    
-    // Insert image
-    function insertImage() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('page_number', currentSlide);
-            formData.append('alt_text', file.name);
-            
-            showLoading('Uploading image...');
-            
-            fetch('upload_image.php', { method: 'POST', body: formData })
-            .then(r => r.json())
-            .then(data => {
-                hideLoading();
-                if (data.success) {
-                    const imageUrl = 'uploads/' + data.filename;
-                    
-                    // Create image element
-                    const imageContainer = document.createElement('div');
-                    imageContainer.className = 'slide-image-container';
-                    imageContainer.setAttribute('data-image-id', data.image_id);
-                    imageContainer.style.position = 'absolute';
-                    imageContainer.style.top = '50px';
-                    imageContainer.style.left = '50px';
-                    imageContainer.style.width = '300px';
-                    imageContainer.style.zIndex = '1000';
-                    
-                    imageContainer.innerHTML = `
-                        <img src="${imageUrl}" alt="${file.name}" style="width: 100%; height: auto;">
-                        <div class="image-controls">
-                            <button class="image-control-btn" onclick="adjustImageSize(${data.image_id}, 'increase', event)">
-                                <i class="fas fa-search-plus"></i>
-                            </button>
-                            <button class="image-control-btn" onclick="adjustImageSize(${data.image_id}, 'decrease', event)">
-                                <i class="fas fa-search-minus"></i>
-                            </button>
-                            <button class="image-control-btn" onclick="deleteImage(${data.image_id}, event)">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    `;
-                    
-                    document.getElementById('editableContent').appendChild(imageContainer);
-                    
-                    // Make image draggable
-                    makeDraggable(imageContainer, data.image_id);
-                    
-                    showMessage('Image Inserted', 'Image added to slide. Drag to reposition.', 'success');
-                    document.getElementById('saveBtn').disabled = false;
-                } else {
-                    showMessage('Upload Failed', data.error || 'Failed to upload image.', 'error');
-                }
-            });
-        };
-        input.click();
-    }
-    
-    // Make image draggable
-    function makeDraggable(element, imageId) {
-        let isDragging = false;
-        let offsetX, offsetY;
-        
-        element.addEventListener('mousedown', function(e) {
-            if (e.target.classList.contains('image-control-btn')) return;
-            
-            isDragging = true;
-            element.classList.add('active');
-            
-            const rect = element.getBoundingClientRect();
-            offsetX = e.clientX - rect.left;
-            offsetY = e.clientY - rect.top;
-            
-            document.addEventListener('mousemove', mouseMoveHandler);
-            document.addEventListener('mouseup', mouseUpHandler);
-            
-            e.preventDefault();
-        });
-        
-        function mouseMoveHandler(e) {
-            if (!isDragging) return;
-            
-            const slideRect = document.querySelector('.slide-content-container').getBoundingClientRect();
-            const elementRect = element.getBoundingClientRect();
-            
-            let newLeft = e.clientX - offsetX - slideRect.left;
-            let newTop = e.clientY - offsetY - slideRect.top;
-            
-            // Constrain within slide
-            newLeft = Math.max(0, Math.min(newLeft, slideRect.width - elementRect.width));
-            newTop = Math.max(0, Math.min(newTop, slideRect.height - elementRect.height));
-            
-            element.style.left = newLeft + 'px';
-            element.style.top = newTop + 'px';
-        }
-        
-        function mouseUpHandler() {
-            isDragging = false;
-            element.classList.remove('active');
-            document.removeEventListener('mousemove', mouseMoveHandler);
-            document.removeEventListener('mouseup', mouseUpHandler);
-            
-            document.getElementById('saveBtn').disabled = false;
-            document.getElementById('saveStatus').textContent = 'Unsaved changes';
-            document.getElementById('saveStatus').style.color = '#f59e0b';
-        }
-    }
-    
-    // Adjust image size
-    function adjustImageSize(imageId, action, event) {
-        if (event) event.stopPropagation();
-        
-        const imageContainer = document.querySelector(`.slide-image-container[data-image-id="${imageId}"]`);
-        if (!imageContainer) return;
-        
-        const img = imageContainer.querySelector('img');
-        if (!img) return;
-        
-        const currentWidth = imageContainer.offsetWidth;
-        let newWidth;
-        
-        if (action === 'increase') {
-            newWidth = currentWidth + 50;
-        } else {
-            newWidth = Math.max(100, currentWidth - 50);
-        }
-        
-        imageContainer.style.width = newWidth + 'px';
-        
-        document.getElementById('saveBtn').disabled = false;
-        document.getElementById('saveStatus').textContent = 'Unsaved changes';
-        document.getElementById('saveStatus').style.color = '#f59e0b';
-    }
-    
-    // Delete image
-    function deleteImage(imageId, event) {
-        if (event) event.stopPropagation();
-        
-        if (!confirm('Are you sure you want to delete this image?')) {
-            return;
-        }
-        
-        const imageContainer = document.querySelector(`.slide-image-container[data-image-id="${imageId}"]`);
-        if (imageContainer) {
-            imageContainer.remove();
-        }
-        
-        document.getElementById('saveBtn').disabled = false;
-        document.getElementById('saveStatus').textContent = 'Unsaved changes';
-        document.getElementById('saveStatus').style.color = '#f59e0b';
-        
-        showMessage('Image Deleted', 'Image removed from slide.', 'info');
-    }
-    
-    // Text formatting functions
-    function formatText(cmd) {
-        if (editor) {
-            editor.execute(cmd);
-        } else {
-            document.execCommand(cmd, false, null);
-        }
-    }
-    
-    function formatHeading(val) {
-        if (editor && val) {
-            editor.execute('heading', { value: val });
-        }
-    }
-    
-    function changeColor(color) {
-        if (editor) {
-            editor.execute('fontColor', { value: color });
-        }
-    }
-    
-    function insertTable() {
-        if (editor) {
-            editor.execute('insertTable', { rows: 3, columns: 3 });
-        }
-    }
-    
-    function insertChart() {
-        showMessage('Coming Soon', 'Chart insertion feature will be available soon.', 'info');
-    }
-    
-    // Preview slide
-    function previewSlide() {
-        const content = editor ? editor.getData() : document.getElementById('editableContent').innerHTML;
-        const win = window.open('', '_blank');
-        win.document.write(`
-            <html>
-            <head>
-                <title>Slide ${currentSlide} Preview</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; }
-                    .slide-preview { max-width: 800px; margin: 0 auto; background: white; padding: 30px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-                </style>
-            </head>
-            <body>
-                <div class="slide-preview">${content}</div>
-            </body>
-            </html>
-        `);
-    }
-    
-    // Show client info
-    function showClientInfo() {
-        // This would open a modal with client information
-        alert('Client Information Editor - To be implemented');
-    }
-    
-    // Update slide title
-    function updateSlideTitle(title) {
-        document.querySelector('.slide-header h1').textContent = title;
-        document.getElementById('saveBtn').disabled = false;
-    }
-    
-    // Message system
-    function showMessage(title, content, type = 'info') {
-        messageCounter++;
-        const messagesPanel = document.getElementById('messagesPanel');
-        
-        // Remove "no messages" placeholder if present
-        const placeholder = messagesPanel.querySelector('.fa-comments');
-        if (placeholder) {
-            messagesPanel.innerHTML = '';
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        messageDiv.innerHTML = `
-            <div class="message-title">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
-                ${title}
+
+    <!-- Client Info Modal -->
+    <div id="clientInfoModal" class="modal-overlay" style="display: none;">
+        <div class="modal-box" style="max-width: 500px;">
+            <h3 style="margin-top: 0; color: #2e75b6;">Edit Client Information</h3>
+            <div class="property-item">
+                <label class="property-label">Client Name</label>
+                <input type="text" class="property-input" id="modalClientName" value="<?php echo htmlspecialchars($client_name); ?>">
             </div>
-            <div class="message-content">${content}</div>
-        `;
-        
-        messagesPanel.prepend(messageDiv);
-        
-        // Auto-remove old messages
-        const allMessages = messagesPanel.querySelectorAll('.message');
-        if (allMessages.length > 10) {
-            for (let i = 10; i < allMessages.length; i++) {
-                allMessages[i].remove();
+            <div class="property-item">
+                <label class="property-label">Risk Profile</label>
+                <select class="property-input" id="modalRiskProfile">
+                    <option value="Conservative" <?php echo $risk_profile == 'Conservative' ? 'selected' : ''; ?>>Conservative</option>
+                    <option value="Moderate" <?php echo $risk_profile == 'Moderate' || empty($risk_profile) ? 'selected' : ''; ?>>Moderate</option>
+                    <option value="Aggressive" <?php echo $risk_profile == 'Aggressive' ? 'selected' : ''; ?>>Aggressive</option>
+                </select>
+            </div>
+            <div class="property-item">
+                <label class="property-label">Investment Horizon</label>
+                <select class="property-input" id="modalInvestmentHorizon">
+                    <option value="Short-term (1-3 years)" <?php echo $investment_horizon == 'Short-term (1-3 years)' ? 'selected' : ''; ?>>Short-term (1-3 years)</option>
+                    <option value="Medium-term (3-7 years)" <?php echo $investment_horizon == 'Medium-term (3-7 years)' ? 'selected' : ''; ?>>Medium-term (3-7 years)</option>
+                    <option value="Long-term (7+ years)" <?php echo $investment_horizon == 'Long-term (7+ years)' || empty($investment_horizon) ? 'selected' : ''; ?>>Long-term (7+ years)</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" class="modal-btn modal-btn-cancel" onclick="closeClientInfoModal()">Cancel</button>
+                <button type="button" class="modal-btn modal-btn-confirm" onclick="saveClientInfo()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- POWERPOINT STYLE EDITOR LOGIC ---
+        let editMode = false;
+        let editor = null;
+        let currentSlide = <?php echo $current_page; ?>;
+        const CLIENT_ID = '<?php echo addslashes($client_id); ?>';
+        const CLIENT_NAME = '<?php echo addslashes($client_name); ?>';
+        const ACTUAL_CLIENT_ID = <?php echo $actual_client_id; ?>;
+        let activeImageId = null;
+        let messageCounter = 0;
+
+        // Update current time in status bar
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.getElementById('propertiesTab').style.display = 'none';
+            document.getElementById('notesTab').style.display = 'none';
+            document.getElementById('messagesTab').style.display = 'none';
+
+            // Remove active class from all tabs
+            document.querySelectorAll('.properties-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').style.display = 'block';
+
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Navigation functions
+        function goToSlide(slideNumber) {
+            if (slideNumber >= 1 && slideNumber <= 24) {
+                window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + slideNumber;
             }
         }
-        
-        // Auto-remove after 10 seconds
-        setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.style.opacity = '0';
-                setTimeout(() => {
-                    if (messageDiv.parentNode) {
-                        messageDiv.remove();
-                    }
-                }, 300);
+
+        function prevSlide() {
+            if (currentSlide > 1) {
+                goToSlide(currentSlide - 1);
             }
-        }, 10000);
-    }
-    
-    function clearMessages() {
-        const messagesPanel = document.getElementById('messagesPanel');
-        messagesPanel.innerHTML = `
+        }
+
+        function nextSlide() {
+            if (currentSlide < 24) {
+                goToSlide(currentSlide + 1);
+            }
+        }
+
+        // Edit mode toggle
+        function toggleEditMode() {
+            const hasContent = <?php echo isset($pages[$current_page]) ? 'true' : 'false'; ?>;
+
+            if (!hasContent) {
+                // Create new slide
+                createNewSlide();
+                return;
+            }
+
+            editMode = !editMode;
+            const editToggleBtn = document.getElementById('editToggleBtn');
+            const saveBtn = document.getElementById('saveBtn');
+            const toolbar = document.getElementById('toolbar');
+
+            if (editMode) {
+                // Enter edit mode
+                editToggleBtn.innerHTML = '<i class="fas fa-times"></i> Exit Edit';
+                editToggleBtn.classList.add('active');
+                saveBtn.disabled = false;
+                toolbar.style.display = 'flex';
+
+                showMessage('Edit Mode Enabled', 'You can now edit the slide content.', 'success');
+            } else {
+                // Exit edit mode
+                editToggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit';
+                editToggleBtn.classList.remove('active');
+                saveBtn.disabled = true;
+                toolbar.style.display = 'none';
+
+                showMessage('Edit Mode Disabled', 'Slide editing is now disabled.', 'info');
+            }
+        }
+
+        let slide7IsValid = true;
+        let slide7Valid = true;
+
+        window.addEventListener('message', function(event) {
+            if (!event.data || event.data.type !== 'slide-validation') return;
+
+            if (event.data.slide !== 7) return;
+
+            slide7Valid = event.data.valid;
+            updateSlide7Warning();
+        });
+
+        function updateSlide7Warning() {
+            const bar = document.getElementById('slide7Warning');
+            if (!bar) return;
+
+            // show ONLY when slide 7 active AND invalid
+            if (currentSlide === 7 && slide7Valid === false) {
+                bar.style.display = 'block';
+            } else {
+                bar.style.display = 'none';
+            }
+        }
+
+        // run once on page load
+        document.addEventListener('DOMContentLoaded', updateSlide7Warning);
+
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateSlideWarning();
+        });
+
+        function updateSlideWarning() {
+            const bar = document.getElementById('slideWarningBar');
+            if (!bar) return;
+
+            const activeSlide = <?= (int)$current_page ?>;
+
+            // Show warning ONLY when slide 7 is active AND invalid
+            if (activeSlide === 7 && slide7IsValid === false) {
+                bar.style.display = 'block';
+            } else {
+                bar.style.display = 'none';
+            }
+        }
+
+        // Save slide
+        function saveSlide() {
+            showLoading('Saving slide...');
+
+            const title = document.getElementById('slideTitle').value;
+            const bgColor = document.getElementById('slideBgColor').value;
+            const notes = document.getElementById('slideNotes').value;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        title: title,
+                        bg_color: bgColor,
+                        notes: notes
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Saved', 'Slide saved successfully!', 'success');
+                        document.getElementById('saveBtn').disabled = true;
+                        document.getElementById('saveStatus').textContent = 'Saved';
+                        document.getElementById('saveStatus').style.color = '#10b981';
+
+                        // Update thumbnail status
+                        const currentThumb = document.querySelector(`.slide-thumbnail:nth-child(${currentSlide})`);
+                        if (currentThumb) {
+                            let statusIcon = currentThumb.querySelector('.slide-status');
+                            if (!statusIcon) {
+                                statusIcon = document.createElement('div');
+                                statusIcon.className = 'slide-status';
+                                statusIcon.title = 'Saved';
+                                statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
+                                currentThumb.appendChild(statusIcon);
+                            }
+
+                            // Update title in thumbnail
+                            const titleEl = currentThumb.querySelector('.slide-preview-title');
+                            if (titleEl) {
+                                titleEl.textContent = title;
+                            }
+                        }
+
+                        // Refresh iframe
+                        document.getElementById('slideIframe').src =
+                            'render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) +
+                            '&page=' + currentSlide + '&t=' + new Date().getTime();
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save slide.', 'error');
+                    }
+                })
+                .catch(err => {
+                    hideLoading();
+                    showMessage('Error', 'Error saving slide: ' + err.message, 'error');
+                });
+        }
+
+        // Save notes
+        function saveNotes() {
+            const notes = document.getElementById('slideNotes').value;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        notes: notes
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage('Notes Saved', 'Notes saved successfully!', 'success');
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save notes.', 'error');
+                    }
+                });
+        }
+
+        // Create new slide
+        function createNewSlide() {
+            showLoading('Creating new slide...');
+
+            const title = document.getElementById('slideTitle').value || 'Slide ' + currentSlide;
+
+            fetch('save_page.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide,
+                        title: title,
+                        content: '<div class="slide-content"><h1>' + title + '</h1><p>Start editing this slide...</p></div>',
+                        bg_color: '#ffffff'
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Created', 'New slide created successfully!', 'success');
+                        // Reload the page to show the new slide
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + currentSlide;
+                    } else {
+                        showMessage('Creation Failed', data.error || 'Failed to create slide.', 'error');
+                    }
+                });
+        }
+
+        // Duplicate current slide
+        function duplicateCurrentSlide() {
+            if (currentSlide >= 24) {
+                showMessage('Error', 'Cannot duplicate - maximum slides reached.', 'error');
+                return;
+            }
+
+            showLoading('Duplicating slide...');
+
+            fetch('duplicate_slide.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        source_page: currentSlide,
+                        target_page: currentSlide + 1
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Duplicated', 'Slide duplicated successfully!', 'success');
+                        // Go to the duplicated slide
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + (currentSlide + 1);
+                    } else {
+                        showMessage('Duplication Failed', data.error || 'Failed to duplicate slide.', 'error');
+                    }
+                });
+        }
+
+        // Export as PDF
+        // Export as PDF
+        // Export as PDF - FIXED WORKING VERSION
+        function downloadPDF() {
+            console.log('Starting PDF download for client:', CLIENT_ID);
+
+            // Check if loading overlay exists before using it
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingMessage = document.getElementById('loadingMessage');
+
+            if (loadingOverlay && loadingMessage) {
+                loadingMessage.textContent = 'Generating PDF document...';
+                loadingOverlay.style.display = 'flex';
+            }
+
+            // Create a hidden iframe for PDF download (most reliable method)
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = 'none';
+            iframe.style.position = 'absolute';
+
+            // Add timestamp to prevent caching
+            const timestamp = new Date().getTime();
+            iframe.src = 'generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID) + '&t=' + timestamp;
+
+            document.body.appendChild(iframe);
+
+            console.log('PDF generation iframe created');
+
+            // Hide loading after 3 seconds (even if download hasn't finished)
+            setTimeout(() => {
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                }
+
+                // Show a simple alert
+                alert('PDF is being generated. It should start downloading automatically.\n\nIf download doesn\'t start, please:\n1. Check your browser downloads\n2. Allow pop-ups for this site\n3. Try again');
+
+                // Remove iframe after 10 seconds
+                setTimeout(() => {
+                    if (iframe && iframe.parentNode) {
+                        iframe.parentNode.removeChild(iframe);
+                    }
+                }, 10000);
+            }, 3000);
+
+            // Alternative: Also open in new tab as backup
+            setTimeout(() => {
+                window.open('generate_pdf.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
+            }, 1000);
+        }
+
+        function deleteCurrentSlide() {
+            if (!confirm('Are you sure you want to delete this slide? This action cannot be undone.')) {
+                return;
+            }
+
+            showLoading('Deleting slide...');
+
+            fetch('delete_slide.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        page_number: currentSlide
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Slide Deleted', 'Slide deleted successfully!', 'success');
+                        // Go to previous slide or first slide
+                        const newPage = currentSlide > 1 ? currentSlide - 1 : 1;
+                        window.location.href = '?client_id=' + encodeURIComponent(CLIENT_ID) + '&page=' + newPage;
+                    } else {
+                        showMessage('Deletion Failed', data.error || 'Failed to delete slide.', 'error');
+                    }
+                });
+        }
+
+        // Insert image
+        function insertImage() {
+            showMessage('Coming Soon', 'Image insertion feature will be available in the next update.', 'info');
+        }
+
+        // Insert table
+        function insertTable() {
+            showMessage('Coming Soon', 'Table insertion feature will be available in the next update.', 'info');
+        }
+
+        // Insert chart
+        function insertChart() {
+            showMessage('Coming Soon', 'Chart insertion feature will be available soon.', 'info');
+        }
+
+        // Text formatting functions
+        function formatText(cmd) {
+            showMessage('Coming Soon', 'Text formatting will be available in edit mode.', 'info');
+        }
+
+        function formatHeading(val) {
+            showMessage('Coming Soon', 'Heading formatting will be available in edit mode.', 'info');
+        }
+
+        function changeColor(color) {
+            showMessage('Coming Soon', 'Color formatting will be available in edit mode.', 'info');
+        }
+
+        // Preview slide
+        function previewSlide() {
+            window.open('render_slide.php?client_id=' + encodeURIComponent(CLIENT_ID) +
+                '&page=' + currentSlide + '&preview=1', '_blank');
+        }
+
+        // Show client info modal
+        function showClientInfo() {
+            document.getElementById('clientInfoModal').style.display = 'flex';
+        }
+
+        function closeClientInfoModal() {
+            document.getElementById('clientInfoModal').style.display = 'none';
+        }
+
+        function saveClientInfo() {
+            const clientName = document.getElementById('modalClientName').value;
+            const riskProfile = document.getElementById('modalRiskProfile').value;
+            const investmentHorizon = document.getElementById('modalInvestmentHorizon').value;
+
+            showLoading('Saving client information...');
+
+            fetch('save_client_info.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        client_name: clientName,
+                        risk_profile: riskProfile,
+                        investment_horizon: investmentHorizon
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.success) {
+                        showMessage('Client Info Saved', 'Client information updated successfully!', 'success');
+                        closeClientInfoModal();
+                        // Update display
+                        document.querySelector('.client-name-display').textContent = clientName;
+                        // Reload page to reflect changes
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        showMessage('Save Failed', data.error || 'Failed to save client information.', 'error');
+                    }
+                });
+        }
+
+        // Update slide title
+        function updateSlideTitle(title) {
+            document.querySelector('.slide-header h1').textContent = title;
+            document.getElementById('saveBtn').disabled = false;
+        }
+
+        // Message system
+        function showMessage(title, content, type = 'info') {
+            const messagesPanel = document.getElementById('messagesPanel');
+            if (!messagesPanel) {
+                console.warn('messagesPanel not found:', title, content);
+                return;
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = `
+        <strong>${title}</strong><br>${content}
+    `;
+            messagesPanel.prepend(messageDiv);
+        }
+
+        function clearMessages() {
+            const messagesPanel = document.getElementById('messagesPanel');
+            messagesPanel.innerHTML = `
             <div style="text-align: center; padding: 20px; color: #999;">
                 <i class="fas fa-comments fa-2x"></i>
                 <p style="margin-top: 10px;">No messages yet</p>
             </div>
         `;
-    }
-    
-    // Loading overlay
-    function showLoading(msg = "Processing...") {
-        document.getElementById('loadingMessage').textContent = msg;
-        document.getElementById('loadingOverlay').style.display = 'flex';
-    }
-    
-    function hideLoading() {
-        document.getElementById('loadingOverlay').style.display = 'none';
-    }
-    
-    // Export functions
-    function downloadPPT() {
-        showLoading('Generating PowerPoint presentation...');
-        showMessage('Export Started', 'PowerPoint generation in progress...', 'info');
-        
-        // Simulate processing
-        setTimeout(() => {
-            hideLoading();
-            showMessage('Export Complete', 'PowerPoint file has been generated successfully!', 'success');
-            window.open('generate-ppt.php', '_blank');
-        }, 2000);
-    }
-    
-    // Initialize existing image interactions
-    document.addEventListener('DOMContentLoaded', function() {
-        // Make existing images draggable
-        document.querySelectorAll('.slide-image-container').forEach(container => {
-            const imageId = container.getAttribute('data-image-id');
-            makeDraggable(container, imageId);
+        }
+
+        // Loading overlay
+        function showLoading(msg = "Processing...") {
+            document.getElementById('loadingMessage').textContent = msg;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // Export functions
+        function downloadPPT() {
+            showLoading('Generating PowerPoint presentation...');
+            showMessage('Export Started', 'PowerPoint generation in progress...', 'info');
+
+            // Simulate processing
+            setTimeout(() => {
+                hideLoading();
+                showMessage('Export Complete', 'PowerPoint file has been generated successfully!', 'success');
+                window.open('generate_ppt.php?client_id=' + encodeURIComponent(CLIENT_ID), '_blank');
+            }, 2000);
+        }
+
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Welcome message
+            showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 24 loaded.`, 'info');
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Left arrow - previous slide
+                if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                    prevSlide();
+                    e.preventDefault();
+                }
+                // Right arrow - next slide
+                if (e.key === 'ArrowRight' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                    nextSlide();
+                    e.preventDefault();
+                }
+                // Ctrl+S - save
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    if (!document.getElementById('saveBtn').disabled) {
+                        saveSlide();
+                    }
+                }
+            });
         });
-        
-        // Set up image click to activate
-        document.addEventListener('click', function(e) {
-            if (e.target.closest('.slide-image-container')) {
-                const imageContainer = e.target.closest('.slide-image-container');
-                document.querySelectorAll('.slide-image-container').forEach(img => {
-                    img.classList.remove('active');
-                });
-                imageContainer.classList.add('active');
-                
-                // Update properties panel
-                const imageId = imageContainer.getAttribute('data-image-id');
-                const img = imageContainer.querySelector('img');
-                document.getElementById('selectedImageInfo').textContent = 
-                    `Image: ${img.alt || 'Untitled'}`;
-                document.getElementById('imageWidth').value = imageContainer.offsetWidth;
-                document.getElementById('imageHeight').value = img.offsetHeight;
+
+        function getSlideIframe() {
+            return document.getElementById('slideIframe');
+        }
+
+        function editCurrentSlide() {
+            const iframe = getSlideIframe();
+            if (iframe && iframe.contentWindow.enableEdit) {
+                iframe.contentWindow.enableEdit();
+            } else {
+                alert('This slide is not editable');
             }
-        });
-        
-        // Initialize save status
-        <?php if (isset($pages[$current_page])): ?>
-            document.getElementById('saveStatus').textContent = 'Saved';
-            document.getElementById('saveStatus').style.color = '#10b981';
-        <?php else: ?>
-            document.getElementById('saveStatus').textContent = 'Not saved';
-            document.getElementById('saveStatus').style.color = '#ef4444';
-        <?php endif; ?>
-        
-        // Welcome message
-        showMessage('Welcome', `Editing ${CLIENT_NAME}'s portfolio slides. Slide ${currentSlide} of 23 loaded.`, 'info');
-    });
+        }
+
+        function saveCurrentSlide() {
+            const iframe = getSlideIframe();
+            if (iframe && iframe.contentWindow.saveSlide) {
+                iframe.contentWindow.saveSlide();
+            } else {
+                alert('Nothing to save on this slide');
+            }
+        }
     </script>
 </body>
+
 </html>

@@ -2,16 +2,17 @@
 // profile_management.php - Admin profile management interface
 require_once 'db_config.php';
 require_once 'auth.php';
-require_once 'navbar.php';
 
 // Check if user is admin
-$currentUser = getCurrentUser();
-$isAdmin = isset($currentUser['username']) && strtolower($currentUser['username']) === 'admin';
+requireAuth();
 
-if (!$isAdmin) {
+$currentUser = getCurrentUser();
+
+if (!isset($currentUser['designation']) || $currentUser['designation'] !== 'Admin') {
     header('Location: upload.php');
     exit;
 }
+
 
 $message = '';
 $messageType = '';
@@ -185,9 +186,11 @@ $designations = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile Management - Admin</title>
     <link rel="stylesheet" href="public/css/profile_management.css">
+    <link rel="stylesheet" href="public/css/navbar.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <?php include 'navbar.php'; ?>
     <div class="profile-management-container">
         <div class="management-header">
             <h1>User Profile Management</h1>
