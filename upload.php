@@ -9,6 +9,7 @@ require_once 'parsers.php';
 require_once 'renderers.php';
 require_once 'env_loader.php';
 
+
 requireAuth();
 $currentReviewPeriod = date('F Y');
 $pdo           = getPdo();
@@ -515,8 +516,9 @@ $userDesignation = $currentUser['designation'] ?? '';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Command Center</title>
+    <title>Dashboard</title>
     <link rel="stylesheet" href="public/css/upload.css">
+    <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-3hT1sJQdT9v+0kz+1vZ1tcHTul3e8DqRL3OjaxAg/P6MqxsVXni4eWh05rq6ArtyTcwxH8333Adxpv8vS1TukA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
@@ -714,11 +716,6 @@ $userDesignation = $currentUser['designation'] ?? '';
             </script>
         </div> <!-- end .wrap main content -->
 
-    <div class="section">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3>Scheme Overview</h3>
-            <a href="schemes.php" class="btn-primary" style="font-size:12px; padding:6px 12px;">Manage Schemes</a>
-        </div>
-    </div>
+    </div> <!-- end .wrap -->
 </body>
 </html>
