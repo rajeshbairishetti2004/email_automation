@@ -191,6 +191,7 @@ $designations = [
 </head>
 <body>
     <?php include 'navbar.php'; ?>
+    <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
     <div class="profile-management-container">
         <div class="management-header">
             <h1>User Profile Management</h1>
@@ -530,5 +531,7 @@ $designations = [
             });
         }, 5000);
     </script>
+    </div>
+
 </body>
 </html>

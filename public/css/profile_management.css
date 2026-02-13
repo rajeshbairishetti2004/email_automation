@@ -5,6 +5,13 @@
     padding: 0;
     box-sizing: border-box;
 }
+html, body { overflow: hidden; }
+.navbar { height: 80px; }
+.main-scroll-container {
+    height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+
 
 body {
     font-family: 'Inter', sans-serif;
