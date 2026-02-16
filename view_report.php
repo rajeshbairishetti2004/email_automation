@@ -70,6 +70,9 @@ $userDesignation = $currentUser['designation'] ?? '';
 $isARM = (stripos($userDesignation, 'Associate') !== false);
 $isRM  = !$isARM;
 
+$isAdmin = (stripos($userDesignation, 'Admin') !== false);
+
+
 
 /* ---------- DATABASE HELPER FUNCTIONS (Local Definitions) ---------- */
 // FIX: Wrap local functions in function_exists() to prevent redeclaration fatal error
@@ -797,7 +800,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
 
             <!-- WORKFLOW BUTTONS (INSIDE FORM, ONLY HERE) -->
             <div class="workflow-actions">
-                <?php if ($isARM): ?>
+                <?php if ($isARM || $isRM): ?>
                     <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
                         <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
                         <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
@@ -807,11 +810,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
                     <?php endif; ?>
                 <?php endif; ?>
 
-                <?php if ($isRM): ?>
-                    <?php if ($reportState == 'draft' || $reviewNotOk == 1): ?>
-                        <button type="button" class="wf-btn btn-draft" onclick="submitWorkflow('save_draft')">Save Draft</button>
-                        <button type="button" class="wf-btn btn-ready" onclick="submitWorkflow('ready_for_review')">Mark Ready for Review</button>
-                    <?php endif; ?>
+                <?php if ($isAdmin): ?>
                     <?php if ($reportState == 'ready' && $reviewNotOk === 0): ?>
                         <button type="button" class="wf-btn btn-approve" onclick="submitWorkflow('approve_review')">Approve (Reviewed OK)</button>
                         <button type="button" class="wf-btn btn-reject" onclick="submitWorkflow('review_not_ok')">Reject (Not OK)</button>
