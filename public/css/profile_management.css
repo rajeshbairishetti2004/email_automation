@@ -5,20 +5,28 @@
     padding: 0;
     box-sizing: border-box;
 }
-html, body { overflow: hidden; }
-.navbar { height: 80px; }
-.main-scroll-container {
-    height: calc(100vh - 80px);
-    overflow-y: auto;
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    overflow-x: hidden; 
 }
+
+.main-scroll-container {
+    height: calc(100vh - 80px); /* must match actual navbar height */
+    overflow-y: auto;
+    overflow-x: hidden; 
+}
+
 
 
 body {
     font-family: 'Inter', sans-serif;
     background: linear-gradient(135deg, #f6f9fc 0%, #f1f5f9 100%);
-    min-height: 100vh;
+    height: 100%;
     color: #0f172a;
 }
+
 
 .profile-management-container {
     max-width: 1400px;
@@ -183,7 +191,6 @@ body {
 
 .users-table tbody tr:hover {
     background: #f8fafc;
-    transform: scale(1.01);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 

@@ -93,31 +93,70 @@ $userDesignation = $_SESSION['designation'] ?? '';
             
         </div>
     </div>
-    <div class="nav-user" id="navUserBtn" style="position:relative;">
-        <span id="profilePic" style="cursor:pointer;">👤 <?php echo htmlspecialchars($navUser); ?></span>
-        <div id="profileDropdown" class="profile-dropdown" style="display:none; position:absolute; right:0; top:36px; background:#fff; border:1px solid #eee; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.07); min-width:180px; z-index:100;">
-            <div>
-                <?= htmlspecialchars($userDesignation) ?>
-            </div>
+    <!-- Replace the nav-user div section in your navbar.php with this: -->
 
-            <a href="profile.php" style="display:block; padding:8px 12px; text-align:right; color:#0288D1; font-weight:600;">My Profile</a>
-            <?php if ($isAdmin): ?>
-                <a href="<?php echo getNavLink('profile_management.php'); ?>" 
-               class="<?= ($currentPage === 'profile_management.php') ? 'active' : '' ?>">
-                Profile Management
-            </a><?php endif; ?>
-            <a href="logout.php" class="logout-link" style="display:block; padding:8px 12px; text-align:right;">Logout</a>
+<!-- Replace the nav-user div section in your navbar.php with this: -->
+
+<div class="nav-user" id="navUserBtn">
+    <span id="profilePic">👤 <?php echo htmlspecialchars($navUser); ?></span>
+    <div id="profileDropdown" class="profile-dropdown">
+        <div class="dropdown-header">
+            <?php echo htmlspecialchars($userDesignation ?: 'User'); ?>
         </div>
+        <a href="profile.php" class="dropdown-item">
+            <span class="item-icon">👤</span>
+            My Profile
+        </a>
+        <?php if ($isAdmin): ?>
+            <a href="<?php echo getNavLink('profile_management.php'); ?>" class="dropdown-item">
+                <span class="item-icon">⚙️</span>
+                Profile Management
+            </a>
+        <?php endif; ?>
+        
+        <a href="logout.php" class="dropdown-item logout-item">
+            <span class="item-icon">🚪</span>
+            Logout
+        </a>
     </div>
-    <script>
-        // Show dropdown on hover, hide on mouseleave
-        const navUserBtn = document.getElementById('navUserBtn');
-        const profileDropdown = document.getElementById('profileDropdown');
-        navUserBtn.addEventListener('mouseenter', function() {
-            profileDropdown.style.display = 'block';
-        });
-        navUserBtn.addEventListener('mouseleave', function() {
-            profileDropdown.style.display = 'none';
-        });
-    </script>
+</div>
+
+<script>
+    const navUserBtn = document.getElementById('navUserBtn');
+    const profileDropdown = document.getElementById('profileDropdown');
+    let hideTimeout;
+
+    navUserBtn.addEventListener('mouseenter', function() {
+        clearTimeout(hideTimeout);
+        profileDropdown.style.display = 'block';
+        setTimeout(() => {
+            profileDropdown.style.opacity = '1';
+            profileDropdown.style.transform = 'translateY(0)';
+        }, 10);
+    });
+
+    navUserBtn.addEventListener('mouseleave', function() {
+        hideTimeout = setTimeout(() => {
+            profileDropdown.style.opacity = '0';
+            profileDropdown.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                profileDropdown.style.display = 'none';
+            }, 200);
+        }, 100);
+    });
+
+    profileDropdown.addEventListener('mouseenter', function() {
+        clearTimeout(hideTimeout);
+    });
+
+    profileDropdown.addEventListener('mouseleave', function() {
+        hideTimeout = setTimeout(() => {
+            profileDropdown.style.opacity = '0';
+            profileDropdown.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                profileDropdown.style.display = 'none';
+            }, 200);
+        }, 100);
+    });
+</script>
 </nav>

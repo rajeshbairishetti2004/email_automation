@@ -1,5 +1,4 @@
 /* public/css/navbar.css */
-/* Navbar Styles Only - External CSS file */
 * {
     margin: 0;
     padding: 0;
@@ -35,7 +34,7 @@ body {
     align-items: center;
     gap: 40px;
     flex: 1;
-    min-width: 0; /* Allow shrinking */
+    min-width: 0;
 }
 
 .top-bar {
@@ -72,12 +71,12 @@ body {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding: 5px 0;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .nav-links::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+    display: none;
 }
 
 .nav-links a {
@@ -101,6 +100,7 @@ body {
     border-bottom: 2px solid #0288D1;
 }
 
+/* ===== UPDATED DROPDOWN STYLES ===== */
 .nav-user {
     color: #0288D1 !important;
     font-weight: 600;
@@ -110,7 +110,7 @@ body {
     align-items: center;
     gap: 10px;
     cursor: pointer;
-    transition: color 0.2s, background 0.2s, box-shadow 0.2s;
+    transition: all 0.2s;
     background: #e3f2fd;
     border-radius: 24px;
     box-shadow: 0 2px 8px rgba(41, 182, 246, 0.10);
@@ -128,47 +128,74 @@ body {
     border-color: #4FC3F7;
 }
 
+/* Wider, modern dropdown */
 .profile-dropdown {
     display: none;
     position: absolute;
     right: 0;
-    top: 45px;
-    background: #fff;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    min-width: 180px;
+    top: 50px;
+    width: 260px; /* Increased from 180px to 260px */
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
     z-index: 1001;
+    border: 1px solid rgba(2, 136, 209, 0.15);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.2s, transform 0.2s;
 }
 
-.profile-dropdown div {
-    font-size: 12px;
-    color: #666;
-    margin-bottom: 5px;
-    border-bottom: 1px solid #eee;
-    padding: 8px 12px 5px;
-}
-
-.profile-dropdown a {
-    display: block;
-    padding: 8px 12px;
-    text-align: right;
-    color: #0288D1;
+/* Dropdown header */
+.dropdown-header {
+    font-size: 13px;
+    color: #64748b;
+    padding: 12px 20px;
     font-weight: 600;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 6px;
+    background: #f8fafc;
+    border-radius: 16px 16px 0 0;
+}
+
+/* Dropdown items */
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    font-size: 14px;
+    color: #0f172a;
     text-decoration: none;
-    border-bottom: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 
-.profile-dropdown a.logout-link {
-    color: #e53935 !important;
-    font-weight: 700;
-    background: none;
-    transition: background 0.2s, color 0.2s;
+.dropdown-item:hover {
+    background: #e3f2fd;
+    color: #0288D1;
+    padding-left: 24px;
 }
 
-.profile-dropdown a.logout-link:hover {
+/* Icon styling */
+.item-icon {
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+.dropdown-item:hover .item-icon {
+    opacity: 1;
+}
+
+
+/* Logout item */
+.logout-item {
+    color: #e53935;
+}
+
+.logout-item:hover {
     background: #ffebee;
-    color: #b71c1c !important;
+    color: #b71c1c;
 }
 
 /* Media query for smaller screens */
@@ -210,10 +237,14 @@ body {
     .nav-user {
         margin-left: 0;
     }
+    
+    .profile-dropdown {
+        width: 240px;
+    }
 }
 
-/* 🔒 Lock full-page scrolling (ADD THIS) */
+/* Remove full-page scroll lock */
 html, body {
-    height: 100%;
-    overflow: hidden;
+    height: auto;
+    overflow: auto;
 }
