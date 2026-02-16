@@ -245,6 +245,6 @@ body {
 
 /* Remove full-page scroll lock */
 html, body {
-    height: auto;
-    overflow: auto;
+    height: 100%;
+    overflow: hidden;
 }
