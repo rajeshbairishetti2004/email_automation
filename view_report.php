@@ -1554,7 +1554,7 @@ if (isset($rmDesignation)) {
                             }
                         });
                         
-                        alert('Some fields failed to save. Fields with red borders had errors.\nError details logged to console (F12).');
+                    alert('Some fields failed to save. Fields with red borders had errors.\nError details logged to console (F12).');
                     }
                     
                     setTimeout(() => {
@@ -1571,6 +1571,7 @@ if (isset($rmDesignation)) {
                     statusSpan.style.display = 'inline';
                     alert('Error saving goals: ' + err.message + '\nCheck console for details.');
                 });
+            });
         }
 
         // Function to save all goal inputs synchronously
