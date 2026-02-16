@@ -1,78 +1,151 @@
 <?php
 // send_email.php
 require_once 'db_config.php';
+require_once 'auth.php';
 
-$domainProfiles = require __DIR__ . '/organization_emails.php';
-$sendAsProfiles = $domainProfiles;
+$pdo->query("USE client_reports");
+
+/* Logged-in user info */
+$loggedInEmail       = $_SESSION['email'] ?? '';
+$loggedInName        = $_SESSION['name'] ?? '';
+$loggedInDesignation = $_SESSION['designation'] ?? '';
+$isAdmin             = strtolower($loggedInDesignation) === 'admin';
+
+/* =========================
+   SEND AS (From users table)
+   ========================= */
+$sendAsProfiles = [];
+
+if ($isAdmin) {
+    $stmt = $pdo->prepare("
+        SELECT email, name, designation
+        FROM users
+        WHERE status = 'active'
+          AND active = 1
+          AND email IS NOT NULL
+          AND email <> ''
+        ORDER BY name
+    ");
+    $stmt->execute();
+
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $sendAsProfiles[$row['email']] = [
+            'name'        => $row['name'],
+            'designation' => $row['designation']
+        ];
+    }
+} else {
+    // Non-admin → only logged-in user
+    if ($loggedInEmail !== '') {
+        $sendAsProfiles[$loggedInEmail] = [
+            'name'        => $loggedInName,
+            'designation' => $loggedInDesignation
+        ];
+    }
+}
+
+/* Default sender */
+$defaultEmail = '';
+$defaultName  = '';
+$defaultRole  = '';
+
+if (!empty($sendAsProfiles)) {
+    $defaultEmail = array_key_first($sendAsProfiles);
+    $defaultName  = $sendAsProfiles[$defaultEmail]['name'];
+    $defaultRole  = $sendAsProfiles[$defaultEmail]['designation'];
+}
+
+/* =========================
+   CC EMAILS (FROM users table)
+   ========================= */
+$allEmails = [];
+
+$stmt = $pdo->prepare("
+    SELECT email
+    FROM users
+    WHERE status = 'active'
+      AND active = 1
+      AND email IS NOT NULL
+      AND email <> ''
+    ORDER BY email
+");
+$stmt->execute();
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $allEmails[] = $row['email'];
+}
+
+/* =========================
+   Client Info
+   ========================= */
 $clientId = (int)($clientId ?? 0);
-
-// Fixed list for CC section - only defined once
-$allEmails = [
-    'contact@financedoctor.in',
-    'tanmay.vyas@financedoctor.in',
-    'akshay.krishna@financedoctor.in',
-    'sajid.ali@financedoctor.in',
-    'vivek.sharma@financedoctor.in',
-    'sailesh.mulleti@financedoctor.in'
-];
-
 $clientInfo = [];
-if (!empty($clientId)) {
+
+if ($clientId > 0) {
     $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
     $clientInfo = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+/* =========================
+   Last Follow-up
+   ========================= */
 $lastFollowup = '';
 
-if (!empty($clientId)) {
+if ($clientId > 0) {
     $stmt = $pdo->prepare("
-        SELECT email_body 
-        FROM email_logs 
-        WHERE client_id = ? AND email_type = 'followup'
-        ORDER BY sent_at DESC 
+        SELECT email_body
+        FROM email_logs
+        WHERE client_id = ?
+          AND email_type = 'followup'
+        ORDER BY sent_at DESC
         LIMIT 1
     ");
     $stmt->execute([$clientId]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($row) {
-        // Convert HTML back to plain text for textarea
+
+    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $lastFollowup = html_entity_decode(strip_tags($row['email_body']));
     }
 }
 
+/* =========================
+   Client Email Search
+   ========================= */
+$allClientEmails = [];
 
-try {
-    $allClientEmails = [];
-    $stmt = $pdo->query("SELECT DISTINCT email FROM clients WHERE email IS NOT NULL AND email <> '' ORDER BY email ASC");
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $allClientEmails[] = $row['email'];
-    }
-} catch (Exception $e) {
-    $allClientEmails = [];
+$stmt = $pdo->query("
+    SELECT DISTINCT email
+    FROM clients
+    WHERE email IS NOT NULL
+      AND email <> ''
+    ORDER BY email
+");
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $allClientEmails[] = $row['email'];
 }
 
-// If AJAX request for email search
-if (isset($_GET['search_emails']) && isset($_GET['query'])) {
+/* =========================
+   AJAX Email Search
+   ========================= */
+if (isset($_GET['search_emails'], $_GET['query'])) {
     header('Content-Type: application/json');
+
     $query = strtolower(trim($_GET['query']));
     $results = [];
-    
-    // Search from beginning of email (username part before @)
+
     foreach ($allClientEmails as $email) {
-        // Get the username part (before @)
         $username = strtolower(explode('@', $email)[0]);
-        
-        // Check if query matches from the beginning of username
         if (strpos($username, $query) === 0) {
             $results[] = $email;
         }
     }
-    
+
     echo json_encode($results);
-    exit();
+    exit;
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,47 +169,63 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                         <div class="email-field-group">
                             <label>Send As</label>
 
-                            <div class="sendas-wrapper" id="sendAsWrapper">
-                                <div class="sendas-input" onclick="toggleSendAsDropdown()">
-                                    <div class="sendas-avatar" id="sendAsAvatar">FD</div>
-                                    <div class="sendas-text">
-                                        <div class="sendas-name" id="sendAsName">Select sender profile</div>
-                                        <div class="sendas-role" id="sendAsRole">Click to choose</div>
-                                    </div>
-                                    <span class="sendas-arrow">⌄</span>
-                                </div>
+<div class="sendas-wrapper" id="sendAsWrapper">
+    <div class="sendas-input"
+         onclick="<?php echo $isAdmin ? 'toggleSendAsDropdown()' : ''; ?>"
+         style="<?php echo !$isAdmin ? 'cursor:not-allowed;opacity:0.85;' : ''; ?>">
 
-                                <div class="sendas-dropdown" id="sendAsDropdown">
-                                    <input
-                                        type="text"
-                                        class="sendas-search"
-                                        placeholder="Search sender..."
-                                        oninput="filterSendAs(this.value)"
-                                    >
+        <div class="sendas-avatar" id="sendAsAvatar">
+            <?php echo strtoupper(substr($defaultName, 0, 2)); ?>
+        </div>
 
-                                    <?php foreach ($sendAsProfiles as $email => $profile): ?>
-                                        <div
-                                            class="sendas-item"
-                                            onclick="selectSendAs(
-                                                '<?php echo htmlspecialchars($email); ?>',
-                                                '<?php echo htmlspecialchars($profile['name']); ?>',
-                                                '<?php echo htmlspecialchars($profile['designation']); ?>'
-                                            )"
-                                        >
-                                            <div class="sendas-item-avatar">
-                                                <?php echo strtoupper(substr($profile['name'], 0, 2)); ?>
-                                            </div>
-                                            <div class="sendas-item-info">
-                                                <div class="sendas-item-name"><?php echo htmlspecialchars($profile['name']); ?></div>
-                                                <div class="sendas-item-role"><?php echo htmlspecialchars($profile['designation']); ?></div>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
+        <div class="sendas-text">
+            <div class="sendas-name" id="sendAsName">
+                <?php echo htmlspecialchars($defaultName); ?>
+            </div>
+            <div class="sendas-role" id="sendAsRole">
+                <?php echo htmlspecialchars($defaultRole); ?>
+            </div>
+        </div>
 
-                            <input type="hidden" name="from_email" id="from_email_hidden">
-                            <input type="hidden" name="from_name" id="from_name_hidden">
+        <?php if ($isAdmin): ?>
+            <span class="sendas-arrow">⌄</span>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($isAdmin): ?>
+        <div class="sendas-dropdown" id="sendAsDropdown">
+            <input type="text" class="sendas-search"
+                   placeholder="Search sender..."
+                   oninput="filterSendAs(this.value)">
+
+            <?php foreach ($sendAsProfiles as $email => $profile): ?>
+                <div class="sendas-item"
+                     onclick="selectSendAs(
+                         '<?php echo htmlspecialchars($email); ?>',
+                         '<?php echo htmlspecialchars($profile['name']); ?>',
+                         '<?php echo htmlspecialchars($profile['designation']); ?>'
+                     )">
+                    <div class="sendas-item-avatar">
+                        <?php echo strtoupper(substr($profile['name'], 0, 2)); ?>
+                    </div>
+                    <div class="sendas-item-info">
+                        <div class="sendas-item-name"><?php echo htmlspecialchars($profile['name']); ?></div>
+                        <div class="sendas-item-role"><?php echo htmlspecialchars($profile['designation']); ?></div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- Hidden fields MUST be OUTSIDE -->
+<input type="hidden" name="from_email" id="from_email_hidden"
+       value="<?php echo htmlspecialchars($defaultEmail); ?>">
+
+<input type="hidden" name="from_name" id="from_name_hidden"
+       value="<?php echo htmlspecialchars($defaultName); ?>">
+
+
                         </div>
                         
                         <!-- Smart Email Input -->
@@ -246,8 +335,8 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
                    id="cc_<?php echo $index; ?>"
                    value="<?php echo htmlspecialchars($email); ?>" 
                    onchange="onCcCheckboxChange()"
-                   <?php echo ($index === 0 || $email === 'sailesh.mulleti@financedoctor.in') ? 'checked' : ''; ?>>
-            <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
+                  <?php echo ($email === $loggedInEmail) ? 'checked' : ''; ?>>
+                             <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
                 <span class="cc-checkbox-custom"></span>
                 <span class="cc-email"><?php echo htmlspecialchars($email); ?></span>
             </label>
@@ -422,7 +511,6 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
     document.addEventListener('DOMContentLoaded', function() {
         updateCcSummary();
         updateSmartHint('');
-        updateSendAsHint();
         updateTextCounts();
         
         // Focus management
@@ -818,10 +906,13 @@ if (isset($_GET['search_emails']) && isset($_GET['query'])) {
         }
     }
     
-    // Send As Dropdown Functions
-    function toggleSendAsDropdown() {
-        document.getElementById('sendAsDropdown').classList.toggle('show');
-    }
+const IS_ADMIN = <?php echo $isAdmin ? 'true' : 'false'; ?>;
+
+function toggleSendAsDropdown() {
+    if (!IS_ADMIN) return;
+    document.getElementById('sendAsDropdown').classList.toggle('show');
+}
+
     
     function selectSendAs(email, name, role) {
         document.getElementById('from_email_hidden').value = email;
