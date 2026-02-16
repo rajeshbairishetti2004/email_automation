@@ -67,6 +67,27 @@ if (isset($_POST['delete_scheme'])) {
     }
     exit;
 }
-
+// Handle Move Scheme (Drag & Drop)
+if (isset($_POST['move_scheme'])) {
+    $id = $_POST['id'];
+    $target_category = $_POST['target_category'];
+    
+    // Validate category
+    if (!in_array($target_category, ['recommended', 'observation', 'drop'])) {
+        http_response_code(400);
+        echo "Invalid category";
+        exit;
+    }
+    
+    // Update the scheme's category
+    $stmt = $pdo->prepare("UPDATE master_schemes SET category = ? WHERE id = ?");
+    if ($stmt->execute([$target_category, $id])) {
+        echo "success";
+    } else {
+        http_response_code(500);
+        echo "Failed to move scheme";
+    }
+    exit;
+}
 http_response_code(400);
 echo 'No valid action';

@@ -195,15 +195,12 @@ body {
 }
 
 /* Badge Styles */
+/* Badge Styles */
 .designation-badge {
-    background: #e3f2fd;
-    color: #0288D1;
-    padding: 8px 14px;
-    border-radius: 30px;
-    font-size: 12px;
-    font-weight: 700;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 500;
     display: inline-block;
-    border: 1px solid #b3e5fc;
 }
 
 .status-badge {

@@ -2,7 +2,7 @@
 // schemes.php
 require_once 'auth.php';
 require_once 'db_config.php';
-require_once 'parsers.php'; // <-- Add this to use XLSX parser
+require_once 'parsers.php';
 
 requireAuth();
 $pdo = getPdo();
@@ -12,8 +12,7 @@ $currentUser = getCurrentUser();
 if (isset($_POST['import_schemes'])) {
     if ($_FILES['scheme_file']['name']) {
         $filename = $_FILES['scheme_file']['tmp_name'];
-        // Use parser from parsers.php to extract scheme names from XLSX
-        $schemeNames = parse_scheme_xlsx($filename); // expects array of names
+        $schemeNames = parse_scheme_xlsx($filename);
         foreach ($schemeNames as $scheme) {
             $scheme = trim($scheme);
             if ($scheme) {
@@ -24,7 +23,7 @@ if (isset($_POST['import_schemes'])) {
     }
 }
 
-// --- B. Handle AJAX Live Search (show all schemes with add icon) ---
+// --- B. Handle AJAX Live Search ---
 if (isset($_GET['search_query'])) {
     $search = trim($_GET['search_query']);
     $cat = trim($_GET['category']);
@@ -143,7 +142,13 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             box-shadow: var(--shadow);
             padding: 24px;
             border-top: 6px solid var(--primary);
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .scheme-col.drag-over {
+            transform: scale(1.02);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            background: #f0f9ff;
         }
 
         .col-recommended { border-top-color: var(--success); }
@@ -201,11 +206,24 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             max-height: 500px;
             overflow-y: auto;
             scrollbar-width: thin;
+            min-height: 100px;
         }
 
         .scheme-item {
             padding: 14px 0;
             border-bottom: 1px solid #f1f5f9;
+            cursor: grab;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        .scheme-item:active {
+            cursor: grabbing;
+            opacity: 0.7;
+        }
+
+        .scheme-item.dragging {
+            opacity: 0.5;
+            background: #e2e8f0;
         }
 
         .scheme-item:last-child { border-bottom: none; }
@@ -222,6 +240,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             color: var(--text-dark);
             word-break: break-word;
             padding-right: 10px;
+            pointer-events: none; /* Allow drag to work through text */
         }
 
         .edit-mode {
@@ -239,7 +258,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         /* Icons & Buttons */
-        .action-btns { display: flex; gap: 8px; }
+        .action-btns { 
+            display: flex; 
+            gap: 8px;
+            pointer-events: auto; /* Ensure buttons remain clickable */
+        }
 
         .btn-icon {
             cursor: pointer;
@@ -265,6 +288,32 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             padding: 20px 0;
         }
 
+        /* Dropdown results */
+        .search-results-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            z-index: 1050;
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .search-result-item {
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .search-result-item:hover { background-color: #f8f9fa; }
+
         @media (max-width: 1024px) {
             .scheme-grid { grid-template-columns: 1fr; }
             .content-wrap { padding: 0 20px; }
@@ -283,13 +332,13 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     <div class="content-wrap">
         <div class="page-header">
             <h1>Scheme Strategy Board</h1>
-            <p>Categorize and manage fund recommendations for client reports.</p>
+            <p>Categorize and manage fund recommendations for client reports. <strong>Drag & Drop</strong> schemes between columns.</p>
         </div>
 
         <!-- XLSX Upload Form -->
         <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin-bottom: 32px;">
             <input type="file" name="scheme_file" accept=".xlsx" required style="flex:unset; padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
-            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload</button>
+            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload Schemes</button>
         </form>
 
         <div class="scheme-grid">
@@ -300,7 +349,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             'drop'        => ['title' => 'Exit / Drop', 'icon' => 'circle-xmark', 'color' => 'danger', 'class' => 'col-drop']
         ];
         foreach ($config as $key => $sec): ?>
-            <div class="scheme-col <?= $sec['class'] ?>">
+            <div class="scheme-col <?= $sec['class'] ?>" data-category="<?= $key ?>" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
                 <h3>
                     <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
                     <?= $sec['title'] ?>
@@ -315,7 +364,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     <li class="empty-msg">No schemes in this list yet.</li>
                 <?php else: ?>
                     <?php foreach($allSchemes[$key] as $scheme): ?>
-                    <li class="scheme-item" id="item-<?= $scheme['id'] ?>">
+                    <li class="scheme-item" id="item-<?= $scheme['id'] ?>" draggable="true" ondragstart="dragStartHandler(event)" ondragend="dragEndHandler(event)" data-id="<?= $scheme['id'] ?>" data-name="<?= htmlspecialchars($scheme['scheme_name']) ?>" data-category="<?= $key ?>">
                         <div class="display-mode">
                             <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
                             <div class="action-btns">
@@ -338,7 +387,101 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     </div>
 
     <script>
-    // Live search for schemes (shows all from schemes table)
+    // Drag and Drop Variables
+    let draggedItem = null;
+
+    // Drag Handlers
+    function dragStartHandler(event) {
+        draggedItem = event.target.closest('.scheme-item');
+        if (!draggedItem) return;
+        
+        // Store data for drag
+        event.dataTransfer.setData('text/plain', JSON.stringify({
+            id: draggedItem.dataset.id,
+            name: draggedItem.dataset.name,
+            category: draggedItem.dataset.category
+        }));
+        
+        draggedItem.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function dragEndHandler(event) {
+        const item = event.target.closest('.scheme-item');
+        if (item) {
+            item.classList.remove('dragging');
+        }
+        
+        // Remove drag-over effect from all columns
+        document.querySelectorAll('.scheme-col').forEach(col => {
+            col.classList.remove('drag-over');
+        });
+        
+        draggedItem = null;
+    }
+
+    function dragOverHandler(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        event.currentTarget.classList.add('drag-over');
+    }
+
+    function dragLeaveHandler(event) {
+        event.currentTarget.classList.remove('drag-over');
+    }
+
+    function dropHandler(event) {
+        event.preventDefault();
+        const targetCol = event.currentTarget;
+        targetCol.classList.remove('drag-over');
+        
+        // Get target category
+        const targetCategory = targetCol.dataset.category;
+        
+        // Get dragged data
+        let dragData;
+        try {
+            dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
+        } catch (e) {
+            console.error('Invalid drag data');
+            return;
+        }
+        
+        // If same category, do nothing
+        if (dragData.category === targetCategory) {
+            return;
+        }
+        
+        // Move the scheme via AJAX
+        moveScheme(dragData.id, dragData.name, targetCategory);
+    }
+
+    // Function to move scheme between categories
+    function moveScheme(schemeId, schemeName, targetCategory) {
+        let formData = new FormData();
+        formData.append('move_scheme', true);
+        formData.append('id', schemeId);
+        formData.append('name', schemeName);
+        formData.append('target_category', targetCategory);
+        
+        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            .then(async res => {
+                let text = await res.text();
+                if (res.ok && text === 'success') {
+                    location.reload(); // Reload to show updated categories
+                } else if (res.status === 409) {
+                    showErrorAlert(text);
+                } else {
+                    showErrorAlert("An unexpected error occurred while moving the scheme.");
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showErrorAlert("Network error occurred. Please try again.");
+            });
+    }
+
+    // Live search for schemes
     function handleSearch(input, category) {
         let query = input.value;
         let dropdown = input.parentElement.querySelector('.search-results-dropdown');
@@ -354,13 +497,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             });
     }
 
-    // Show error alert at the top of the board
+    // Show error alert
     function showErrorAlert(message) {
-        // Remove any existing alert
         let oldAlert = document.getElementById('error-alert');
         if (oldAlert) oldAlert.remove();
 
-        // Create new alert
         let alertDiv = document.createElement('div');
         alertDiv.id = 'error-alert';
         alertDiv.style = "background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);";
@@ -398,29 +539,36 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         fetch('api_manage_schemes.php', { method: 'POST', body: formData })
             .then(() => location.reload());
     }
+
+    // Edit mode toggle (you'll need to implement save functionality)
+    function toggleEdit(id, show) {
+        const item = document.getElementById(`item-${id}`);
+        if (!item) return;
+        
+        const displayMode = item.querySelector('.display-mode');
+        const editMode = item.querySelector('.edit-mode');
+        
+        if (show) {
+            displayMode.style.display = 'none';
+            editMode.style.display = 'flex';
+            // Make item non-draggable while editing
+            item.draggable = false;
+        } else {
+            displayMode.style.display = 'flex';
+            editMode.style.display = 'none';
+            // Restore draggable
+            item.draggable = true;
+        }
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('.add-form')) {
+            document.querySelectorAll('.search-results-dropdown').forEach(d => {
+                d.style.display = 'none';
+            });
+        }
+    });
     </script>
-    <style>
-    /* Styling for the dropdown results */
-    .search-results-dropdown {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: white;
-        z-index: 1050;
-        max-height: 250px;
-        overflow-y: auto;
-    }
-    .search-result-item {
-        padding: 8px 12px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        font-size: 0.85rem;
-    }
-    .search-result-item:hover { background-color: #f8f9fa; }
-    .action-icons i { font-size: 0.8rem; }
-    </style>
 </body>
 </html>
