@@ -14,16 +14,18 @@ $isAdmin             = strtolower($loggedInDesignation) === 'admin';
 /* =========================
    SEND AS (From users table)
    ========================= */
+
 $sendAsProfiles = [];
 
+/* ---------- ADMIN ---------- */
 if ($isAdmin) {
+
+    // Fetch ALL active users for Send As dropdown
     $stmt = $pdo->prepare("
         SELECT email, name, designation
         FROM users
         WHERE status = 'active'
           AND active = 1
-          AND email IS NOT NULL
-          AND email <> ''
         ORDER BY name
     ");
     $stmt->execute();
@@ -34,17 +36,33 @@ if ($isAdmin) {
             'designation' => $row['designation']
         ];
     }
-} else {
-    // Non-admin → only logged-in user
-    if ($loggedInEmail !== '') {
+
+    // Determine selected sender (POST → fallback to logged-in user)
+    $selectedFromEmail = $_POST['from_email']
+        ?? $loggedInEmail
+        ?? array_key_first($sendAsProfiles);
+
+
+}
+/* ---------- NON-ADMIN ---------- */
+else {
+
+    if (!empty($loggedInEmail)) {
         $sendAsProfiles[$loggedInEmail] = [
             'name'        => $loggedInName,
             'designation' => $loggedInDesignation
         ];
+
+        // Non-admin can reply only as themselves
+
     }
+
 }
 
-/* Default sender */
+/* =========================
+   DEFAULT SENDER (UI)
+   ========================= */
+
 $defaultEmail = '';
 $defaultName  = '';
 $defaultRole  = '';

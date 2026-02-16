@@ -26,17 +26,32 @@ function handleEmailSending($clientId) {
     // --- Read email fields from the form ---
     $toEmail = trim($_POST['recipient_email'] ?? '');
     $ccEmailsRaw = trim($_POST['cc_emails'] ?? '');
-    $fromEmailSender = trim($_POST['from_email'] ?? '');
+   $fromEmailSender = trim($_POST['from_email'] ?? '');
+
+   if (!filter_var($fromEmailSender, FILTER_VALIDATE_EMAIL)) {
+    header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=Invalid sender email');
+    exit;
+}
+
+
+   $selectedFromName  = trim($_POST['from_name'] ?? '');
     
     // Combine To and CC emails into a single validation/logging list
     $rawEmailList = [];
     if (!empty($toEmail)) $rawEmailList[] = $toEmail;
     
-    // Split CC emails by comma, filter out empty strings
-    $ccList = array_filter(
-        array_map('trim', preg_split('/[;,]+/', $ccEmailsRaw))
-    );
+$ccList = array_filter(
+    array_map('trim', preg_split('/[;,]+/', $ccEmailsRaw)),
+    function ($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL);
+    }
+);
+
+
     $emailList = array_merge($rawEmailList, $ccList);
+
+    $emailList = array_unique($emailList);
+
 
     if ($clientId <= 0 || empty($emailList) || empty($fromEmailSender)) {
         // Redirect if no recipients or no sender is specified
@@ -62,9 +77,6 @@ function handleEmailSending($clientId) {
         exit;
     }
     
-    // Use the dynamic sender email as the sender for PHPMailer
-    $smtpFromEmail = $fromEmailSender; 
-    $smtpFromName = $_ENV['SMTP_FROM_NAME'] ?? 'Portfolio Reports'; 
 
     // --- 1. Handle New/Temporary Attachments (from the Send Email form) ---
     $attachmentPaths = [];
@@ -229,7 +241,6 @@ function handleEmailSending($clientId) {
         $signatureBlock = generateSignatureBlock($rmData);
     }
 
-    // Build HTML email body
     ob_start();
     ?>
     <html>
@@ -761,130 +772,115 @@ function handleEmailSending($clientId) {
     // Build dynamic subject
     $dynamicSubject = "$clientName - Quarterly Review $month $year";
 
-    // Send email via PHPMailer using environment variables
-    $mail = new PHPMailer(true);
-    try {
-        $mail->isSMTP();
-        $mail->Host       = $smtpHost;
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $smtpUsername;
-        $mail->Password   = $smtpPassword;
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = $smtpPort;
-        $mail->CharSet    = 'UTF-8';
 
-        $mail->setFrom($smtpFromEmail, $smtpFromName);
-        $mail->addBCC($smtpFromEmail); // Ensure sender gets a copy
+$mail = new PHPMailer(true);
 
-        // Add all recipients (TO and CC)
-        foreach ($emailList as $email) {
-            if ($email === $toEmail) {
-                $mail->addAddress($email);
-            } else {
-                $mail->addCC($email);
-            }
+try {
+
+    // ---------------- SMTP CONFIG ----------------
+    $mail->isSMTP();
+    $mail->Host       = $smtpHost;
+    $mail->SMTPAuth   = true;
+    $mail->Username   = $smtpUsername;   // contact@financedoctor.in
+    $mail->Password   = $smtpPassword;
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $mail->Port       = $smtpPort;
+    $mail->CharSet    = 'UTF-8';
+
+    // FROM = logged-in user (Send mail as already configured)
+    $mail->setFrom($fromEmailSender, $selectedFromName);
+
+    // ---------------- RECIPIENTS ----------------
+    foreach ($emailList as $email) {
+        if ($email === $toEmail) {
+            $mail->addAddress($email);
+        } else {
+            $mail->addCC($email);
         }
-
-        $mail->Subject = $dynamicSubject;
-        $mail->isHTML(true);
-        $mail->Body = $emailHtml;
-
-        // Attach All Uploaded Files (Unlimited)
-        foreach ($attachmentPaths as $index => $file) {
-            if (file_exists($file)) {
-                // Use original filename if available, otherwise use basename
-                $displayName = isset($attachmentNames[$index]) ? $attachmentNames[$index] : basename($file);
-                $mail->addAttachment($file, $displayName);
-            }
-        }
-
-        $mail->send();
-
-        // ✅ SEND FOLLOW-UP EMAIL IF TOGGLE IS CHECKED
-if (!empty($_POST['send_followup']) && !empty($_POST['followup_message'])) {
-    sendFollowupEmail(
-        $client,
-        $toEmail,
-        $ccList,
-        $smtpFromEmail,
-        $smtpFromName,
-        $pdo,
-        $_POST['followup_message']
-    );
-}
-
-        
-        // --- UPDATE REPORT STATUS TO 'SENT' ---
-        $updateStmt = $pdo->prepare("
-            UPDATE clients 
-            SET report_state = 'sent', 
-                sent_at = NOW() 
-            WHERE id = :client_id
-        ");
-        $updateStmt->execute([':client_id' => $clientId]);
-        
-        // --- LOG THE SUCCESSFUL EMAIL TRANSMISSION ---
-        try {
-            // Get sender details
-            $fromEmail = $smtpFromEmail;
-            $fromName = $smtpFromName;
-            
-            // Get recipient details
-            $toEmail = $toEmail;
-            $toName = $name;
-            
-            // Prepare CC emails as comma-separated string
-            $ccEmailsString = !empty($ccList) ? implode(', ', $ccList) : '';
-            
-$logStmt = $pdo->prepare("
-    INSERT INTO email_logs 
-    (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type, followup_sent)
-    VALUES 
-    (:client_id, :from_email, :from_name, :to_email, :to_name, :cc_emails, :email_body, 'primary', 0)
-");
-
-$logStmt->execute([
-    ':client_id' => $clientId,
-    ':from_email' => $fromEmail,
-    ':from_name' => $fromName,
-    ':to_email' => $toEmail,
-    ':to_name' => $name,
-    ':cc_emails' => $ccEmailsString,
-    ':email_body' => $emailHtml
-]);
-
-            $logId = $pdo->lastInsertId();
-            error_log("Email logged successfully with ID: $logId - From: $fromEmail, To: $toEmail, CC: " . substr($ccEmailsString, 0, 50) . "...");
-            
-        } catch (Exception $e) {
-            // Log the error but don't stop the email process
-            error_log("Failed to log email details: " . $e->getMessage());
-        }
-        
-        // Clean up ONLY temporary uploaded files (not the persistent ones)
-        foreach ($attachmentPaths as $file) {
-            // Only delete if it is NOT in the attachments folder
-            if (file_exists($file) && strpos($file, '/attachments/client_') === false) {
-                @unlink($file);
-            }
-        }
-        
-        header('Location: view_report.php?id=' . $clientId . '&sent=1');
-        exit;
-        
-    } catch (Exception $e) {
-        // Clean up temp files even if email fails (not persistent ones)
-        foreach ($attachmentPaths as $file) {
-            if (file_exists($file) && strpos($file, '/attachments/client_') === false) {
-                @unlink($file);
-            }
-        }
-        
-        // Log the error for debugging
-        error_log("Email sending failed for client ID $clientId: " . $e->getMessage());
-        
-        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($e->getMessage()));
-        exit;
     }
+
+    // ---------------- CONTENT ----------------
+    $mail->Subject = $dynamicSubject;
+    $mail->isHTML(true);
+    $mail->Body = $emailHtml;
+
+    // ---------------- ATTACHMENTS ----------------
+    foreach ($attachmentPaths as $index => $file) {
+        if (is_file($file)) {
+            $displayName = $attachmentNames[$index] ?? basename($file);
+            $mail->addAttachment($file, $displayName);
+        }
+    }
+
+    // ---------------- SEND MAIL ----------------
+    $mail->send();
+
+    // ---------------- FOLLOW-UP EMAIL ----------------
+    if (!empty($_POST['send_followup']) && !empty($_POST['followup_message'])) {
+        sendFollowupEmail(
+            $client,
+            $toEmail,
+            $ccList,
+            $fromEmailSender,
+            $selectedFromName,
+            $pdo,
+            $_POST['followup_message']
+        );
+    }
+
+    // ---------------- UPDATE REPORT STATUS ----------------
+    $updateStmt = $pdo->prepare("
+        UPDATE clients 
+        SET report_state = 'sent', 
+            sent_at = NOW() 
+        WHERE id = :client_id
+    ");
+    $updateStmt->execute([':client_id' => $clientId]);
+
+    // ---------------- LOG EMAIL ----------------
+    $ccEmailsString = !empty($ccList) ? implode(', ', $ccList) : '';
+
+    $logStmt = $pdo->prepare("
+        INSERT INTO email_logs 
+        (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type, followup_sent)
+        VALUES 
+        (:client_id, :from_email, :from_name, :to_email, :to_name, :cc_emails, :email_body, 'primary', 0)
+    ");
+
+    $logStmt->execute([
+        ':client_id' => $clientId,
+        ':from_email' => $fromEmailSender,
+        ':from_name'  => $selectedFromName,
+        ':to_email'   => $toEmail,
+        ':to_name'    => $name,
+        ':cc_emails'  => $ccEmailsString,
+        ':email_body' => $emailHtml
+    ]);
+
+    // ---------------- CLEANUP TEMP FILES ----------------
+    foreach ($attachmentPaths as $file) {
+        if (is_file($file) && strpos($file, '/attachments/client_') === false) {
+            @unlink($file);
+        }
+    }
+
+    header('Location: view_report.php?id=' . $clientId . '&sent=1');
+    exit;
+
+} catch (Exception $e) {
+
+    // Cleanup temp files on failure
+    foreach ($attachmentPaths as $file) {
+        if (is_file($file) && strpos($file, '/attachments/client_') === false) {
+            @unlink($file);
+        }
+    }
+
+    error_log("Email sending failed for client ID {$clientId}: " . $e->getMessage());
+
+    header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($e->getMessage()));
+    exit;
 }
+}
+
 ?>
