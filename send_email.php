@@ -82,7 +82,7 @@ $clientId = (int)($clientId ?? 0);
 $clientInfo = [];
 
 if ($clientId > 0) {
-    $stmt = $pdo->prepare("SELECT name FROM clients WHERE id = ?");
+   $stmt = $pdo->prepare("SELECT name, email FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
     $clientInfo = $stmt->fetch(PDO::FETCH_ASSOC);
 }
@@ -363,11 +363,10 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
                                     <span class="cc-summary-icon">📋</span>
                                     <div>
                                         <h4 class="cc-summary-title">Selected CC Recipients</h4>
-                                        <p class="cc-summary-subtitle" id="cc_summary_hint">
-                                            <?php echo isset($allEmails[0]) ? 
-                                                "Email will be copied to " . htmlspecialchars($allEmails[0]) : 
-                                                'No CC recipients selected'; ?>
-                                        </p>
+<p class="cc-summary-subtitle" id="cc_summary_hint">
+    No CC recipients selected
+</p>
+
                                     </div>
                                 </div>
                                 <div class="cc-count-badge" id="cc_count">1</div>
@@ -498,9 +497,10 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
 
     <script>
     // Email data from PHP
-    const emailData = <?php echo json_encode($allClientEmails); ?>;
-    const ccEmailData = <?php echo json_encode($allEmails); ?>;
-    const sendAsProfiles = <?php echo json_encode($sendAsProfiles); ?>;
+const emailData = <?php echo json_encode($allClientEmails); ?>;
+const ccEmailData = <?php echo json_encode($allEmails); ?>;
+const sendAsProfiles = <?php echo json_encode($sendAsProfiles); ?>;
+const DEFAULT_CLIENT_EMAIL = <?php echo json_encode($clientInfo['email'] ?? ''); ?>;
     
     // State variables
     let emailSearchTimeout;
@@ -508,43 +508,51 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
     let lastValidatedEmail = '';
     
     // Initialize on load
-    document.addEventListener('DOMContentLoaded', function() {
-        updateCcSummary();
-        updateSmartHint('');
-        updateTextCounts();
-        
-        // Focus management
-        const searchInput = document.getElementById('recipient_email_search');
-        searchInput.addEventListener('focus', function() {
-            if (this.value.length >= 2) {
-                handleEmailInput();
-            }
-        });
-        
-        // Initialize followup textarea with proper height
-        const followupTextarea = document.getElementById('followup_message');
-        if (followupTextarea) {
-            autoResizeFollowup(followupTextarea);
-        }
-        
-        // Add listener for signature changes
-        const signatureTextarea = document.getElementById('signature_block');
-        if (signatureTextarea) {
-            signatureTextarea.addEventListener('change', function() {
-                // Update follow-up if it contains old signature
-                const followupText = document.getElementById('followup_message').value;
-                const newSignature = this.value;
-                
-                // Check if follow-up already has a signature
-                if (followupText.includes('Regards,')) {
-                    // Extract the part before "Regards,"
-                    const beforeSignature = followupText.split('Regards,')[0];
-                    document.getElementById('followup_message').value = beforeSignature.trim() + '\n\n' + newSignature;
-                    autoResizeFollowup(document.getElementById('followup_message'));
-                }
-            });
+document.addEventListener('DOMContentLoaded', function () {
+    updateCcSummary();
+    updateSmartHint('');
+    updateTextCounts();
+
+    // ✅ Default Primary Recipient = Client email
+    if (DEFAULT_CLIENT_EMAIL) {
+        const input = document.getElementById('recipient_email_search');
+        const hidden = document.getElementById('recipient_email_hidden');
+
+        input.value = DEFAULT_CLIENT_EMAIL;
+        hidden.value = DEFAULT_CLIENT_EMAIL;
+
+        validateAndProcessEmail(DEFAULT_CLIENT_EMAIL);
+    }
+
+    // Focus management
+    const searchInput = document.getElementById('recipient_email_search');
+    searchInput.addEventListener('focus', function () {
+        if (this.value.length >= 2) {
+            handleEmailInput();
         }
     });
+
+    // Follow-up textarea init
+    const followupTextarea = document.getElementById('followup_message');
+    if (followupTextarea) {
+        autoResizeFollowup(followupTextarea);
+    }
+
+    // Signature change listener
+    const signatureTextarea = document.getElementById('signature_block');
+    if (signatureTextarea) {
+        signatureTextarea.addEventListener('change', function () {
+            const followupText = document.getElementById('followup_message').value;
+            if (followupText.includes('Regards,')) {
+                const before = followupText.split('Regards,')[0];
+                document.getElementById('followup_message').value =
+                    before.trim() + '\n\n' + this.value;
+                autoResizeFollowup(document.getElementById('followup_message'));
+            }
+        });
+    }
+});
+
     
     // Handle email input with smart search
     function handleEmailInput() {
