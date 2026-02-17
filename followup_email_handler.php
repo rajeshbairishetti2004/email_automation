@@ -5,7 +5,7 @@ function sendFollowupEmail($client, $toEmail, $ccList, $fromEmail, $fromName, $p
 {
     $mail = new PHPMailer(true);
 
-    $subject = $client['name'] . " - Follow-up on Quarterly Review";
+    $subject = $client['name'] . " - Quarterly Review - scheduling a zoom meeting";
 
     // ✅ USE TEXTAREA CONTENT
     $body = nl2br(htmlspecialchars($message));
