@@ -223,6 +223,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             justify-content: center;
             font-size: 18px;
         }
+        .btn-add:hover {
+            
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            transform: translateY(-1px);
+        }
 
         /* ===== ENHANCED LIST STYLES ===== */
         .scheme-list {
@@ -501,7 +506,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
             <!-- 🔥 NEW BUTTON -->
             <button onclick="openAddModal()"
-                style="padding:10px 20px; border:none; border-radius:8px; background:#22c55e; color:white; font-weight:600; cursor:pointer;">
+                style="padding:10px 20px; border:none; border-radius:8px; background:#22c55e; color:white; font-weight:600; cursor:pointer;" onmouseover="this.style.background='#16a34a'" onmouseout="this.style.background='#22c55e'">
                 + Add Scheme
             </button>
 
@@ -596,12 +601,13 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         <div style="display:flex; justify-content:flex-end; gap:10px;">
             <button onclick="closeAddModal()"
-                style="padding:8px 14px; border:none; border-radius:6px; background:#64748b; color:white;">
+                style="padding:8px 14px;cursor:pointer; border:none; border-radius:6px; background:#64748b; color:white;"onmouseover="this.style.background='#7e848b'"onmouseout="this.style.background='#64748b'">
                 Cancel
             </button>
 
             <button onclick="submitModalScheme()"
-                style="padding:8px 14px; border:none; border-radius:6px; background:#2563eb; color:white;">
+                style="padding:8px 14px; cursor:pointer; border:none; border-radius:6px; background:#2563eb; color:white;" onmouseover="this.style.background='#0c48ca'"onmouseout="this.style.background='#2563eb'">
+                
                 Submit
             </button>
         </div>
