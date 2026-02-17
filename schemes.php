@@ -459,6 +459,20 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 opacity: 1;
             }
         }
+
+        html::-webkit-scrollbar {
+    width: 8px;
+}
+
+html::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 20px;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+    background: #2563eb;
+}
+
     </style>
 </head>
 
