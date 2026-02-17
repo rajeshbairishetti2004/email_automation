@@ -347,19 +347,25 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
                         </div>
 
 <div class="cc-checkboxes-grid" id="cc_checkbox_list">
-    <?php foreach ($allEmails as $index => $email): ?>
+    <?php
+    $allowedCcEmails = [
+        'contact@financedoctor.in',
+        'sailesh.mulleti@financedoctor.in'
+    ];
+    $ccIndex = 0;
+    foreach ($allowedCcEmails as $email): ?>
         <div class="cc-checkbox-wrapper">
-            <input type="checkbox" 
-                   id="cc_<?php echo $index; ?>"
-                   value="<?php echo htmlspecialchars($email); ?>" 
+            <input type="checkbox"
+                   id="cc_<?php echo $ccIndex; ?>"
+                   value="<?php echo htmlspecialchars($email); ?>"
                    onchange="onCcCheckboxChange()"
-                  <?php echo ($email === $loggedInEmail) ? 'checked' : ''; ?>>
-                             <label for="cc_<?php echo $index; ?>" class="cc-checkbox-label">
+                   checked>
+            <label for="cc_<?php echo $ccIndex; ?>" class="cc-checkbox-label">
                 <span class="cc-checkbox-custom"></span>
                 <span class="cc-email"><?php echo htmlspecialchars($email); ?></span>
             </label>
         </div>
-    <?php endforeach; ?>
+    <?php $ccIndex++; endforeach; ?>
 </div>
 
 <!-- External CC Input -->
