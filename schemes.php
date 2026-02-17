@@ -10,15 +10,24 @@ $currentUser = getCurrentUser();
 
 // --- A. Handle XLSX File Upload ---
 if (isset($_POST['import_schemes'])) {
+
     if ($_FILES['scheme_file']['name']) {
+
         $filename = $_FILES['scheme_file']['tmp_name'];
-        $schemeNames = parse_scheme_xlsx($filename);
-        foreach ($schemeNames as $scheme) {
-            $scheme = trim($scheme);
-            if ($scheme) {
-                $stmt = $pdo->prepare("INSERT IGNORE INTO schemes (scheme_name) VALUES (?)");
-                $stmt->execute([$scheme]);
-            }
+        $schemes = parse_scheme_xlsx($filename);
+
+        foreach ($schemes as $schemeData) {
+
+            $stmt = $pdo->prepare("
+        INSERT INTO master_schemes (scheme_name, category)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE category = VALUES(category)
+    ");
+
+            $stmt->execute([
+                $schemeData['name'],
+                $schemeData['category']
+            ]);
         }
     }
 }
@@ -57,6 +66,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -108,7 +118,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transition: background 0.2s;
         }
 
-        .btn-back:hover { background: #475569; }
+        .btn-back:hover {
+            background: #475569;
+        }
 
         .content-wrap {
             max-width: 1300px;
@@ -151,9 +163,17 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             background: #f0f9ff;
         }
 
-        .col-recommended { border-top-color: var(--success); }
-        .col-observation { border-top-color: var(--warning); }
-        .col-drop { border-top-color: var(--danger); }
+        .col-recommended {
+            border-top-color: var(--success);
+        }
+
+        .col-observation {
+            border-top-color: var(--warning);
+        }
+
+        .col-drop {
+            border-top-color: var(--danger);
+        }
 
         .scheme-col h3 {
             font-family: 'Poppins', sans-serif;
@@ -182,7 +202,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             background: #fcfcfc;
         }
 
-        .add-form input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        .add-form input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
 
         .btn-add {
             background: var(--primary);
@@ -226,7 +249,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             background: #e2e8f0;
         }
 
-        .scheme-item:last-child { border-bottom: none; }
+        .scheme-item:last-child {
+            border-bottom: none;
+        }
 
         .display-mode {
             display: flex;
@@ -240,7 +265,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             color: var(--text-dark);
             word-break: break-word;
             padding-right: 10px;
-            pointer-events: none; /* Allow drag to work through text */
+            pointer-events: none;
+            /* Allow drag to work through text */
         }
 
         .edit-mode {
@@ -258,10 +284,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         /* Icons & Buttons */
-        .action-btns { 
-            display: flex; 
+        .action-btns {
+            display: flex;
             gap: 8px;
-            pointer-events: auto; /* Ensure buttons remain clickable */
+            pointer-events: auto;
+            /* Ensure buttons remain clickable */
         }
 
         .btn-icon {
@@ -275,10 +302,23 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             color: #94a3b8;
         }
 
-        .btn-edit:hover { color: var(--primary); background: #eff6ff; }
-        .btn-del:hover { color: var(--danger); background: #fef2f2; }
-        .btn-save { color: var(--success); }
-        .btn-cancel { color: #94a3b8; }
+        .btn-edit:hover {
+            color: var(--primary);
+            background: #eff6ff;
+        }
+
+        .btn-del:hover {
+            color: var(--danger);
+            background: #fef2f2;
+        }
+
+        .btn-save {
+            color: var(--success);
+        }
+
+        .btn-cancel {
+            color: #94a3b8;
+        }
 
         .empty-msg {
             text-align: center;
@@ -312,15 +352,26 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             font-size: 0.85rem;
         }
 
-        .search-result-item:hover { background-color: #f8f9fa; }
+        .search-result-item:hover {
+            background-color: #f8f9fa;
+        }
 
         @media (max-width: 1024px) {
-            .scheme-grid { grid-template-columns: 1fr; }
-            .content-wrap { padding: 0 20px; }
-            .top-nav { padding: 20px; }
+            .scheme-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-wrap {
+                padding: 0 20px;
+            }
+
+            .top-nav {
+                padding: 20px;
+            }
         }
     </style>
 </head>
+
 <body>
 
     <nav class="top-nav">
@@ -342,233 +393,243 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         </form>
 
         <div class="scheme-grid">
-        <?php
-        $config = [
-            'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check', 'color' => 'success', 'class' => 'col-recommended'],
-            'observation' => ['title' => 'Observation', 'icon' => 'eye', 'color' => 'warning', 'class' => 'col-observation'],
-            'drop'        => ['title' => 'Exit / Drop', 'icon' => 'circle-xmark', 'color' => 'danger', 'class' => 'col-drop']
-        ];
-        foreach ($config as $key => $sec): ?>
-            <div class="scheme-col <?= $sec['class'] ?>" data-category="<?= $key ?>" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
-                <h3>
-                    <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
-                    <?= $sec['title'] ?>
-                </h3>
-                <div class="add-form" style="margin-bottom:18px; position:relative;">
-                    <input type="text" placeholder="Search or enter fund name..." onkeyup="handleSearch(this, '<?= $key ?>')" autocomplete="off">
-                    <button type="button" class="btn-add" style="background:var(--<?= $sec['color'] ?>); pointer-events:none; opacity:0.7;"><i class="fa-solid fa-plus"></i></button>
-                    <div class="search-results-dropdown shadow-sm border" style="display:none; position:absolute; width:100%;"></div>
+            <?php
+            $config = [
+                'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check', 'color' => 'success', 'class' => 'col-recommended'],
+                'observation' => ['title' => 'Observation', 'icon' => 'eye', 'color' => 'warning', 'class' => 'col-observation'],
+                'drop'        => ['title' => 'Exit / Drop', 'icon' => 'circle-xmark', 'color' => 'danger', 'class' => 'col-drop']
+            ];
+            foreach ($config as $key => $sec): ?>
+                <div class="scheme-col <?= $sec['class'] ?>" data-category="<?= $key ?>" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
+                    <h3>
+                        <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
+                        <?= $sec['title'] ?>
+                    </h3>
+                    <div class="add-form" style="margin-bottom:18px; position:relative;">
+                        <input type="text" placeholder="Search or enter fund name..." onkeyup="handleSearch(this, '<?= $key ?>')" autocomplete="off">
+                        <button type="button" class="btn-add" style="background:var(--<?= $sec['color'] ?>); pointer-events:none; opacity:0.7;"><i class="fa-solid fa-plus"></i></button>
+                        <div class="search-results-dropdown shadow-sm border" style="display:none; position:absolute; width:100%;"></div>
+                    </div>
+                    <ul class="scheme-list">
+                        <?php if (empty($allSchemes[$key])): ?>
+                            <li class="empty-msg">No schemes in this list yet.</li>
+                        <?php else: ?>
+                            <?php foreach ($allSchemes[$key] as $scheme): ?>
+                                <li class="scheme-item" id="item-<?= $scheme['id'] ?>" draggable="true" ondragstart="dragStartHandler(event)" ondragend="dragEndHandler(event)" data-id="<?= $scheme['id'] ?>" data-name="<?= htmlspecialchars($scheme['scheme_name']) ?>" data-category="<?= $key ?>">
+                                    <div class="display-mode">
+                                        <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
+                                        <div class="action-btns">
+                                            <button class="btn-icon btn-edit" onclick="toggleEdit(<?= $scheme['id'] ?>, true)" title="Edit Name"><i class="fa-solid fa-pen-to-square"></i></button>
+                                            <button class="btn-icon btn-del" onclick="deleteScheme(<?= $scheme['id'] ?>)" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+                                        </div>
+                                    </div>
+                                    <form class="edit-mode" style="display:none;" onsubmit="return false;">
+                                        <input type="text" value="<?= htmlspecialchars($scheme['scheme_name']) ?>" required>
+                                        <button class="btn-icon btn-save" title="Save Changes"><i class="fa-solid fa-check"></i></button>
+                                        <button type="button" class="btn-icon btn-cancel" onclick="toggleEdit(<?= $scheme['id'] ?>, false)" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+                                    </form>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </ul>
                 </div>
-                <ul class="scheme-list">
-                <?php if (empty($allSchemes[$key])): ?>
-                    <li class="empty-msg">No schemes in this list yet.</li>
-                <?php else: ?>
-                    <?php foreach($allSchemes[$key] as $scheme): ?>
-                    <li class="scheme-item" id="item-<?= $scheme['id'] ?>" draggable="true" ondragstart="dragStartHandler(event)" ondragend="dragEndHandler(event)" data-id="<?= $scheme['id'] ?>" data-name="<?= htmlspecialchars($scheme['scheme_name']) ?>" data-category="<?= $key ?>">
-                        <div class="display-mode">
-                            <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
-                            <div class="action-btns">
-                                <button class="btn-icon btn-edit" onclick="toggleEdit(<?= $scheme['id'] ?>, true)" title="Edit Name"><i class="fa-solid fa-pen-to-square"></i></button>
-                                <button class="btn-icon btn-del" onclick="deleteScheme(<?= $scheme['id'] ?>)" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
-                            </div>
-                        </div>
-                        <form class="edit-mode" style="display:none;" onsubmit="return false;">
-                            <input type="text" value="<?= htmlspecialchars($scheme['scheme_name']) ?>" required>
-                            <button class="btn-icon btn-save" title="Save Changes"><i class="fa-solid fa-check"></i></button>
-                            <button type="button" class="btn-icon btn-cancel" onclick="toggleEdit(<?= $scheme['id'] ?>, false)" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
-                        </form>
-                    </li>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                </ul>
-            </div>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
         </div>
     </div>
 
     <script>
-    // Drag and Drop Variables
-    let draggedItem = null;
+        // Drag and Drop Variables
+        let draggedItem = null;
 
-    // Drag Handlers
-    function dragStartHandler(event) {
-        draggedItem = event.target.closest('.scheme-item');
-        if (!draggedItem) return;
-        
-        // Store data for drag
-        event.dataTransfer.setData('text/plain', JSON.stringify({
-            id: draggedItem.dataset.id,
-            name: draggedItem.dataset.name,
-            category: draggedItem.dataset.category
-        }));
-        
-        draggedItem.classList.add('dragging');
-        event.dataTransfer.effectAllowed = 'move';
-    }
+        // Drag Handlers
+        function dragStartHandler(event) {
+            draggedItem = event.target.closest('.scheme-item');
+            if (!draggedItem) return;
 
-    function dragEndHandler(event) {
-        const item = event.target.closest('.scheme-item');
-        if (item) {
-            item.classList.remove('dragging');
+            // Store data for drag
+            event.dataTransfer.setData('text/plain', JSON.stringify({
+                id: draggedItem.dataset.id,
+                name: draggedItem.dataset.name,
+                category: draggedItem.dataset.category
+            }));
+
+            draggedItem.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
         }
-        
-        // Remove drag-over effect from all columns
-        document.querySelectorAll('.scheme-col').forEach(col => {
-            col.classList.remove('drag-over');
-        });
-        
-        draggedItem = null;
-    }
 
-    function dragOverHandler(event) {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        event.currentTarget.classList.add('drag-over');
-    }
+        function dragEndHandler(event) {
+            const item = event.target.closest('.scheme-item');
+            if (item) {
+                item.classList.remove('dragging');
+            }
 
-    function dragLeaveHandler(event) {
-        event.currentTarget.classList.remove('drag-over');
-    }
-
-    function dropHandler(event) {
-        event.preventDefault();
-        const targetCol = event.currentTarget;
-        targetCol.classList.remove('drag-over');
-        
-        // Get target category
-        const targetCategory = targetCol.dataset.category;
-        
-        // Get dragged data
-        let dragData;
-        try {
-            dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
-        } catch (e) {
-            console.error('Invalid drag data');
-            return;
-        }
-        
-        // If same category, do nothing
-        if (dragData.category === targetCategory) {
-            return;
-        }
-        
-        // Move the scheme via AJAX
-        moveScheme(dragData.id, dragData.name, targetCategory);
-    }
-
-    // Function to move scheme between categories
-    function moveScheme(schemeId, schemeName, targetCategory) {
-        let formData = new FormData();
-        formData.append('move_scheme', true);
-        formData.append('id', schemeId);
-        formData.append('name', schemeName);
-        formData.append('target_category', targetCategory);
-        
-        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
-            .then(async res => {
-                let text = await res.text();
-                if (res.ok && text === 'success') {
-                    location.reload(); // Reload to show updated categories
-                } else if (res.status === 409) {
-                    showErrorAlert(text);
-                } else {
-                    showErrorAlert("An unexpected error occurred while moving the scheme.");
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showErrorAlert("Network error occurred. Please try again.");
+            // Remove drag-over effect from all columns
+            document.querySelectorAll('.scheme-col').forEach(col => {
+                col.classList.remove('drag-over');
             });
-    }
 
-    // Live search for schemes
-    function handleSearch(input, category) {
-        let query = input.value;
-        let dropdown = input.parentElement.querySelector('.search-results-dropdown');
-        if (query.length < 1) {
-            dropdown.style.display = 'none';
-            return;
+            draggedItem = null;
         }
-        fetch(`schemes.php?search_query=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`)
-            .then(res => res.text())
-            .then(data => {
-                dropdown.innerHTML = data;
-                dropdown.style.display = 'block';
-            });
-    }
 
-    // Show error alert
-    function showErrorAlert(message) {
-        let oldAlert = document.getElementById('error-alert');
-        if (oldAlert) oldAlert.remove();
+        function dragOverHandler(event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            event.currentTarget.classList.add('drag-over');
+        }
 
-        let alertDiv = document.createElement('div');
-        alertDiv.id = 'error-alert';
-        alertDiv.style = "background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);";
-        alertDiv.innerHTML = `<span><i class="fa-solid fa-circle-exclamation" style="margin-right: 10px;"></i> ${message}</span>
+        function dragLeaveHandler(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        function dropHandler(event) {
+            event.preventDefault();
+            const targetCol = event.currentTarget;
+            targetCol.classList.remove('drag-over');
+
+            // Get target category
+            const targetCategory = targetCol.dataset.category;
+
+            // Get dragged data
+            let dragData;
+            try {
+                dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
+            } catch (e) {
+                console.error('Invalid drag data');
+                return;
+            }
+
+            // If same category, do nothing
+            if (dragData.category === targetCategory) {
+                return;
+            }
+
+            // Move the scheme via AJAX
+            moveScheme(dragData.id, dragData.name, targetCategory);
+        }
+
+        // Function to move scheme between categories
+        function moveScheme(schemeId, schemeName, targetCategory) {
+            let formData = new FormData();
+            formData.append('move_scheme', true);
+            formData.append('id', schemeId);
+            formData.append('name', schemeName);
+            formData.append('target_category', targetCategory);
+
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(async res => {
+                    let text = await res.text();
+                    if (res.ok && text === 'success') {
+                        location.reload(); // Reload to show updated categories
+                    } else if (res.status === 409) {
+                        showErrorAlert(text);
+                    } else {
+                        showErrorAlert("An unexpected error occurred while moving the scheme.");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showErrorAlert("Network error occurred. Please try again.");
+                });
+        }
+
+        // Live search for schemes
+        function handleSearch(input, category) {
+            let query = input.value;
+            let dropdown = input.parentElement.querySelector('.search-results-dropdown');
+            if (query.length < 1) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            fetch(`schemes.php?search_query=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`)
+                .then(res => res.text())
+                .then(data => {
+                    dropdown.innerHTML = data;
+                    dropdown.style.display = 'block';
+                });
+        }
+
+        // Show error alert
+        function showErrorAlert(message) {
+            let oldAlert = document.getElementById('error-alert');
+            if (oldAlert) oldAlert.remove();
+
+            let alertDiv = document.createElement('div');
+            alertDiv.id = 'error-alert';
+            alertDiv.style = "background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 15px; border-radius: 12px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);";
+            alertDiv.innerHTML = `<span><i class="fa-solid fa-circle-exclamation" style="margin-right: 10px;"></i> ${message}</span>
             <button onclick="this.parentElement.remove()" style="background: none; border: none; color: #dc2626; cursor: pointer; font-size: 20px; line-height: 1;">&times;</button>`;
-        let contentWrap = document.querySelector('.content-wrap');
-        contentWrap.insertBefore(alertDiv, contentWrap.firstChild);
-    }
-
-    // Add scheme to master_schemes (from dropdown)
-    function selectScheme(name, category) {
-        let formData = new FormData();
-        formData.append('add_to_board', true);
-        formData.append('name', name);
-        formData.append('cat', category);
-        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
-            .then(async res => {
-                let text = await res.text();
-                if (res.ok && text === 'success') {
-                    location.reload();
-                } else if (res.status === 409) {
-                    showErrorAlert(text);
-                } else {
-                    showErrorAlert("An unexpected error occurred. Please try again.");
-                }
-            });
-    }
-
-    // Delete scheme from master_schemes
-    function deleteScheme(id) {
-        if (!confirm('Are you sure you want to delete this scheme?')) return;
-        let formData = new FormData();
-        formData.append('delete_scheme', true);
-        formData.append('id', id);
-        fetch('api_manage_schemes.php', { method: 'POST', body: formData })
-            .then(() => location.reload());
-    }
-
-    // Edit mode toggle (you'll need to implement save functionality)
-    function toggleEdit(id, show) {
-        const item = document.getElementById(`item-${id}`);
-        if (!item) return;
-        
-        const displayMode = item.querySelector('.display-mode');
-        const editMode = item.querySelector('.edit-mode');
-        
-        if (show) {
-            displayMode.style.display = 'none';
-            editMode.style.display = 'flex';
-            // Make item non-draggable while editing
-            item.draggable = false;
-        } else {
-            displayMode.style.display = 'flex';
-            editMode.style.display = 'none';
-            // Restore draggable
-            item.draggable = true;
+            let contentWrap = document.querySelector('.content-wrap');
+            contentWrap.insertBefore(alertDiv, contentWrap.firstChild);
         }
-    }
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function(event) {
-        if (!event.target.closest('.add-form')) {
-            document.querySelectorAll('.search-results-dropdown').forEach(d => {
-                d.style.display = 'none';
-            });
+        // Add scheme to master_schemes (from dropdown)
+        function selectScheme(name, category) {
+            let formData = new FormData();
+            formData.append('add_to_board', true);
+            formData.append('name', name);
+            formData.append('cat', category);
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(async res => {
+                    let text = await res.text();
+                    if (res.ok && text === 'success') {
+                        location.reload();
+                    } else if (res.status === 409) {
+                        showErrorAlert(text);
+                    } else {
+                        showErrorAlert("An unexpected error occurred. Please try again.");
+                    }
+                });
         }
-    });
+
+        // Delete scheme from master_schemes
+        function deleteScheme(id) {
+            if (!confirm('Are you sure you want to delete this scheme?')) return;
+            let formData = new FormData();
+            formData.append('delete_scheme', true);
+            formData.append('id', id);
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(() => location.reload());
+        }
+
+        // Edit mode toggle (you'll need to implement save functionality)
+        function toggleEdit(id, show) {
+            const item = document.getElementById(`item-${id}`);
+            if (!item) return;
+
+            const displayMode = item.querySelector('.display-mode');
+            const editMode = item.querySelector('.edit-mode');
+
+            if (show) {
+                displayMode.style.display = 'none';
+                editMode.style.display = 'flex';
+                // Make item non-draggable while editing
+                item.draggable = false;
+            } else {
+                displayMode.style.display = 'flex';
+                editMode.style.display = 'none';
+                // Restore draggable
+                item.draggable = true;
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.add-form')) {
+                document.querySelectorAll('.search-results-dropdown').forEach(d => {
+                    d.style.display = 'none';
+                });
+            }
+        });
     </script>
 </body>
+
 </html>

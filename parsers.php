@@ -639,21 +639,55 @@ if (!empty($pdfGoal['client_name'])) {
     return $clients;
 }
 
-function parse_scheme_xlsx($filepath) {
-    $names = [];
-    $spreadsheet = IOFactory::load($filepath);
-    $sheet = $spreadsheet->getActiveSheet();
-    foreach ($sheet->getRowIterator() as $row) {
-        $cellIterator = $row->getCellIterator();
-        $cellIterator->setIterateOnlyExistingCells(false);
-        $cell = $cellIterator->current();
-        $val = trim((string)$cell->getValue());
-        if ($val !== '' && strtolower($val) !== 'scheme_name') { // skip header if present
-            $names[] = $val;
+
+function parse_scheme_xlsx($filePath)
+{
+    $data = [];
+
+    $spreadsheet = IOFactory::load($filePath);
+
+    // ✅ Get SECOND sheet (index starts from 0)
+    $sheet = $spreadsheet->getSheet(1);
+
+    $highestRow = $sheet->getHighestRow();
+    $highestColumn = $sheet->getHighestColumn();
+
+    // 🔍 Read header row (Row 1)
+    $headers = [];
+    foreach ($sheet->rangeToArray("A1:{$highestColumn}1")[0] as $colIndex => $header) {
+        $header = strtolower(trim($header));
+
+        if ($header === 'continue') {
+            $headers[$colIndex] = 'recommended';
+        } elseif ($header === 'under observation') {
+            $headers[$colIndex] = 'observation';
+        } elseif ($header === 'drop') {
+            $headers[$colIndex] = 'drop';
         }
     }
-    return $names;
+
+    // 🔁 Loop from row 2 (skip header)
+    for ($row = 2; $row <= $highestRow; $row++) {
+
+        $rowData = $sheet->rangeToArray("A{$row}:{$highestColumn}{$row}")[0];
+
+        foreach ($headers as $colIndex => $category) {
+
+            $value = trim((string)$rowData[$colIndex]);
+
+            // Skip empty & formulas
+            if ($value !== '' && strpos($value, '=') !== 0) {
+                $data[] = [
+                    'name' => $value,
+                    'category' => $category
+                ];
+            }
+        }
+    }
+
+    return $data;
 }
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -780,3 +814,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
 }
+
+
