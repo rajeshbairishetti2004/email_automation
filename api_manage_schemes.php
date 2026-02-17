@@ -35,10 +35,11 @@ if (isset($_POST['add_to_board'])) {
 
     // ✅ Insert if not exists at all
     $stmt = $pdo->prepare(
-        "INSERT INTO master_schemes (scheme_name, category, created_by)
-         VALUES (?, ?, ?)"
+        "INSERT INTO master_schemes (scheme_name, category)
+     VALUES (?, ?)"
     );
-    $stmt->execute([$name, $cat, $_SESSION['user_id']]);
+    $stmt->execute([$name, $cat]);
+
 
     echo 'success';
     exit;
@@ -100,6 +101,24 @@ if (isset($_POST['update_scheme'])) {
     }
     exit;
 }
+
+// Fetch schemes by category
+if (isset($_POST['get_category'])) {
+    $category = $_POST['category'] ?? '';
+
+    if (!in_array($category, ['recommended', 'observation', 'drop'])) {
+        http_response_code(400);
+        echo "Invalid category";
+        exit;
+    }
+
+    $stmt = $pdo->prepare("SELECT id, scheme_name FROM master_schemes WHERE category = ? ORDER BY scheme_name ASC");
+    $stmt->execute([$category]);
+
+    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    exit;
+}
+
 
 http_response_code(400);
 echo 'No valid action';

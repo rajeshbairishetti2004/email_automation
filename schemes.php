@@ -189,14 +189,21 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         .add-form input {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            font-size: 14px;
-            outline: none;
-            background: #fcfcfc;
-        }
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 16px; /* increase input text size */
+    outline: none;
+    background: #fcfcfc;
+}
+
+/* 🔥 Increase placeholder text size */
+.add-form input::placeholder {
+    font-size: 16px;
+    color: #94a3b8; /* optional softer color */
+}
+
 
         .add-form input:focus {
             border-color: var(--primary);
@@ -386,6 +393,34 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             border: 2px dashed #e2e8f0;
         }
 
+        /* 🔥 Modal Input + Dropdown Styling */
+#modalSchemeName,
+#modalCategory {
+    width: 100%;
+    height: 48px;                 /* same height */
+    padding: 0 14px;              /* horizontal padding only */
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    font-size: 16px;              /* bigger text */
+    margin-bottom: 18px;
+    box-sizing: border-box;
+}
+
+/* Placeholder styling */
+#modalSchemeName::placeholder {
+    font-size: 16px;
+    color: #94a3b8;
+}
+
+/* Focus effect */
+#modalSchemeName:focus,
+#modalCategory:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
+
         /* Dropdown results (unchanged) */
 
 
@@ -452,10 +487,26 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
 
         <!-- XLSX Upload Form -->
-        <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin-bottom: 32px;">
-            <input type="file" name="scheme_file" accept=".xlsx" required style="flex:unset; padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
-            <button type="submit" name="import_schemes" class="btn-add" style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">Upload Schemes</button>
-        </form>
+        <div style="display:flex; gap:15px; align-items:center; margin-bottom:32px;">
+
+            <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin:0;">
+                <input type="file" name="scheme_file" accept=".xlsx" required
+                    style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
+                <button type="submit" name="import_schemes"
+                    class="btn-add"
+                    style="width:auto; min-width:140px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">
+                    Upload Schemes
+                </button>
+            </form>
+
+            <!-- 🔥 NEW BUTTON -->
+            <button onclick="openAddModal()"
+                style="padding:10px 20px; border:none; border-radius:8px; background:#22c55e; color:white; font-weight:600; cursor:pointer;">
+                + Add Scheme
+            </button>
+
+        </div>
+
 
         <div class="scheme-grid">
             <?php
@@ -476,7 +527,12 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
                     <div class="add-form" style="margin-bottom:18px; position:relative;">
                         <input type="text" placeholder="Enter Scheme name to search..." onkeyup="handleSearch(this)" autocomplete="off">
-                        <button type="button" class="btn-add" style="background:var(--<?= $sec['color'] ?>); pointer-events:none; opacity:0.7;"><i class="fa-solid fa-plus"></i></button>
+                        <button type="button"
+                            class="btn-add"
+                            style="background:var(--<?= $sec['color'] ?>);"
+                            onclick="addSchemeFromInput(this)">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
                     </div>
                     <ul class="scheme-list">
                         <?php if (empty($allSchemes[$key])): ?>
@@ -504,9 +560,121 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             <?php endforeach; ?>
         </div>
     </div>
+    <!-- ADD SCHEME MODAL -->
+<div id="addSchemeModal" style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.4);
+    justify-content:center;
+    align-items:center;
+    z-index:1000;
+">
+
+    <div style="
+        background:white;
+        width:400px;
+        padding:30px;
+        border-radius:16px;
+        box-shadow:0 10px 40px rgba(0,0,0,0.15);
+    ">
+
+        <h3 style="margin-bottom:20px;">Add New Scheme</h3>
+
+        <input type="text" id="modalSchemeName"
+            placeholder="Enter Scheme Name"
+            >
+
+        <select id="modalCategory"
+            >
+
+            <option value="recommended">Recommended</option>
+            <option value="observation">Observation</option>
+            <option value="drop">Exit / Drop</option>
+
+        </select>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="closeAddModal()"
+                style="padding:8px 14px; border:none; border-radius:6px; background:#64748b; color:white;">
+                Cancel
+            </button>
+
+            <button onclick="submitModalScheme()"
+                style="padding:8px 14px; border:none; border-radius:6px; background:#2563eb; color:white;">
+                Submit
+            </button>
+        </div>
+
+    </div>
+</div>
+
 
     <script>
         // Drag and Drop Variables
+
+        function openAddModal() {
+    document.getElementById('addSchemeModal').style.display = 'flex';
+}
+
+function closeAddModal() {
+    document.getElementById('addSchemeModal').style.display = 'none';
+}
+
+function submitModalScheme() {
+
+    const name = document.getElementById('modalSchemeName').value.trim();
+    const category = document.getElementById('modalCategory').value;
+
+    if (!name) {
+        alert("Please enter scheme name");
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append('add_to_board', true);
+    formData.append('name', name);
+    formData.append('cat', category);
+
+    fetch('api_manage_schemes.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.text())
+    .then(response => {
+
+        if (response === 'success') {
+
+            closeAddModal();
+
+            document.getElementById('modalSchemeName').value = '';
+
+            // 🔥 Refresh only selected category
+            refreshCategory(category);
+
+        } else {
+            alert(response);
+        }
+    });
+}
+document.getElementById('addSchemeModal').addEventListener('click', function(e) {
+    if (e.target.id === 'addSchemeModal') {
+        closeAddModal();
+    }
+});
+function openAddModal() {
+    const modal = document.getElementById('addSchemeModal');
+    modal.style.display = 'flex';
+    document.getElementById('modalSchemeName').focus();
+}
+document.getElementById('modalSchemeName')
+.addEventListener('keypress', function(e){
+    if(e.key === 'Enter'){
+        submitModalScheme();
+    }
+});
+
+
         let draggedItem = null;
 
         // Drag Handlers
@@ -547,6 +715,43 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         function dragLeaveHandler(event) {
             event.currentTarget.classList.remove('drag-over');
+        }
+
+        function addSchemeFromInput(button) {
+
+            const column = button.closest('.scheme-col');
+            const input = column.querySelector('input[type="text"]');
+            const category = column.dataset.category;
+            const schemeName = input.value.trim();
+
+            if (!schemeName) {
+                alert("Please enter scheme name");
+                return;
+            }
+
+            let formData = new FormData();
+            formData.append('add_to_board', true);
+            formData.append('name', schemeName);
+            formData.append('cat', category);
+
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.text())
+                .then(response => {
+
+                    if (response === 'success') {
+
+                        input.value = "";
+
+                        // 🔥 THIS IS THE IMPORTANT PART
+                        refreshCategory(category);
+
+                    } else {
+                        alert(response);
+                    }
+                });
         }
 
         function dropHandler(event) {
@@ -623,18 +828,20 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
 
         // Live search for schemes
-        function handleSearch(input, category) {
-            const filter = input.value.toLowerCase();
+        function handleSearch(input) {
+
+            const filter = input.value.toLowerCase().trim();
             const column = input.closest('.scheme-col');
-            const items = column.querySelectorAll('.scheme-item');
-            const emptyMsg = column.querySelector('.empty-msg');
+            const list = column.querySelector('.scheme-list');
+            const items = list.querySelectorAll('.scheme-item');
 
             let visibleCount = 0;
 
             items.forEach(item => {
                 const name = item.querySelector('.scheme-name').innerText.toLowerCase();
 
-                if (name.includes(filter)) {
+                // ✅ Match from starting letter only
+                if (filter === '' || name.startsWith(filter)) {
                     item.style.display = '';
                     visibleCount++;
                 } else {
@@ -642,10 +849,32 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 }
             });
 
-            // Show or hide empty message dynamically
-            if (emptyMsg) {
-                emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+            // 🔥 Remove existing search message if any
+            let oldMsg = list.querySelector('.search-empty-msg');
+            if (oldMsg) oldMsg.remove();
+
+            // ✅ If search text exists AND no matches → show message
+            if (filter !== '' && visibleCount === 0) {
+
+                const msg = document.createElement('li');
+                msg.className = 'search-empty-msg';
+                msg.style.cssText = `
+            text-align:center;
+            font-size:13px;
+            color:#94a3b8;
+            padding:20px;
+            font-style:italic;
+        `;
+
+                msg.innerHTML = `
+            Searched scheme is not available.<br>
+            Click <strong>+</strong> to add.
+        `;
+
+                list.appendChild(msg);
             }
+
+            updateCounts();
         }
 
         // Show error alert
@@ -675,12 +904,66 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 .then(async res => {
                     let text = await res.text();
                     if (res.ok && text === 'success') {
-                        location.reload();
+                        refreshCategory(category);
                     } else if (res.status === 409) {
                         showErrorAlert(text);
                     } else {
                         showErrorAlert("An unexpected error occurred. Please try again.");
                     }
+                });
+        }
+
+        function refreshCategory(category) {
+
+            let formData = new FormData();
+            formData.append('get_category', true);
+            formData.append('category', category);
+
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+
+                    const list = document.querySelector(
+                        `.scheme-col[data-category="${category}"] .scheme-list`
+                    );
+
+                    list.innerHTML = '';
+
+                    if (data.length === 0) {
+                        list.innerHTML = '<li class="empty-msg">No schemes in this list yet.</li>';
+                    } else {
+                        data.forEach(scheme => {
+
+                            const li = document.createElement('li');
+                            li.className = 'scheme-item';
+                            li.id = `item-${scheme.id}`;
+                            li.draggable = true;
+                            li.dataset.id = scheme.id;
+                            li.dataset.name = scheme.scheme_name;
+                            li.dataset.category = category;
+
+                            li.innerHTML = `
+                    <div class="display-mode">
+                        <span class="scheme-name">${scheme.scheme_name}</span>
+                        <div class="action-btns">
+                            <button class="btn-icon btn-edit" onclick="toggleEdit(${scheme.id}, true)">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button class="btn-icon btn-del" onclick="deleteScheme(${scheme.id})">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                            list.appendChild(li);
+                        });
+                    }
+
+                    updateCounts();
                 });
         }
 
