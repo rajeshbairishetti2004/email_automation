@@ -488,6 +488,7 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
                                     placeholder="Enter follow-up email content..."
                                     oninput="autoResizeFollowup(this)"
                                     spellcheck="true"
+                                    style="overflow:hidden; resize:none; max-height:none;"
                                 ></textarea>
                                 <div class="textarea-footer">
                                     <div class="character-count" id="character_count">0 characters</div>
