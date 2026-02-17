@@ -19,36 +19,27 @@ if (isset($_POST['add_to_board'])) {
 
     // 🔍 Check if scheme already exists (any category)
     $check = $pdo->prepare(
-        "SELECT category FROM master_schemes WHERE scheme_name = ? LIMIT 1"
+        "SELECT id FROM master_schemes WHERE scheme_name = ? LIMIT 1"
     );
     $check->execute([$name]);
     $existing = $check->fetch(PDO::FETCH_ASSOC);
 
     if ($existing) {
-        // Map DB category to user-friendly label
-        $labels = [
-            'recommended' => 'Recommended',
-            'observation' => 'Under Observation',
-            'drop'        => 'Exit/Drop'
-        ];
-        $section = $labels[$existing['category']] ?? $existing['category'];
-
-        if ($existing['category'] !== $cat) {
-            http_response_code(409);
-            echo "$name is already present in $section schemes.";
-        } else {
-            http_response_code(409);
-            echo "$name is already present in $section schemes.";
-        }
+        // Instead of error, move it
+        $stmt = $pdo->prepare("UPDATE master_schemes SET category = ? WHERE id = ?");
+        $stmt->execute([$cat, $existing['id']]);
+        echo "success";
         exit;
     }
 
+
     // ✅ Insert if not exists at all
     $stmt = $pdo->prepare(
-        "INSERT INTO master_schemes (scheme_name, category, created_by)
-         VALUES (?, ?, ?)"
+        "INSERT INTO master_schemes (scheme_name, category)
+     VALUES (?, ?)"
     );
-    $stmt->execute([$name, $cat, $_SESSION['user_id']]);
+    $stmt->execute([$name, $cat]);
+
 
     echo 'success';
     exit;
@@ -67,18 +58,19 @@ if (isset($_POST['delete_scheme'])) {
     }
     exit;
 }
+
 // Handle Move Scheme (Drag & Drop)
 if (isset($_POST['move_scheme'])) {
-    $id = $_POST['id'];
-    $target_category = $_POST['target_category'];
-    
+    $id = (int)($_POST['id'] ?? 0);
+    $target_category = $_POST['target_category'] ?? '';
+
     // Validate category
     if (!in_array($target_category, ['recommended', 'observation', 'drop'])) {
         http_response_code(400);
         echo "Invalid category";
         exit;
     }
-    
+
     // Update the scheme's category
     $stmt = $pdo->prepare("UPDATE master_schemes SET category = ? WHERE id = ?");
     if ($stmt->execute([$target_category, $id])) {
@@ -89,5 +81,44 @@ if (isset($_POST['move_scheme'])) {
     }
     exit;
 }
+// Update scheme name
+if (isset($_POST['update_scheme'])) {
+    $id   = (int)($_POST['id'] ?? 0);
+    $name = trim($_POST['name'] ?? '');
+
+    if (!$id || !$name) {
+        http_response_code(400);
+        echo "Invalid data";
+        exit;
+    }
+
+    $stmt = $pdo->prepare("UPDATE master_schemes SET scheme_name = ? WHERE id = ?");
+    if ($stmt->execute([$name, $id])) {
+        echo "success";
+    } else {
+        http_response_code(500);
+        echo "Failed to update";
+    }
+    exit;
+}
+
+// Fetch schemes by category
+if (isset($_POST['get_category'])) {
+    $category = $_POST['category'] ?? '';
+
+    if (!in_array($category, ['recommended', 'observation', 'drop'])) {
+        http_response_code(400);
+        echo "Invalid category";
+        exit;
+    }
+
+    $stmt = $pdo->prepare("SELECT id, scheme_name FROM master_schemes WHERE category = ? ORDER BY scheme_name ASC");
+    $stmt->execute([$category]);
+
+    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    exit;
+}
+
+
 http_response_code(400);
 echo 'No valid action';
