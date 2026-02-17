@@ -647,7 +647,13 @@ function parse_scheme_xlsx($filePath)
     $spreadsheet = IOFactory::load($filePath);
 
     // ✅ Get SECOND sheet (index starts from 0)
-    $sheet = $spreadsheet->getSheet(1);
+    // ✅ Load sheet by exact name
+$sheet = $spreadsheet->getSheetByName('current schemes');
+
+if (!$sheet) {
+        throw new Exception("Sheet name is mismatched. Please rename the sheet to 'current schemes'.");
+    }
+
 
     $highestRow = $sheet->getHighestRow();
     $highestColumn = $sheet->getHighestColumn();

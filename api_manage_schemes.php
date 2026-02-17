@@ -57,11 +57,6 @@ if (isset($_POST['delete_scheme'])) {
     }
     exit;
 }
-if (!$id) {
-    http_response_code(400);
-    echo "Invalid ID";
-    exit;
-}
 
 // Handle Move Scheme (Drag & Drop)
 if (isset($_POST['move_scheme'])) {
@@ -85,5 +80,26 @@ if (isset($_POST['move_scheme'])) {
     }
     exit;
 }
+// Update scheme name
+if (isset($_POST['update_scheme'])) {
+    $id   = (int)($_POST['id'] ?? 0);
+    $name = trim($_POST['name'] ?? '');
+
+    if (!$id || !$name) {
+        http_response_code(400);
+        echo "Invalid data";
+        exit;
+    }
+
+    $stmt = $pdo->prepare("UPDATE master_schemes SET scheme_name = ? WHERE id = ?");
+    if ($stmt->execute([$name, $id])) {
+        echo "success";
+    } else {
+        http_response_code(500);
+        echo "Failed to update";
+    }
+    exit;
+}
+
 http_response_code(400);
 echo 'No valid action';

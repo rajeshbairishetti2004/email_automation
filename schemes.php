@@ -8,46 +8,42 @@ requireAuth();
 $pdo = getPdo();
 $currentUser = getCurrentUser();
 
+
+$uploadError = '';
+
+
 // --- A. Handle XLSX File Upload ---
 if (isset($_POST['import_schemes'])) {
 
     if ($_FILES['scheme_file']['name']) {
 
         $filename = $_FILES['scheme_file']['tmp_name'];
-        $schemes = parse_scheme_xlsx($filename);
+        $schemes = [];   // ✅ ALWAYS initialize
 
-        foreach ($schemes as $schemeData) {
+        try {
+            $schemes = parse_scheme_xlsx($filename);
+        } catch (Exception $e) {
+            $uploadError = $e->getMessage();
+        }
 
-            $stmt = $pdo->prepare("
-        INSERT INTO master_schemes (scheme_name, category)
-        VALUES (?, ?)
-        ON DUPLICATE KEY UPDATE category = VALUES(category)
-    ");
+        // ✅ Only run insert if no error
+        if (empty($uploadError) && !empty($schemes)) {
 
-            $stmt->execute([
-                $schemeData['name'],
-                $schemeData['category']
-            ]);
+            foreach ($schemes as $schemeData) {
+
+                $stmt = $pdo->prepare("
+                    INSERT INTO master_schemes (scheme_name, category)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE category = VALUES(category)
+                ");
+
+                $stmt->execute([
+                    $schemeData['name'],
+                    $schemeData['category']
+                ]);
+            }
         }
     }
-}
-
-// --- B. Handle AJAX Live Search ---
-if (isset($_GET['search_query'])) {
-    $search = trim($_GET['search_query']);
-    $cat = trim($_GET['category']);
-    $stmt = $pdo->prepare("SELECT scheme_name FROM schemes WHERE scheme_name LIKE ? ORDER BY scheme_name ASC LIMIT 20");
-    $stmt->execute(["%$search%"]);
-    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if ($results) {
-        foreach ($results as $row) {
-            $name = htmlspecialchars($row['scheme_name']);
-            echo "<div class='search-result-item' onclick=\"selectScheme('{$name}', '{$cat}')\"><span>{$name}</span><i class='fas fa-plus-circle text-success'></i></div>";
-        }
-    } else {
-        echo "<div class='p-2 text-muted'>No schemes found</div>";
-    }
-    exit;
 }
 
 // --- 2. FETCH AND CATEGORIZE DATA ---
@@ -221,7 +217,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             font-size: 18px;
         }
 
-        /* Scheme List Items */
+        /* ===== ENHANCED LIST STYLES ===== */
         .scheme-list {
             list-style: none;
             padding: 0;
@@ -229,95 +225,154 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             max-height: 500px;
             overflow-y: auto;
             scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
             min-height: 100px;
         }
 
+        .scheme-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scheme-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .scheme-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .scheme-list::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
         .scheme-item {
-            padding: 14px 0;
-            border-bottom: 1px solid #f1f5f9;
+            background: #ffffff;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            padding: 12px 14px;
             cursor: grab;
-            transition: background 0.2s, opacity 0.2s;
+            transition: all 0.2s ease;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .scheme-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .scheme-item:hover {
+            border-color: #94a3b8;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            transform: translateY(-1px);
         }
 
         .scheme-item:active {
             cursor: grabbing;
-            opacity: 0.7;
+            opacity: 0.8;
+            transform: scale(0.99);
         }
 
         .scheme-item.dragging {
             opacity: 0.5;
             background: #e2e8f0;
-        }
-
-        .scheme-item:last-child {
-            border-bottom: none;
+            border-color: #94a3b8;
         }
 
         .display-mode {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 8px;
         }
 
         .scheme-name {
             font-size: 14px;
             font-weight: 500;
-            color: var(--text-dark);
+            color: #1e293b;
             word-break: break-word;
-            padding-right: 10px;
-            pointer-events: none;
-            /* Allow drag to work through text */
-        }
-
-        .edit-mode {
-            display: none;
-            gap: 10px;
-            width: 100%;
-        }
-
-        .edit-mode input {
+            padding: 2px 0;
             flex: 1;
-            padding: 8px 10px;
-            border: 2px solid var(--primary);
-            border-radius: 6px;
-            font-size: 13px;
         }
 
-        /* Icons & Buttons */
+        .scheme-count {
+            margin-left: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+
         .action-btns {
             display: flex;
-            gap: 8px;
-            pointer-events: auto;
-            /* Ensure buttons remain clickable */
+            gap: 6px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .scheme-item:hover .action-btns {
+            opacity: 1;
         }
 
         .btn-icon {
             cursor: pointer;
             border: none;
-            background: none;
-            font-size: 15px;
+            background: #f8fafc;
+            font-size: 14px;
             padding: 6px;
             border-radius: 6px;
             transition: all 0.2s;
-            color: #94a3b8;
+            color: #64748b;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
         }
 
         .btn-edit:hover {
-            color: var(--primary);
-            background: #eff6ff;
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
         }
 
         .btn-del:hover {
-            color: var(--danger);
-            background: #fef2f2;
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+
+        .edit-mode {
+            display: none;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .edit-mode input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #2563eb;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .edit-mode input:focus {
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .btn-save {
-            color: var(--success);
+            background: #22c55e;
+            color: white;
+            border-color: #22c55e;
         }
 
         .btn-cancel {
-            color: #94a3b8;
+            background: #64748b;
+            color: white;
+            border-color: #64748b;
         }
 
         .empty-msg {
@@ -325,23 +380,14 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             font-size: 13px;
             color: #94a3b8;
             font-style: italic;
-            padding: 20px 0;
+            padding: 30px 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 2px dashed #e2e8f0;
         }
 
-        /* Dropdown results */
-        .search-results-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: white;
-            z-index: 1050;
-            max-height: 250px;
-            overflow-y: auto;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            box-shadow: var(--shadow);
-        }
+        /* Dropdown results (unchanged) */
+
 
         .search-result-item {
             padding: 8px 12px;
@@ -368,6 +414,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             .top-nav {
                 padding: 20px;
             }
+
+            .action-btns {
+                opacity: 1;
+            }
         }
     </style>
 </head>
@@ -385,6 +435,21 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             <h1>Scheme Strategy Board</h1>
             <p>Categorize and manage fund recommendations for client reports. <strong>Drag & Drop</strong> schemes between columns.</p>
         </div>
+        <?php if (!empty($uploadError)): ?>
+            <div style="
+        background:#fef2f2;
+        border:1px solid #fecaca;
+        color:#dc2626;
+        padding:14px 18px;
+        border-radius:12px;
+        margin-bottom:25px;
+        font-weight:500;
+    ">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <?= htmlspecialchars($uploadError) ?>
+            </div>
+        <?php endif; ?>
+
 
         <!-- XLSX Upload Form -->
         <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin-bottom: 32px;">
@@ -404,11 +469,14 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     <h3>
                         <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
                         <?= $sec['title'] ?>
+                        <span class="scheme-count" id="count-<?= $key ?>">
+                            (<?= count($allSchemes[$key]) ?>)
+                        </span>
                     </h3>
+
                     <div class="add-form" style="margin-bottom:18px; position:relative;">
-                        <input type="text" placeholder="Search or enter fund name..." onkeyup="handleSearch(this, '<?= $key ?>')" autocomplete="off">
+                        <input type="text" placeholder="Enter Scheme name to search..." onkeyup="handleSearch(this)" autocomplete="off">
                         <button type="button" class="btn-add" style="background:var(--<?= $sec['color'] ?>); pointer-events:none; opacity:0.7;"><i class="fa-solid fa-plus"></i></button>
-                        <div class="search-results-dropdown shadow-sm border" style="display:none; position:absolute; width:100%;"></div>
                     </div>
                     <ul class="scheme-list">
                         <?php if (empty($allSchemes[$key])): ?>
@@ -522,7 +590,14 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 .then(async res => {
                     let text = await res.text();
                     if (res.ok && text === 'success') {
-                        location.reload(); // Reload to show updated categories
+
+                        const draggedElement = document.getElementById(`item-${schemeId}`);
+                        const targetColumn = document.querySelector(`.scheme-col[data-category="${targetCategory}"] .scheme-list`);
+
+                        draggedElement.dataset.category = targetCategory;
+                        targetColumn.appendChild(draggedElement);
+
+                        updateCounts();
                     } else if (res.status === 409) {
                         showErrorAlert(text);
                     } else {
@@ -535,20 +610,42 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 });
         }
 
+        function updateCounts() {
+            document.querySelectorAll('.scheme-col').forEach(col => {
+                const category = col.dataset.category;
+                const count = col.querySelectorAll('.scheme-item').length;
+                const countElement = document.getElementById(`count-${category}`);
+                if (countElement) {
+                    countElement.innerText = `(${count})`;
+                }
+            });
+        }
+
+
         // Live search for schemes
         function handleSearch(input, category) {
-            let query = input.value;
-            let dropdown = input.parentElement.querySelector('.search-results-dropdown');
-            if (query.length < 1) {
-                dropdown.style.display = 'none';
-                return;
+            const filter = input.value.toLowerCase();
+            const column = input.closest('.scheme-col');
+            const items = column.querySelectorAll('.scheme-item');
+            const emptyMsg = column.querySelector('.empty-msg');
+
+            let visibleCount = 0;
+
+            items.forEach(item => {
+                const name = item.querySelector('.scheme-name').innerText.toLowerCase();
+
+                if (name.includes(filter)) {
+                    item.style.display = '';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            // Show or hide empty message dynamically
+            if (emptyMsg) {
+                emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
             }
-            fetch(`schemes.php?search_query=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`)
-                .then(res => res.text())
-                .then(data => {
-                    dropdown.innerHTML = data;
-                    dropdown.style.display = 'block';
-                });
         }
 
         // Show error alert
@@ -627,6 +724,41 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 document.querySelectorAll('.search-results-dropdown').forEach(d => {
                     d.style.display = 'none';
                 });
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.btn-save')) {
+                const item = e.target.closest('.scheme-item');
+                const id = item.dataset.id;
+                const input = item.querySelector('.edit-mode input');
+                const newName = input.value.trim();
+
+                if (!newName) {
+                    alert("Scheme name cannot be empty");
+                    return;
+                }
+
+                let formData = new FormData();
+                formData.append('update_scheme', true);
+                formData.append('id', id);
+                formData.append('name', newName);
+
+                fetch('api_manage_schemes.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(res => res.text())
+                    .then(response => {
+                        if (response === 'success') {
+                            item.querySelector('.scheme-name').innerText = newName;
+                            item.dataset.name = newName;
+                            toggleEdit(id, false);
+
+                        } else {
+                            alert(response);
+                        }
+                    });
             }
         });
     </script>
