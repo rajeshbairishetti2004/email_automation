@@ -137,3 +137,41 @@
     font-size: 16px;
     font-weight: 500;
 }
+.action-link {
+    font-family: 'Inter', 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.25s ease, text-decoration 0.25s ease;
+}
+
+.action-separator {
+    color: #cbd5e1;
+    margin: 0 8px;
+    font-weight: 600;
+}
+
+/* OPEN */
+.open-link {
+    color: #1e88e5;
+}
+
+.open-link:hover {
+    color: hsl(216, 85%, 34%);
+    text-decoration:none;
+}
+
+/* UPLOAD */
+.upload-link {
+    color: #0755a9;
+}
+
+.upload-link:hover {
+    color: #5f8de3;
+    text-decoration: none;
+}
+

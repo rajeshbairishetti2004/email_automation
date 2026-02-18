@@ -7,16 +7,538 @@
 
 require_once 'auth.php';
 requireAuth();
+
+const DEFAULT_GREETING  = 'Dear Mr.';
+const DEFAULT_INTRO     = 'Introduction';
+const DEFAULT_CLOSING   = 'Closing remarks';
+const DEFAULT_RATIONALE = 'Rationale for recommendations';
+
+require_once 'env_loader.php';
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_FILES['client_files'])
+    && isset($_POST['expected_client_id'])
+    && isset($_POST['expected_client_name'])
+) {
+
+    require_once 'parsers.php';
+    require_once 'renderers.php';
+
+    $expectedClientId = (int)($_POST['expected_client_id'] ?? 0);
+    if ($expectedClientId <= 0) {
+        throw new Exception('Invalid client upload request.');
+    }
+}
+
+
+use PhpOffice\PhpSpreadsheet\IOFactory;
+
+function extractSubCategoryAllocation(string $filePath): array
+{
+    $spreadsheet = IOFactory::load($filePath);
+
+    foreach ($spreadsheet->getSheetNames() as $i => $name) {
+        if (stripos($name, 'sub') !== false && stripos($name, 'category') !== false) {
+
+            $sheet = $spreadsheet->getSheet($i);
+            $rows  = $sheet->toArray(null, true, true, true);
+
+            // Detect header row
+            $headerRow = null;
+            foreach ($rows as $rIdx => $row) {
+                foreach ($row as $cell) {
+                    if (stripos($cell, 'category') !== false) {
+                        $headerRow = $rIdx;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$headerRow) return [];
+
+            $header = $rows[$headerRow];
+            $catCol = null;
+            $pctCol = null;
+
+            foreach ($header as $col => $val) {
+                if (stripos($val, 'category') !== false) $catCol = $col;
+                if (stripos($val, 'share') !== false || stripos($val, '%') !== false) $pctCol = $col;
+            }
+
+            if (!$catCol || !$pctCol) return [];
+
+            $out = [];
+            for ($i = $headerRow + 1; $i <= count($rows); $i++) {
+                $cat = trim($rows[$i][$catCol] ?? '');
+                $pct = trim($rows[$i][$pctCol] ?? '');
+
+                if ($cat === '' || !is_numeric($pct)) continue;
+
+                $out[] = [
+                    'asset' => $cat,
+                    'pct'   => (float)$pct
+                ];
+            }
+
+            return $out;
+        }
+    }
+
+    return [];
+}
+
+
+
+function extractGlobalEquityFromScriptSheet(string $filePath): float
+{
+    $spreadsheet = IOFactory::load($filePath);
+
+    foreach ($spreadsheet->getSheetNames() as $i => $sheetName) {
+
+        if (
+            stripos($sheetName, 'scheme') !== false &&
+            stripos($sheetName, 'scrip') !== false
+        ) {
+
+            $sheet = $spreadsheet->getSheet($i);
+            $rows  = $sheet->toArray(null, true, true, true);
+
+            $shareCol = null;
+
+            // Find SHARE column
+            foreach ($rows as $row) {
+                foreach ($row as $col => $val) {
+                    if (stripos($val, 'share') !== false) {
+                        $shareCol = $col;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$shareCol) return 0;
+
+            // Find "Equity: Global Total" row ONLY
+            foreach ($rows as $row) {
+
+                $rowText = implode(' ', $row);
+
+                if (
+                    stripos($rowText, 'equity') !== false &&
+                    stripos($rowText, 'global') !== false &&
+                    stripos($rowText, 'total') !== false
+                ) {
+                    return (float)($row[$shareCol] ?? 0);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+
 $currentUser = getCurrentUser();
 $userDesignation = $currentUser['designation'] ?? '';
 $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 $myId = $currentUser['id'] ?? ($_SESSION['user_id'] ?? 0);
+$currentUserId = $myId;
+$successMessage = '';
+$errorMessage   = '';
+
+
 
 require_once 'db_config.php';
-
 $pdo = getPdo();
-$successMessage = '';
-$errorMessage = '';
+$pdoSlides = getSlidesPdo();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
+
+    try {
+
+
+        $baseUploadDir = __DIR__ . '/uploads/tmp_' . session_id();
+        if (!is_dir($baseUploadDir)) {
+            mkdir($baseUploadDir, 0777, true);
+        }
+
+        $pv  = [];
+        $aa  = [];
+        $rst = [];
+        $ps  = [];
+        $pdfGoal     = [];
+        $attachments = [];
+        $allocationExcelPath = null;
+
+
+        $fileCount = count($_FILES['client_files']['name']);
+        for ($i = 0; $i < $fileCount; $i++) {
+            $error = $_FILES['client_files']['error'][$i];
+            if ($error !== UPLOAD_ERR_OK) {
+                continue;
+            }
+
+            $name     = $_FILES['client_files']['name'][$i];
+            $tmpPath  = $_FILES['client_files']['tmp_name'][$i];
+            $ext      = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            $destName = uniqid('upload_', true) . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '_', $name);
+            $destPath = $baseUploadDir . '/' . $destName;
+            if (!move_uploaded_file($tmpPath, $destPath)) {
+                continue;
+            }
+
+            $nameLower = strtolower($name);
+
+            try {
+                if ($ext === 'pdf') {
+                    if (strpos($nameLower, 'goalstatusreport') !== false) {
+                        $pdfGoal = parseGoalStatusPdf($destPath);
+                    } else {
+                        $attachments[] = ['path' => $destPath, 'name' => $name];
+                    }
+                } else {
+                    if (strpos($nameLower, 'valuation') !== false) {
+                        mergeClientArrays($pv, parsePortfolioValuation($destPath));
+                    } elseif (strpos($nameLower, 'allocation') !== false) {
+                        $allocationExcelPath = $destPath;   // 👈 STORE THIS
+                        mergeClientArrays($aa, parseAllocationAnalysis($destPath));
+                    } elseif (strpos($nameLower, 'running') !== false || strpos($nameLower, 'systematic') !== false || strpos($nameLower, 'sip') !== false) {
+                        mergeClientArrays($rst, parseRunningSystematicTransactions($destPath));
+                    } elseif (strpos($nameLower, 'summary') !== false) {
+                        mergeClientArrays($ps, parsePortfolioSummary($destPath));
+                    } else {
+                        $attachments[] = ['path' => $destPath, 'name' => $name];
+                    }
+                }
+            } catch (Throwable $parseErr) {
+                $attachments[] = ['path' => $destPath, 'name' => $name];
+            }
+        }
+
+        $allClientReports = buildClientReports($pv, $aa, $rst, $ps, $pdfGoal);
+
+        // 1️⃣ Nothing parsed at all
+        if (empty($allClientReports)) {
+            throw new Exception('No client data could be parsed from the uploaded files.');
+        }
+
+        $expectedClientName = trim($_POST['expected_client_name'] ?? '');
+
+        $uploadedNames = array_values(array_unique(array_filter(array_map(
+            fn($c) => trim($c['name'] ?? ''),
+            $allClientReports
+        ))));
+
+        // 2️⃣ No client name found inside files
+        if (empty($uploadedNames)) {
+            throw new Exception('Unable to detect client name from uploaded files.');
+        }
+
+        // 3️⃣ Multiple clients in one upload
+        if (count($uploadedNames) > 1) {
+            throw new Exception("Please upload {$expectedClientName} files only.");
+        }
+
+        // 4️⃣ Client mismatch
+        if (strcasecmp($uploadedNames[0], $expectedClientName) !== 0) {
+            throw new Exception("Please upload {$expectedClientName} files only.");
+        }
+
+
+
+
+
+        // NEW: Get current month_year for the review
+        $currentMonthYear = date('F Y');
+
+        // Check for existing client with same name/email in the SAME month
+        $checkExistingReview = $pdo->prepare('
+            SELECT id, review_attempt 
+            FROM clients 
+            WHERE name = :name 
+            AND month_year = :month_year 
+            ORDER BY review_attempt DESC 
+            LIMIT 1
+        ');
+
+        // Update previous versions to mark them as not latest
+        $markPreviousAsNotLatest = $pdo->prepare('
+            UPDATE clients 
+            SET is_latest = FALSE 
+            WHERE name = :name 
+            AND month_year = :month_year
+        ');
+
+        $insertClient = $pdo->prepare('INSERT INTO clients
+            (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
+             total_goal_current, total_goal_target, total_sip,
+             greeting_prefix, intro_text, closing_text, rationale_text,
+             created_by, report_state, assigned_to, month_year, review_cycle,
+             is_latest, previous_version_id, review_attempt)
+            VALUES
+            (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
+             :total_goal_current, :total_goal_target, :total_sip,
+             :greeting_prefix, :intro_text, :closing_text, :rationale_text,
+             :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
+             :is_latest, :previous_version_id, :review_attempt)');
+
+        $stmtGoal = $pdo->prepare('INSERT INTO client_goals
+            (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
+            VALUES
+            (:client_id, :goal, :goal_date, :current_amount, :sip_swp, :target_amount, :projected, :shortfall, :completion, :status)');
+
+        $stmtAlloc = $pdo->prepare('INSERT INTO client_allocations (client_id, asset, share_pct)
+            VALUES (:client_id, :asset, :share_pct)');
+
+        $stmtScheme = $pdo->prepare('INSERT INTO client_schemes
+            (client_id, scheme_name, sip_swp, current_value, action_step, recommended_scheme, recommended_amount)
+            VALUES
+            (:client_id, :scheme_name, :sip_swp, :current_value, :action_step, :recommended_scheme, :recommended_amount)');
+
+        $stmtAnnex = $pdo->prepare('INSERT INTO client_annexures (client_id, line_text) VALUES (:client_id, :line_text)');
+
+        $pdo->beginTransaction();
+
+        $firstClientId = 0;
+        foreach ($allClientReports as $clientData) {
+            $email = trim($clientData['email'] ?? '');
+            $clientName = trim($clientData['name'] ?? '');
+            if ($clientName === '') {
+                continue;
+            }
+
+            // Check if this client already has a review this month
+            $checkExistingReview->execute([
+                ':name' => $clientName,
+                ':month_year' => $currentMonthYear
+            ]);
+            $existingReview = $checkExistingReview->fetch(PDO::FETCH_ASSOC);
+
+            // Calculate review attempt number
+            $reviewAttempt = 1;
+            $previousVersionId = null;
+
+            if ($existingReview) {
+                $reviewAttempt = (int)$existingReview['review_attempt'] + 1;
+                $previousVersionId = $existingReview['id'];
+
+                // Mark all previous versions for this month as not latest
+                $markPreviousAsNotLatest->execute([
+                    ':name' => $clientName,
+                    ':month_year' => $currentMonthYear
+                ]);
+            }
+
+            $totals  = $clientData['current']['totals'] ?? ['purchase' => 0, 'current' => 0, 'profit' => 0, 'cagr_weighted' => 0, 'xirr_weighted' => 0, 'absolute_return' => 0];
+            $summary = $clientData['current']['summary'] ?? null;
+
+            $totalAmount    = $totals['current'] ?? 0;
+
+            $aum = $totalAmount > 0 ? ($totalAmount / 10000000) : 0;
+
+            $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
+            $cagr           = $totals['cagr_weighted'] ?? 0;
+            $xirr           = $summary['xirr'] ?? ($totals['xirr_weighted'] ?? 0);
+            $absoluteReturn = $totals['absolute_return'] ?? 0;
+
+            $goals      = $clientData['goals'] ?? [];
+            $allocation = $clientData['allocation'] ?? [];
+            $schemes    = $clientData['schemes'] ?? [];
+            $asOn       = $clientData['as_on'] ?? '';
+
+            // Determine review cycle (you might need to add this logic)
+            $reviewCycle = $_POST['review_cycle'] ?? 'RJ'; // Default or from form
+
+            $totalSip         = 0;
+            $totalGoalCurrent = 0;
+            $totalGoalTarget  = 0;
+            foreach ($goals as $g) {
+                $totalSip         += (float)($g['running_sip'] ?? 0);
+                $totalGoalCurrent += (float)($g['current_value'] ?? 0);
+                $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
+            }
+
+            // INSERT NEW RECORD (not update!)
+            $insertClient->execute([
+                ':name'               => $clientName,
+                ':email'              => $email,
+                ':as_on'              => $asOn,
+                ':total_amount'       => $totalAmount,
+                ':aum'                => $aum,  // Store in crores (carried forward or calculated)
+                ':profit'             => $profit,
+                ':cagr'               => $cagr,
+                ':xirr'               => $xirr,
+                ':absolute_return'    => $absoluteReturn,
+                ':total_goal_current' => $totalGoalCurrent,
+                ':total_goal_target'  => $totalGoalTarget,
+                ':total_sip'          => $totalSip,
+                ':greeting_prefix'    => DEFAULT_GREETING,
+                ':intro_text'         => DEFAULT_INTRO,
+                ':closing_text'       => DEFAULT_CLOSING,
+                ':rationale_text'     => DEFAULT_RATIONALE,
+                ':created_by'         => $currentUserId,
+                ':report_state'       => 'draft',
+                ':assigned_to'        => $currentUserId,
+                ':month_year'         => $currentMonthYear,
+                ':review_cycle'       => $reviewCycle,
+                ':is_latest'          => true,
+                ':previous_version_id' => $previousVersionId,
+                ':review_attempt'     => $reviewAttempt
+            ]);
+
+            $clientId = (int)$pdo->lastInsertId();
+            // ======================================
+            // SLIDE 8 – SUB CATEGORY ALLOCATION
+            // ======================================
+            // ======================================
+            // SLIDE 8 – SUB CATEGORY ALLOCATION
+            // ======================================
+            if ($allocationExcelPath && file_exists($allocationExcelPath)) {
+
+                // Clear old slide8 rows
+                $pdoSlides->prepare("DELETE FROM slide8 WHERE client_id = ?")
+                    ->execute([$clientId]);
+
+                $subCats = extractSubCategoryAllocation($allocationExcelPath);
+
+                foreach ($subCats as $row) {
+
+                    $assetRaw = trim($row['asset']);
+
+                    if (stripos($assetRaw, 'grand total') !== false) {
+                        continue;
+                    }
+
+                    $asset = ucwords($row['asset']);
+                    $pct   = (float)$row['pct'];
+
+                    $stmt = $pdoSlides->prepare("
+            INSERT INTO slide8
+            (client_id, asset, current_pct, recommended_pct, updated_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+
+                    $stmt->execute([
+                        $clientId,
+                        $asset,
+                        $pct,
+                        $pct
+                    ]);
+                }
+
+                // ======================================
+                // SLIDE 10 – GLOBAL EQUITY
+                // ======================================
+
+                $globalPct = extractGlobalEquityFromScriptSheet($allocationExcelPath);
+
+                // Remove old slide10 record
+                $pdoSlides->prepare("DELETE FROM slide10 WHERE client_id = ?")
+                    ->execute([$clientId]);
+
+                $pdoSlides->prepare("
+        INSERT INTO slide10
+        (client_id, current_pct, recommended_pct, updated_at)
+        VALUES (?, ?, ?, NOW())
+    ")->execute([
+                    $clientId,
+                    $globalPct,
+                    0
+                ]);
+            }
+
+
+
+
+            if ($firstClientId === 0 && $clientId > 0) {
+                $firstClientId = $clientId;
+            }
+
+            foreach ($goals as $g) {
+                $projectedVal = (float)($g['projected'] ?? 0);
+                $targetVal    = (float)($g['target_amount'] ?? 0);
+                $shortfallVal = (float)($g['shortfall'] ?? 0);
+                $statusCalc   = ($shortfallVal > 0) ? 'Invest More' : 'On Track';
+
+                $stmtGoal->execute([
+                    ':client_id'      => $clientId,
+                    ':goal'           => $g['goal'] ?? '',
+                    ':goal_date'      => $g['goal_date'] ?? '',
+                    ':current_amount' => $g['current_value'] ?? 0,
+                    ':sip_swp'        => $g['running_sip'] ?? 0,
+                    ':target_amount'  => $targetVal,
+                    ':projected'      => $projectedVal,
+                    ':shortfall'      => $g['shortfall'] ?? 0,
+                    ':completion'     => $g['completion'] ?? 0,
+                    ':status'         => $statusCalc,
+                ]);
+            }
+
+            foreach ($allocation as $asset => $share) {
+                $stmtAlloc->execute([
+                    ':client_id' => $clientId,
+                    ':asset'     => $asset,
+                    ':share_pct' => $share,
+                ]);
+            }
+
+            foreach ($schemes as $schemeData) {
+                $stmtScheme->execute([
+                    ':client_id'          => $clientId,
+                    ':scheme_name'        => $schemeData['scheme'] ?? '',
+                    ':sip_swp'            => $schemeData['sip_swp'] ?? 0,
+                    ':current_value'      => $schemeData['current_value'] ?? 0,
+                    ':action_step'        => 'Continue',
+                    ':recommended_scheme' => null,
+                    ':recommended_amount' => 0,
+                ]);
+            }
+
+            $clientAttachmentsDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
+            if (!is_dir($clientAttachmentsDir)) {
+                mkdir($clientAttachmentsDir, 0777, true);
+            }
+
+            $annexLines = [];
+            foreach ($attachments as $att) {
+                $annexLines[] = $att['name'];
+                $newPath = $clientAttachmentsDir . '/' . basename($att['name']);
+                $counter = 1;
+                while (file_exists($newPath)) {
+                    $newPath = $clientAttachmentsDir . '/' . $counter . '_' . basename($att['name']);
+                    $counter++;
+                }
+                rename($att['path'], $newPath);
+            }
+
+            foreach ($annexLines as $line) {
+                $stmtAnnex->execute([
+                    ':client_id' => $clientId,
+                    ':line_text' => $line,
+                ]);
+            }
+        }
+
+        $pdo->commit();
+
+        if ($firstClientId > 0) {
+            header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
+            exit;
+        }
+
+        $successMessage = 'Reports uploaded successfully.';
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $errorMessage = $e->getMessage();
+    }
+}
+
+
+
+
 
 // Initialize action mode variables
 $deleteMode = false;
@@ -798,6 +1320,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
                 <!-- RIGHT: Reassign Button (UNCHANGED) -->
                 <div class="action-icons-container">
+
+
                     <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
                         <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>"
                             class="action-btn reassign-btn" title="Reassign Clients">
@@ -917,6 +1441,10 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     <option value="asc" <?php echo $sortOrder === 'ASC' ? 'selected' : ''; ?>>Ascending</option>
                 </select>
 
+
+
+
+
                 <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
                 <!-- Only Reset button remains -->
@@ -924,7 +1452,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             </form>
 
             <?php if (!$clients): ?>
-                <p style="margin-top: 20px;">No reports found. Try uploading from <a href="upload.php">Upload Page</a>.</p>
+                <p>No reports found. Use the Upload button next to a client.</p>
             <?php else: ?>
                 <!-- Delete Mode Bulk Actions -->
                 <?php if ($deleteMode): ?>
@@ -1023,59 +1551,26 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($clients as $c):
-                                    // --- WORKFLOW BADGE LOGIC ---
-                                    $statusHtml = '';
+                                <?php foreach ($clients as $c): ?>
+                                    <?php
+                                    $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
+                                    $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
+                                    ?>
 
-                                    if (isset($c['review_not_ok']) && $c['review_not_ok'] == 1) {
-                                        $comment = htmlspecialchars($c['review_comment'] ?? '');
-                                        $statusHtml = "<span class='badge badge-rejected' title='RM Comment: $comment'>NOT OK</span>";
-                                    } else {
-                                        $state = $c['report_state'] ?? 'draft';
-                                        $badgeClass = 'badge-' . $state;
 
-                                        if ($state === 'sent') {
-                                            $displayText = 'Email Sent';
-                                        } elseif ($state === 'pending') {
-                                            $displayText = 'Review Not Started';
-                                            $badgeClass = 'badge-pending';
-                                        } else {
-                                            $displayText = ucfirst($state);
-                                        }
-
-                                        $statusHtml = "<span class='badge $badgeClass'>" . $displayText . "</span>";
-                                    }
-
-                                    // Check for attachments
-                                    $hasAttachments = false;
-                                    $cDir = __DIR__ . '/uploads/attachments/client_' . $c['id'];
-                                    if (is_dir($cDir)) {
-                                        $files = array_diff(scandir($cDir), ['.', '..']);
-                                        if (count($files) > 0) {
-                                            $hasAttachments = true;
-                                        }
-                                    }
-
-                                    // Priority badge styling
-                                    $priorityBadgeClass = 'badge';
-                                    $priorityText = htmlspecialchars($c['priority'] ?? 'Normal');
-
-                                    if (strtolower($priorityText) === 'high') {
-                                        $priorityBadgeClass .= ' badge-ready';
-                                    } elseif (strtolower($priorityText) === 'low') {
-                                        $priorityBadgeClass .= ' badge-draft';
-                                    }
-                                ?>
                                     <tr>
+
                                         <!-- Show checkboxes only in action mode -->
                                         <?php if ($deleteMode || $reassignMode): ?>
                                             <td>
-                                                <input type="checkbox" class="action-checkbox client-checkbox" name="selected_ids[]" value="<?php echo (int)$c['id']; ?>" onchange="updateSelectedCount()">
+                                                <input type="checkbox"
+                                                    class="action-checkbox client-checkbox"
+                                                    name="selected_ids[]"
+                                                    value="<?php echo (int)$c['id']; ?>"
+                                                    onchange="updateSelectedCount()">
                                             </td>
                                         <?php else: ?>
-                                            <td class="action-icon-cell">
-                                                <!-- Empty cell for icon column when not in action mode -->
-                                            </td>
+                                            <td class="action-icon-cell"></td>
                                         <?php endif; ?>
 
                                         <td><?php echo (int)$c['id']; ?></td>
@@ -1136,6 +1631,23 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                             <?php endif; ?>
                                         </td>
                                         <td>
+                                            <?php
+                                            $priority = strtolower($c['priority'] ?? '');
+
+                                            switch ($priority) {
+                                                case 'high':
+                                                    $priorityText = 'High';
+                                                    $priorityBadgeClass = 'badge badge-red';
+                                                    break;
+                                                case 'low':
+                                                    $priorityText = 'Low';
+                                                    $priorityBadgeClass = 'badge badge-grey';
+                                                    break;
+                                                default:
+                                                    $priorityText = 'Normal';
+                                                    $priorityBadgeClass = 'badge badge-blue';
+                                            }
+                                            ?>
                                             <?php if (!empty($c['priority'])): ?>
                                                 <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
                                                     <?php echo $priorityText; ?>
@@ -1154,6 +1666,20 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                                 <span style="color: #999; font-size: 0.85em;">N/A</span>
                                             <?php endif; ?>
                                         </td>
+                                        <?php
+                                        $state = $c['report_state'] ?? 'draft';
+
+                                        $statusMap = [
+                                            'pending'  => '<span class="badge badge-grey">Pending</span>',
+                                            'draft'    => '<span class="badge badge-yellow">Draft</span>',
+                                            'ready'    => '<span class="badge badge-blue">Ready</span>',
+                                            'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
+                                            'sent'     => '<span class="badge badge-green">Sent</span>',
+                                        ];
+
+                                        $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
+
+                                        ?>
                                         <td><?php echo $statusHtml; ?></td>
                                         <td style="text-align: center;">
                                             <select
@@ -1186,20 +1712,46 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                             <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
                                         </td>
                                         <td>
-                                            <?php if (($c['report_state'] ?? '') === 'pending'): ?>
-                                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>"
-                                                    style="font-weight: 600; color:#0288D1; text-decoration:none;">
-                                                    📂 Upload <?php echo htmlspecialchars($c['name']); ?>'s Files
+                                            <?php
+                                            $hasReport = ($c['report_state'] !== 'pending');
+                                            ?>
+
+                                            <?php if ($hasReport): ?>
+                                                <!-- OPEN -->
+                                                <a href="view_report.php?id=<?= (int)$c['id']; ?>"
+                                                    class="action-link open-link">
+                                                    Open
                                                 </a>
-                                            <?php else: ?>
-                                                <a href="view_report.php?id=<?php echo (int)$c['id']; ?>"
-                                                    style="font-weight: 600; color:#0288D1; text-decoration:none;">Open</a>
-                                                <span style="color:#ccc; margin:0 6px;">|</span>
-                                                <a href="upload.php?auto_search=<?php echo urlencode($c['name']); ?>"
-                                                    style="font-size:0.9em; color:#555; text-decoration:none;"
-                                                    title="Upload files for <?php echo htmlspecialchars($c['name']); ?>">Upload</a>
+
+                                                <span class="action-separator">|</span>
                                             <?php endif; ?>
+
+                                            <!-- UPLOAD -->
+                                            <button type="button"
+                                                class="action-link upload-link"
+                                                onclick="triggerUpload(<?= (int)$c['id']; ?>)">
+                                                Upload
+                                            </button>
+
+
+                                            <!-- HIDDEN FORM -->
+                                            <form id="uploadForm_<?= (int)$c['id']; ?>"
+                                                method="post"
+                                                enctype="multipart/form-data"
+                                                style="display:none;">
+
+                                                <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
+                                                <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
+                                                <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
+
+                                                <input type="file"
+                                                    name="client_files[]"
+                                                    multiple
+                                                    onchange="submitUpload(<?= (int)$c['id']; ?>)">
+                                            </form>
+
                                         </td>
+
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -1312,6 +1864,18 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 });
             }
         </script>
+        <script>
+            function triggerUpload(clientId) {
+                const form = document.getElementById('uploadForm_' + clientId);
+                const fileInput = form.querySelector('input[type="file"]');
+                fileInput.click(); // opens local file chooser
+            }
+
+            function submitUpload(clientId) {
+                const form = document.getElementById('uploadForm_' + clientId);
+                form.submit(); // submits to SAME page
+            }
+        </script>
 
         <!-- Meeting Remarks Modal -->
         <div id="listMeetingModal" class="modal-overlay" style="display:none;">
@@ -1422,9 +1986,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                         }
                     });
             }
-        </script>
 
-        <script>
             // --- Client Name Autocomplete for Search Box ---
             document.addEventListener('DOMContentLoaded', function() {
                 const input = document.getElementById('client-search');
@@ -1509,9 +2071,7 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
                 dropdown.style.display = names.length ? "block" : "none";
             }
-        </script>
 
-        <script>
             document.addEventListener('DOMContentLoaded', function() {
                 const filterForm = document.getElementById('filterForm');
                 if (!filterForm) return;
@@ -1523,7 +2083,16 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     });
                 });
             });
+
+            function submitUpload(clientId) {
+                const form = document.getElementById('uploadForm_' + clientId);
+                const fileInput = form.querySelector('input[type="file"]');
+
+                if (!fileInput.files.length) return;
+                form.submit();
+            }
         </script>
+
     </div>
 
 </body>

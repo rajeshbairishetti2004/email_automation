@@ -821,4 +821,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 }
 
+function mergeClientArrays(array &$target, array $source): void
+{
+    foreach ($source as $client => $data) {
+        if (!isset($target[$client])) {
+            $target[$client] = $data;
+            continue;
+        }
+        foreach ($data as $key => $val) {
+            if (is_array($val)) {
+                if (!isset($target[$client][$key])) {
+                    $target[$client][$key] = $val;
+                } else {
+                    $target[$client][$key] = array_merge($target[$client][$key], $val);
+                }
+            } else {
+                $target[$client][$key] = $val;
+            }
+        }
+    }
+}
+
 
