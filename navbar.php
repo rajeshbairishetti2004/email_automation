@@ -91,7 +91,7 @@ $userDesignation = $_SESSION['designation'] ?? '';
 
             <?php endif; ?>
             <!-- Report Generation link: if we're already in report_generation folder, link to index.php, otherwise link to report_generation/index.php -->
-            <a href="<?php echo $isInReportGenFolder ? 'index.php' : 'report_generation/index.php'; ?>"
+            <a href="<?php echo $isInReportGenFolder ? 'coming_soon.php' : 'report_generation/coming_soon.php'; ?>"
                 class="<?= $isReportGeneration ? 'active' : '' ?>">
                 Report Generation
             </a>

@@ -794,7 +794,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
             <a href="view_saved_reports.php" class="nav-button">&larr; Back to list</a>
             <a href="upload.php?auto_search=<?php echo urlencode($client['name']); ?>" class="nav-button">Upload New Files</a>
             <!-- UPDATE THIS BUTTON WITH FULL PATH -->
-            <a href="report_generation/index.php?client_id=CLIENT_<?php echo (int)$clientId; ?>"
+            <a href="report_generation/coming_soon.php?client_id=CLIENT_<?php echo (int)$clientId; ?>"
                 class="nav-button"
                 target="_blank">
                 📊 Generate Report

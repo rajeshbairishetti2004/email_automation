@@ -16,6 +16,22 @@ requireAuth();
 $currentReviewPeriod = date('F Y');
 $pdo           = getPdo();
 $currentUser   = getCurrentUser();
+
+// Ensure correct timezone
+date_default_timezone_set('Asia/Kolkata');
+
+$currentMonthShort = date('M');   // Jan, Feb, Mar...
+$currentYear       = date('Y');   // 2026
+
+// Detect current cycle based on month
+if (in_array($currentMonthShort, ['Jan', 'Apr', 'Jul', 'Oct'])) {
+    $currentCycle = 'RJ';
+} elseif (in_array($currentMonthShort, ['Feb', 'May', 'Aug', 'Nov'])) {
+    $currentCycle = 'RF';
+} else {
+    $currentCycle = 'RM';
+}
+
 // ---------------- ADMIN CHECK (USERNAME BASED) ----------------
 $isAdmin = (
     isset($currentUser['username']) &&
@@ -54,9 +70,54 @@ function getLatestAumForClient(PDO $pdo, string $clientName): float
     return (float)($result['aum'] ?? 0);
 }
 
+$cycleFilter = $_GET['cycle_filter'] ?? $currentCycle;
+$monthFilter = $_GET['month_filter'] ?? $currentMonthShort;
+$yearFilter  = $_GET['year_filter']  ?? $currentYear;
+
+$isFilterApplied = !empty($_GET['cycle_filter'])
+    || !empty($_GET['month_filter'])
+    || !empty($_GET['year_filter']);
 
 
-function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
+$requestedContext = $_GET['view_context'] ?? 'mine';
+
+if ($isAdmin) {
+    $viewContext = $requestedContext;
+} else {
+    $viewContext = 'mine';
+}
+
+
+// Get previous month from DB based on current month
+if (!$isFilterApplied) {
+
+    // Get actual previous calendar month
+    $previousDate = date('M Y', strtotime('-1 month'));
+
+    $availableMonths = [$previousDate];
+
+    // IMPORTANT: Disable cycle filter influence in default mode
+    $cycleFilter = '';
+} else {
+
+    // Only get immediate previous calendar month
+    if ($monthFilter !== '' && $yearFilter !== '') {
+
+        $selectedDate = DateTime::createFromFormat('M Y', $monthFilter . ' ' . $yearFilter);
+        $selectedDate->modify('-1 month');
+
+        $previousMonth = $selectedDate->format('M Y');
+
+        $availableMonths = [$previousMonth];
+    } else {
+        $availableMonths = [];
+    }
+}
+
+
+
+
+function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = '', string $monthFilter = '', string $yearFilter = ''): array
 {
     // Build the base WHERE clause for filtering
     $baseWhere = "1=1";
@@ -74,10 +135,25 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
     }
 
     // Add cycle filter if set
-    if ($cycleFilter !== '') {
-        $baseWhere .= " AND review_cycle = ?";
-        $params[] = $cycleFilter;
+    if ($cycleFilter === 'RJ') {
+        $baseWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Jan','Apr','Jul','Oct')";
+    } elseif ($cycleFilter === 'RF') {
+        $baseWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Feb','May','Aug','Nov')";
+    } elseif ($cycleFilter === 'RM') {
+        $baseWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Mar','Jun','Sep','Dec')";
     }
+
+    if ($monthFilter !== '') {
+        $baseWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) = ?";
+        $params[] = $monthFilter;
+    }
+
+    if ($yearFilter !== '') {
+        $baseWhere .= " AND SUBSTRING_INDEX(month_year, ' ', -1) = ?";
+        $params[] = $yearFilter;
+    }
+
+
 
     // Get the latest record for each client and count by status
     // Using is_latest column for efficiency
@@ -131,20 +207,6 @@ function fetchTeamStats(PDO $pdo): array
     return $result;
 }
 
-
-$cycleFilter = isset($_GET['cycle_filter']) ? $_GET['cycle_filter'] : '';
-
-$requestedContext = $_GET['view_context'] ?? 'mine';
-
-// 🔐 HARD RULE
-if ($isAdmin) {
-    // Admin can see everything
-    $viewContext = $requestedContext;
-} else {
-    // Everyone else → ONLY their own data
-    $viewContext = 'mine';
-}
-
 $targetName  = 'My';
 if ($viewContext === 'all') {
     $targetName = 'Global';
@@ -164,10 +226,27 @@ if ($viewContext === 'mine') {
     $aumParams = [(int)$viewContext, (int)$viewContext];
 }
 
-if ($cycleFilter !== '') {
-    $aumWhere .= " AND review_cycle = ?";
-    $aumParams[] = $cycleFilter;
+if ($cycleFilter === 'RJ') {
+    $aumWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Jan','Apr','Jul','Oct')";
+} elseif ($cycleFilter === 'RF') {
+    $aumWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Feb','May','Aug','Nov')";
+} elseif ($cycleFilter === 'RM') {
+    $aumWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) IN ('Mar','Jun','Sep','Dec')";
 }
+
+if ($monthFilter !== '') {
+    $aumWhere .= " AND SUBSTRING_INDEX(month_year, ' ', 1) = ?";
+    $aumParams[] = $monthFilter;
+}
+
+
+if ($yearFilter !== '') {
+    $aumWhere .= " AND SUBSTRING_INDEX(month_year, ' ', -1) = ?";
+    $aumParams[] = $yearFilter;
+}
+
+
+
 
 // Get AUM from the latest records only
 $stmtAum = $pdo->prepare("
@@ -181,7 +260,7 @@ $totalAum = $stmtAum->fetchColumn() ?: 0;
 $usersStmt = $pdo->query('SELECT id, username FROM users ORDER BY username ASC');
 $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter);
+$viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter, $monthFilter, $yearFilter);
 $completionRate  = safePercent($viewStats['count_sent'], max(1, $viewStats['total']));
 $uploadError     = '';
 
@@ -194,6 +273,15 @@ if (!$isAdmin) {
 }
 
 $userDesignation = $currentUser['designation'] ?? '';
+
+$yearsStmt = $pdo->query("
+    SELECT DISTINCT SUBSTRING_INDEX(month_year, ' ', -1) AS year
+    FROM clients
+    WHERE month_year IS NOT NULL
+    ORDER BY year DESC
+");
+$availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -214,27 +302,99 @@ $userDesignation = $currentUser['designation'] ?? '';
         <div class="wrap">
             <div class="page-header">
                 <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
-                    <h1 style="margin:0;">Quarterly Review of <?php echo date('F Y'); ?></h1>
+                    <h1 style="margin:0;">
+                        Quarterly Review of
+                        <span id="reviewHeading">
+                            <?php
+                            if (!$isFilterApplied) {
+                                echo date('F Y');
+                            } else {
+                                echo date('F', strtotime($monthFilter . " 1")) . " " . $yearFilter;
+                            }
+                            ?>
+                        </span>
+
+                    </h1>
                     <div style="display: flex; align-items: center; gap: 0;">
-                        <form method="get" id="cycleForm" style="margin:15px;">
-                            <select name="cycle_filter" onchange="this.form.submit()" style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
-                                <option value="" <?php if ($cycleFilter === '') echo 'selected'; ?>>All Cycles</option>
-                                <option value="RJ" <?php if ($cycleFilter === 'RJ') echo 'selected'; ?>>RJ</option>
-                                <option value="RM" <?php if ($cycleFilter === 'RM') echo 'selected'; ?>>RM</option>
-                                <option value="RF" <?php if ($cycleFilter === 'RF') echo 'selected'; ?>>RF</option>
+                        <form method="get" id="filterForm" style="margin:15px; display:flex; gap:10px; align-items:center;">
+
+                            <!-- Cycle Dropdown -->
+                            <select name="cycle_filter" id="cycleFilter"
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
+                                <option value="" <?= ($cycleFilter === '') ? 'selected' : '' ?>>All Cycles</option>
+                                <option value="RJ" <?= ($cycleFilter === 'RJ') ? 'selected' : '' ?>>RJ</option>
+                                <option value="RM" <?= ($cycleFilter === 'RM') ? 'selected' : '' ?>>RM</option>
+                                <option value="RF" <?= ($cycleFilter === 'RF') ? 'selected' : '' ?>>RF</option>
                             </select>
-                            <!-- Preserve view_context in the form if present -->
+
+                            <!-- Month Dropdown -->
+                            <select name="month_filter" id="monthFilter"
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
+                                <option value="">All Months</option>
+
+                                <option value="Jan" <?= ($monthFilter === 'Jan') ? 'selected' : '' ?>>January</option>
+                                <option value="Feb" <?= ($monthFilter === 'Feb') ? 'selected' : '' ?>>February</option>
+                                <option value="Mar" <?= ($monthFilter === 'Mar') ? 'selected' : '' ?>>March</option>
+                                <option value="Apr" <?= ($monthFilter === 'Apr') ? 'selected' : '' ?>>April</option>
+                                <option value="May" <?= ($monthFilter === 'May') ? 'selected' : '' ?>>May</option>
+                                <option value="Jun" <?= ($monthFilter === 'Jun') ? 'selected' : '' ?>>June</option>
+                                <option value="Jul" <?= ($monthFilter === 'Jul') ? 'selected' : '' ?>>July</option>
+                                <option value="Aug" <?= ($monthFilter === 'Aug') ? 'selected' : '' ?>>August</option>
+                                <option value="Sep" <?= ($monthFilter === 'Sep') ? 'selected' : '' ?>>September</option>
+                                <option value="Oct" <?= ($monthFilter === 'Oct') ? 'selected' : '' ?>>October</option>
+                                <option value="Nov" <?= ($monthFilter === 'Nov') ? 'selected' : '' ?>>November</option>
+                                <option value="Dec" <?= ($monthFilter === 'Dec') ? 'selected' : '' ?>>December</option>
+
+                            </select>
+
+                            <select name="year_filter" id="yearFilter"
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
+                                <option value="">All Years</option>
+
+                                <?php foreach ($availableYears as $year): ?>
+                                    <option value="<?= $year ?>" <?= ($yearFilter == $year) ? 'selected' : '' ?>>
+                                        <?= $year ?>
+                                    </option>
+                                <?php endforeach; ?>
+
+                            </select>
+
+
+                            <button type="button" id="resetFilters"
+                                style="padding:8px 14px; font-weight:600; border-radius:8px; 
+                                border:1px solid #e2e8f0; background:#f1f5f9; cursor:pointer;" onmouseover="this.style.background='#c5eaf5'" onmouseout="this.style.background='#f8fafc'">
+
+                                Reset
+                            </button>
+
+
+
+
+                            <!-- Preserve view_context -->
                             <?php if (isset($_GET['view_context'])): ?>
-                                <input type="hidden" name="view_context" value="<?php echo htmlspecialchars($_GET['view_context']); ?>">
+                                <input type="hidden" name="view_context" value="<?= htmlspecialchars($_GET['view_context']); ?>">
                             <?php endif; ?>
+
                         </form>
-                        <?php $cycleParam = $cycleFilter !== '' ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>
+                        <?php $cycleParam = '';
+                        if ($cycleFilter !== '') {
+                            $cycleParam .= '&cycle_filter=' . urlencode($cycleFilter);
+                        }
+                        if ($monthFilter !== '') {
+                            $cycleParam .= '&month_filter=' . urlencode($monthFilter);
+                        }
+                        if ($yearFilter !== '') {
+                            $cycleParam .= '&year_filter=' . urlencode($yearFilter);
+                        } ?>
                         <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
                             <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
-                            <div style="font-size: 22px; font-weight: 800; color: #1e293b;">
-                                ₹<?= number_format($totalAum / 10000000, 2); ?>
-                                <span style="font-size: 13px;">Cr</span>
+                            <div id="aumValue">
+                                ₹<?= number_format($totalAum / 10000000, 2); ?> <span style="font-size: 13px;">Cr</span>
                             </div>
+
                         </div>
                     </div>
                 </div>
@@ -254,42 +414,198 @@ $userDesignation = $currentUser['designation'] ?? '';
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>" class="stats-card card-blue">
                     <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
                     <div class="label">Total Assigned</div>
-                    <div class="number"><?php echo (int)$viewStats['total']; ?></div>
+                    <div class="number" id="totalCount"><?= (int)$viewStats['total']; ?></div>
                 </a>
+
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending" class="stats-card card-red-outline">
                     <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
                     <div class="label">Review Not Started</div>
-                    <div class="number"><?php echo (int)$viewStats['count_pending']; ?></div>
+                    <div class="number" id="pendingCount"><?= (int)$viewStats['count_pending']; ?></div>
                 </a>
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=draft" class="stats-card card-grey">
                     <span class="card-icon"><i class="fa-regular fa-pen-to-square"></i></span>
                     <div class="label">Draft</div>
-                    <div class="number"><?php echo (int)$viewStats['count_draft']; ?></div>
+                    <div class="number" id="draftCount"><?= (int)$viewStats['count_draft']; ?></div>
                 </a>
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready" class="stats-card card-yellow">
                     <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
                     <div class="label">Ready</div>
-                    <div class="number"><?php echo (int)$viewStats['count_ready']; ?></div>
+                    <div class="number" id="readyCount"><?= (int)$viewStats['count_ready']; ?></div>
                 </a>
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed" class="stats-card card-teal">
                     <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
                     <div class="label">Reviewed</div>
-                    <div class="number"><?php echo (int)$viewStats['count_reviewed']; ?></div>
+                    <div class="number" id="reviewedCount"><?= (int)$viewStats['count_reviewed']; ?></div>
                 </a>
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=sent" class="stats-card card-green">
                     <span class="card-icon"><i class="fa-solid fa-paper-plane"></i></span>
                     <div class="label">Sent</div>
-                    <div class="number"><?php echo (int)$viewStats['count_sent']; ?></div>
+                    <div class="number" id="sentCount"><?= (int)$viewStats['count_sent']; ?></div>
                 </a>
             </div>
+            <?php foreach ($availableMonths as $monthYear): ?>
+
+                <?php
+                list($mShort, $y) = explode(' ', $monthYear);
+                if ($mShort === $monthFilter && $y == $yearFilter) {
+                    continue;
+                }
+                $stats = fetchDashboardStats(
+                    $pdo,
+                    $viewContext,
+                    $currentUserId,
+                    '',
+                    $mShort,
+                    $y
+                );
+                ?>
+
+                <div class="history-block" style="margin-top:40px;">
+                    <h2 style="margin-bottom:15px;">
+                        <?= date('F', strtotime($mShort . " 1")) . " " . $y ?>
+                    </h2>
+
+                    <div class="kpi-grid">
+                        <div class="stats-card card-blue">
+                            <div class="label">Total Assigned</div>
+                            <div class="number"><?= $stats['total']; ?></div>
+                        </div>
+
+                        <div class="stats-card card-red-outline">
+                            <div class="label">Review Not Started</div>
+                            <div class="number"><?= $stats['count_pending']; ?></div>
+                        </div>
+
+                        <div class="stats-card card-grey">
+                            <div class="label">Draft</div>
+                            <div class="number"><?= $stats['count_draft']; ?></div>
+                        </div>
+
+                        <div class="stats-card card-yellow">
+                            <div class="label">Ready</div>
+                            <div class="number"><?= $stats['count_ready']; ?></div>
+                        </div>
+
+                        <div class="stats-card card-teal">
+                            <div class="label">Reviewed</div>
+                            <div class="number"><?= $stats['count_reviewed']; ?></div>
+                        </div>
+
+                        <div class="stats-card card-green">
+                            <div class="label">Sent</div>
+                            <div class="number"><?= $stats['count_sent']; ?></div>
+                        </div>
+                    </div>
+                </div>
+
+            <?php endforeach; ?>
+
 
         </div> <!-- end .wrap -->
     </div> <!-- end .main-scroll-container -->
 </body>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        const cycle = document.getElementById("cycleFilter");
+        const month = document.getElementById("monthFilter");
+        const year = document.getElementById("yearFilter");
+        const resetBtn = document.getElementById("resetFilters");
+
+        const currentCycle = "<?= $currentCycle ?>";
+        const currentMonth = "<?= $currentMonthShort ?>";
+        const currentYear = "<?= $currentYear ?>";
+
+        function filterMonthDropdown() {
+            const cycleValue = cycle.value;
+
+            const cycleMap = {
+                "RJ": ["Jan", "Apr", "Jul", "Oct"],
+                "RF": ["Feb", "May", "Aug", "Nov"],
+                "RM": ["Mar", "Jun", "Sep", "Dec"]
+            };
+
+            for (let option of month.options) {
+                if (option.value === "") {
+                    option.style.display = "block";
+                    continue;
+                }
+
+                if (!cycleValue) {
+                    option.style.display = "block";
+                } else {
+                    option.style.display = cycleMap[cycleValue]?.includes(option.value) ?
+                        "block" :
+                        "none";
+                }
+            }
+
+            if (cycleValue && !cycleMap[cycleValue]?.includes(month.value)) {
+                month.value = "";
+            }
+        }
+
+        function loadDashboard() {
+            const params = new URLSearchParams({
+                cycle_filter: cycle.value,
+                month_filter: month.value,
+                year_filter: year.value,
+                view_context: "<?= $viewContext ?>"
+            });
+
+            fetch("ajax_dashboard_stats.php?" + params.toString())
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("totalCount").innerText = data.total;
+                    document.getElementById("pendingCount").innerText = data.pending;
+                    document.getElementById("draftCount").innerText = data.draft;
+                    document.getElementById("readyCount").innerText = data.ready;
+                    document.getElementById("reviewedCount").innerText = data.reviewed;
+                    document.getElementById("sentCount").innerText = data.sent;
+
+                    let crore = (data.aum / 10000000).toFixed(2);
+                    document.getElementById("aumValue").innerHTML =
+                        "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
+
+                    document.getElementById("reviewHeading").innerText =
+                        month.options[month.selectedIndex].text + " " + year.value;
+                });
+        }
+
+        // Cycle change
+        if (cycle) {
+            cycle.addEventListener("change", function() {
+                filterMonthDropdown();
+                loadDashboard();
+            });
+        }
+
+        // Month change
+        if (month) month.addEventListener("change", loadDashboard);
+
+        // Year change
+        if (year) year.addEventListener("change", loadDashboard);
+
+        // ✅ Reset button (CORRECT LOCATION)
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function() {
+                cycle.value = currentCycle;
+                month.value = currentMonth;
+                year.value = currentYear;
+
+                filterMonthDropdown();
+                loadDashboard();
+            });
+        }
+
+        // Initial load
+        filterMonthDropdown();
+    });
+</script>
 
 </html>
