@@ -24,7 +24,6 @@ const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 
 
-
 function extractSubCategoryAllocation(string $filePath): array
 {
     $spreadsheet = IOFactory::load($filePath);
@@ -135,32 +134,39 @@ $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 $myId = $currentUser['id'] ?? ($_SESSION['user_id'] ?? 0);
 $currentUserId = $myId;
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';         
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
 // ===============================
 // REVIEW CYCLE RESOLUTION (SINGLE SOURCE OF TRUTH)
 // ===============================
-if (array_key_exists('cycle_filter', $_GET)) {
-
-    // User explicitly selected a value
-    $cycleFilter = trim($_GET['cycle_filter']); // '' means ALL cycles
-
-} else {
-
-    // No cycle_filter in URL → default to current month
-    $month = (int)date('n');
-
-    if (in_array($month, [1, 4, 7, 10])) {
-        $cycleFilter = 'RJ';
-    } elseif (in_array($month, [2, 5, 8, 11])) {
-        $cycleFilter = 'RF';
-    } else {
-        $cycleFilter = 'RM';
-    }
-}
 
 if (isset($_GET['reset'])) {
-    unset($_GET['cycle_filter'], $_GET['filter'], $_GET['owner_filter'], $_GET['q'], $_GET['sort'], $_GET['order']);
+    $_GET = [];
 }
+
+
+function getCurrentReviewCycle(): string {
+    $month = (int)date('n');
+    if (in_array($month, [1,4,7,10])) return 'RJ';
+    if (in_array($month, [2,5,8,11])) return 'RF';
+    return 'RM';
+}
+
+$systemCurrentCycle = getCurrentReviewCycle();
+
+if (isset($_GET['reset'])) {
+    $_GET = [];
+}
+
+$cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
+
+
+
+
+
+
+$systemCurrentCycle = getCurrentReviewCycle();
+$cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
+
 
 
 $successMessage = '';
@@ -202,6 +208,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
             $name     = $_FILES['client_files']['name'][$i];
             $tmpPath  = $_FILES['client_files']['tmp_name'][$i];
             $ext      = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            $allowedExts = ['pdf', 'xls', 'xlsx', 'csv'];
+            if (!in_array($ext, $allowedExts, true)) {
+    continue;
+}
             $destName = uniqid('upload_', true) . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '_', $name);
             $destPath = $baseUploadDir . '/' . $destName;
             if (!move_uploaded_file($tmpPath, $destPath)) {
@@ -245,6 +255,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
 
         $expectedClientName = trim($_POST['expected_client_name'] ?? '');
 
+        $postedCycle = $_POST['review_cycle'] ?? '';
+
+if ($postedCycle !== $systemCurrentCycle) {
+    throw new Exception(
+        "Uploads are allowed only for the current review cycle."
+    );
+}
+
+
+
         $uploadedNames = array_values(array_unique(array_filter(array_map(
             fn($c) => trim($c['name'] ?? ''),
             $allClientReports
@@ -264,6 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
         if (strcasecmp($uploadedNames[0], $expectedClientName) !== 0) {
             throw new Exception("Please upload {$expectedClientName} files only.");
         }
+
 
 
 
@@ -1740,43 +1761,48 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                         <td>
                                             <?php
                                             $hasReport = ($c['report_state'] !== 'pending');
+
+                                            $isUploadAllowed =
+                                                !$hasReport &&
+                                                isset($c['review_cycle']) &&
+                                                $c['review_cycle'] === $systemCurrentCycle;
+
                                             ?>
 
+                                            <!-- OPEN: only if uploaded at least once -->
                                             <?php if ($hasReport): ?>
-                                                <!-- OPEN -->
                                                 <a href="view_report.php?id=<?= (int)$c['id']; ?>"
                                                     class="action-link open-link">
                                                     Open
                                                 </a>
-
-                                                <span class="action-separator">|</span>
                                             <?php endif; ?>
 
-                                            <!-- UPLOAD -->
-                                            <button type="button"
-                                                class="action-link upload-link"
-                                                onclick="triggerUpload(<?= (int)$c['id']; ?>)">
-                                                Upload
-                                            </button>
+                                            <!-- UPLOAD: only if NO report yet AND SYSTEM CURRENT CYCLE -->
+                                            <?php if ($isUploadAllowed): ?>
+                                                <button type="button"
+                                                    class="action-link upload-link"
+                                                    onclick="triggerUpload(<?= (int)$c['id']; ?>)">
+                                                    Upload
+                                                </button>
 
+                                                <form id="uploadForm_<?= (int)$c['id']; ?>"
+                                                    method="post"
+                                                    enctype="multipart/form-data"
+                                                    style="display:none;">
 
-                                            <!-- HIDDEN FORM -->
-                                            <form id="uploadForm_<?= (int)$c['id']; ?>"
-                                                method="post"
-                                                enctype="multipart/form-data"
-                                                style="display:none;">
+                                                    <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
+                                                    <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
+                                                    <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
 
-                                                <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
-                                                <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
-                                                <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
-
-                                                <input type="file"
-                                                    name="client_files[]"
-                                                    multiple
-                                                    onchange="submitUpload(<?= (int)$c['id']; ?>)">
-                                            </form>
+                                                    <input type="file"
+                                                        name="client_files[]"
+                                                        multiple
+                                                        onchange="submitUpload(<?= (int)$c['id']; ?>)">
+                                                </form>
+                                            <?php endif; ?>
 
                                         </td>
+
 
                                     </tr>
                                 <?php endforeach; ?>
@@ -1891,16 +1917,15 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             }
         </script>
         <script>
-function triggerUpload(clientId) {
-    const form = document.getElementById('uploadForm_' + clientId);
-    if (!form) return;
+            function triggerUpload(clientId) {
+                const form = document.getElementById('uploadForm_' + clientId);
+                if (!form) return;
 
-    const fileInput = form.querySelector('input[type="file"]');
-    if (!fileInput) return;
+                const fileInput = form.querySelector('input[type="file"]');
+                if (!fileInput) return;
 
-    fileInput.click();
-}
-
+                fileInput.click();
+            }
         </script>
 
         <!-- Meeting Remarks Modal -->
