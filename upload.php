@@ -302,7 +302,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
         <div class="wrap">
             <div class="page-header">
                 <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
-                    <h1 style="margin:0;">
+                    <h1 >
                         Quarterly Review of
                         <span id="reviewHeading">
                             <?php
@@ -509,7 +509,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                             <!-- Cycle Dropdown -->
                             <select id="prevCycleFilter"
-                               >
+                              style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+ 
                                 <option value="">All Cycles</option>
                                 <option value="RJ">RJ</option>
                                 <option value="RM">RM</option>
@@ -518,7 +519,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                             <!-- Month Dropdown -->
                             <select id="prevMonthFilter"
-                               >
+                              style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+  
                                 <option value="">All Months</option>
                                 <option value="Jan">January</option>
                                 <option value="Feb">February</option>
@@ -535,11 +537,22 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                             </select>
 
                             <!-- Year Dropdown -->
-                            <select id="prevYearFilter"
-                               >
-                                <option value="<?= $y ?>"><?= $y ?></option>
-                            </select>
-                            <button type="button" id="prevResetFilters">
+                          <select id="prevYearFilter"
+   style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
+    <option value="">All Years</option>
+
+    <?php foreach ($availableYears as $year): ?>
+        <option value="<?= $year ?>" <?= ($year == $y) ? 'selected' : '' ?>>
+            <?= $year ?>
+        </option>
+    <?php endforeach; ?>
+
+</select>
+
+                            <button type="button" id="prevResetFilters"  style="padding:8px 14px; font-weight:600; border-radius:8px; 
+                                border:1px solid #e2e8f0; background:#f1f5f9; cursor:pointer;" onmouseover="this.style.background='#c5eaf5'" onmouseout="this.style.background='#f8fafc'">
+
                                 Reset
                             </button>
                             <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
