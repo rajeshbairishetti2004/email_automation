@@ -448,13 +448,20 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                     <div class="number" id="sentCount"><?= (int)$viewStats['count_sent']; ?></div>
                 </a>
             </div>
-            <?php foreach ($availableMonths as $monthYear): ?>
-
-                <?php
+            <?php if (!empty($availableMonths)):
+                $monthYear = $availableMonths[0];
                 list($mShort, $y) = explode(' ', $monthYear);
-                if ($mShort === $monthFilter && $y == $yearFilter) {
-                    continue;
+
+                $prevMonthShort = $mShort;
+
+                if (in_array($prevMonthShort, ['Jan', 'Apr', 'Jul', 'Oct'])) {
+                    $prevCycle = 'RJ';
+                } elseif (in_array($prevMonthShort, ['Feb', 'May', 'Aug', 'Nov'])) {
+                    $prevCycle = 'RF';
+                } else {
+                    $prevCycle = 'RM';
                 }
+
                 $stats = fetchDashboardStats(
                     $pdo,
                     $viewContext,
@@ -463,53 +470,140 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                     $mShort,
                     $y
                 );
-                ?>
 
-                <div class="history-block" style="margin-top:40px;">
-                    <h2 style="margin-bottom:15px;">
-                        <?= date('F', strtotime($mShort . " 1")) . " " . $y ?>
-                    </h2>
+                // ✅ NOW add Previous AUM calculation BELOW this
+                $prevAumWhere = "is_latest = TRUE 
+    AND SUBSTRING_INDEX(month_year, ' ', 1) = ?
+    AND SUBSTRING_INDEX(month_year, ' ', -1) = ?";
+
+                $prevAumParams = [$mShort, $y];
+
+                if ($viewContext === 'mine') {
+                    $prevAumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+                    $prevAumParams[] = $currentUserId;
+                    $prevAumParams[] = $currentUserId;
+                } elseif (ctype_digit($viewContext)) {
+                    $prevAumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
+                    $prevAumParams[] = (int)$viewContext;
+                    $prevAumParams[] = (int)$viewContext;
+                }
+
+                $stmtPrevAum = $pdo->prepare("SELECT SUM(aum) FROM clients WHERE {$prevAumWhere}");
+                $stmtPrevAum->execute($prevAumParams);
+                $prevTotalAum = $stmtPrevAum->fetchColumn() ?: 0;
+
+            ?>
+
+                <div class="dashboard-section" style="margin-top:60px;">
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:20px;">
+
+                        <h1>
+                            Quarterly Review of
+                            <span id="prevReviewHeading">
+                                <?= date('F', strtotime($mShort . " 1")) . " " . $y ?>
+                            </span>
+                        </h1>
+
+                        <div style="display:flex; align-items:center; gap:10px;">
+
+                            <!-- Cycle Dropdown -->
+                            <select id="prevCycleFilter"
+                               >
+                                <option value="">All Cycles</option>
+                                <option value="RJ">RJ</option>
+                                <option value="RM">RM</option>
+                                <option value="RF">RF</option>
+                            </select>
+
+                            <!-- Month Dropdown -->
+                            <select id="prevMonthFilter"
+                               >
+                                <option value="">All Months</option>
+                                <option value="Jan">January</option>
+                                <option value="Feb">February</option>
+                                <option value="Mar">March</option>
+                                <option value="Apr">April</option>
+                                <option value="May">May</option>
+                                <option value="Jun">June</option>
+                                <option value="Jul">July</option>
+                                <option value="Aug">August</option>
+                                <option value="Sep">September</option>
+                                <option value="Oct">October</option>
+                                <option value="Nov">November</option>
+                                <option value="Dec">December</option>
+                            </select>
+
+                            <!-- Year Dropdown -->
+                            <select id="prevYearFilter"
+                               >
+                                <option value="<?= $y ?>"><?= $y ?></option>
+                            </select>
+                            <button type="button" id="prevResetFilters">
+                                Reset
+                            </button>
+                            <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
+                                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">
+                                    AUM Handled
+                                </div>
+
+
+                                <div id="prevAumValue">
+                                    ₹<?= number_format($prevTotalAum / 10000000, 2); ?>
+                                    <span style="font-size: 13px;">Cr</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
 
                     <div class="kpi-grid">
+
                         <div class="stats-card card-blue">
                             <div class="label">Total Assigned</div>
-                            <div class="number"><?= $stats['total']; ?></div>
+                            <div class="number" id="prevTotalCount"><?= $stats['total']; ?></div>
                         </div>
 
                         <div class="stats-card card-red-outline">
                             <div class="label">Review Not Started</div>
-                            <div class="number"><?= $stats['count_pending']; ?></div>
+                            <div class="number" id="prevPendingCount"><?= $stats['count_pending']; ?></div>
                         </div>
 
                         <div class="stats-card card-grey">
                             <div class="label">Draft</div>
-                            <div class="number"><?= $stats['count_draft']; ?></div>
+                            <div class="number" id="prevDraftCount"><?= $stats['count_draft']; ?></div>
                         </div>
 
                         <div class="stats-card card-yellow">
                             <div class="label">Ready</div>
-                            <div class="number"><?= $stats['count_ready']; ?></div>
+                            <div class="number" id="prevReadyCount"><?= $stats['count_ready']; ?></div>
                         </div>
 
                         <div class="stats-card card-teal">
                             <div class="label">Reviewed</div>
-                            <div class="number"><?= $stats['count_reviewed']; ?></div>
+                            <div class="number" id="prevReviewedCount"><?= $stats['count_reviewed']; ?></div>
                         </div>
 
                         <div class="stats-card card-green">
                             <div class="label">Sent</div>
-                            <div class="number"><?= $stats['count_sent']; ?></div>
+                            <div class="number" id="prevSentCount"><?= $stats['count_sent']; ?></div>
                         </div>
+
                     </div>
-                </div>
+                </div> <!-- end .wrap -->
+        </div>
 
-            <?php endforeach; ?>
 
+    <?php endif; ?>
 
-        </div> <!-- end .wrap -->
-    </div> <!-- end .main-scroll-container -->
+    </div>
+
 </body>
 <script>
+    const defaultPrevCycle = "<?= $prevCycle ?? '' ?>";
+    const defaultPrevMonth = "<?= $mShort ?? '' ?>";
+    const defaultPrevYear = "<?= $y ?? '' ?>";
+
     document.addEventListener("DOMContentLoaded", function() {
 
         const cycle = document.getElementById("cycleFilter");
@@ -517,36 +611,75 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
         const year = document.getElementById("yearFilter");
         const resetBtn = document.getElementById("resetFilters");
 
+        const prevCycle = document.getElementById("prevCycleFilter");
+        const prevMonth = document.getElementById("prevMonthFilter");
+        const prevYear = document.getElementById("prevYearFilter");
+
         const currentCycle = "<?= $currentCycle ?>";
         const currentMonth = "<?= $currentMonthShort ?>";
         const currentYear = "<?= $currentYear ?>";
 
+        const cycleMap = {
+            "RJ": ["Jan", "Apr", "Jul", "Oct"],
+            "RF": ["Feb", "May", "Aug", "Nov"],
+            "RM": ["Mar", "Jun", "Sep", "Dec"]
+        };
+        const prevResetBtn = document.getElementById("prevResetFilters");
+        // 🔥 Auto select previous dropdown defaults on load
+if (prevCycle && defaultPrevCycle) {
+    prevCycle.value = defaultPrevCycle;
+}
+
+if (prevMonth && defaultPrevMonth) {
+    prevMonth.value = defaultPrevMonth;
+}
+
+if (prevYear && defaultPrevYear) {
+    prevYear.value = defaultPrevYear;
+}
+
+filterPrevMonthDropdown();
+
+
+        if (prevResetBtn) {
+            prevResetBtn.addEventListener("click", function() {
+
+                prevCycle.value = defaultPrevCycle;
+                prevMonth.value = defaultPrevMonth;
+                prevYear.value = defaultPrevYear;
+
+                filterPrevMonthDropdown();
+                loadPreviousDashboard();
+            });
+        }
+
         function filterMonthDropdown() {
             const cycleValue = cycle.value;
 
-            const cycleMap = {
-                "RJ": ["Jan", "Apr", "Jul", "Oct"],
-                "RF": ["Feb", "May", "Aug", "Nov"],
-                "RM": ["Mar", "Jun", "Sep", "Dec"]
-            };
-
             for (let option of month.options) {
-                if (option.value === "") {
-                    option.style.display = "block";
-                    continue;
-                }
-
-                if (!cycleValue) {
+                if (!cycleValue || option.value === "" || cycleMap[cycleValue]?.includes(option.value)) {
                     option.style.display = "block";
                 } else {
-                    option.style.display = cycleMap[cycleValue]?.includes(option.value) ?
-                        "block" :
-                        "none";
+                    option.style.display = "none";
                 }
             }
 
             if (cycleValue && !cycleMap[cycleValue]?.includes(month.value)) {
                 month.value = "";
+            }
+        }
+
+        function filterPrevMonthDropdown() {
+            if (!prevCycle || !prevMonth) return;
+
+            const cycleValue = prevCycle.value;
+
+            for (let option of prevMonth.options) {
+                if (!cycleValue || option.value === "" || cycleMap[cycleValue]?.includes(option.value)) {
+                    option.style.display = "block";
+                } else {
+                    option.style.display = "none";
+                }
             }
         }
 
@@ -561,6 +694,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
             fetch("ajax_dashboard_stats.php?" + params.toString())
                 .then(res => res.json())
                 .then(data => {
+
                     document.getElementById("totalCount").innerText = data.total;
                     document.getElementById("pendingCount").innerText = data.pending;
                     document.getElementById("draftCount").innerText = data.draft;
@@ -572,12 +706,48 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                     document.getElementById("aumValue").innerHTML =
                         "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
 
-                    document.getElementById("reviewHeading").innerText =
-                        month.options[month.selectedIndex].text + " " + year.value;
+                    if (month.value) {
+                        document.getElementById("reviewHeading").innerText =
+                            month.options[month.selectedIndex].text + " " + year.value;
+                    }
                 });
         }
 
-        // Cycle change
+        function loadPreviousDashboard() {
+            if (!prevCycle || !prevMonth || !prevYear) return;
+
+            const params = new URLSearchParams({
+                cycle_filter: prevCycle.value,
+                month_filter: prevMonth.value,
+                year_filter: prevYear.value,
+                view_context: "<?= $viewContext ?>"
+            });
+
+
+            fetch("ajax_dashboard_stats.php?" + params.toString())
+                .then(res => res.json())
+                .then(data => {
+
+                    document.getElementById("prevTotalCount").innerText = data.total;
+                    document.getElementById("prevPendingCount").innerText = data.pending;
+                    document.getElementById("prevDraftCount").innerText = data.draft;
+                    document.getElementById("prevReadyCount").innerText = data.ready;
+                    document.getElementById("prevReviewedCount").innerText = data.reviewed;
+                    document.getElementById("prevSentCount").innerText = data.sent;
+
+                    let crore = (data.aum / 10000000).toFixed(2);
+                    document.getElementById("prevAumValue").innerHTML =
+                        "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
+
+                    if (prevMonth.value) {
+                        document.getElementById("prevReviewHeading").innerText =
+                            prevMonth.options[prevMonth.selectedIndex].text + " " + prevYear.value;
+                    }
+                });
+        }
+
+        /* Event Listeners */
+
         if (cycle) {
             cycle.addEventListener("change", function() {
                 filterMonthDropdown();
@@ -585,25 +755,29 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
             });
         }
 
-        // Month change
         if (month) month.addEventListener("change", loadDashboard);
-
-        // Year change
         if (year) year.addEventListener("change", loadDashboard);
 
-        // ✅ Reset button (CORRECT LOCATION)
+        if (prevCycle) {
+            prevCycle.addEventListener("change", function() {
+                filterPrevMonthDropdown();
+                loadPreviousDashboard();
+            });
+        }
+
+        if (prevMonth) prevMonth.addEventListener("change", loadPreviousDashboard);
+        if (prevYear) prevYear.addEventListener("change", loadPreviousDashboard);
+
         if (resetBtn) {
             resetBtn.addEventListener("click", function() {
                 cycle.value = currentCycle;
                 month.value = currentMonth;
                 year.value = currentYear;
-
                 filterMonthDropdown();
                 loadDashboard();
             });
         }
 
-        // Initial load
         filterMonthDropdown();
     });
 </script>

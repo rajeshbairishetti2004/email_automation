@@ -95,7 +95,6 @@ a:hover { color: var(--primary-dark); }
 
 .wrap { max-width: 1260px; margin: 0 auto; padding: 28px 20px 60px; }
 .main-scroll-container { height: calc(100vh - 72px); overflow-y: auto; }
-h1 { margin: 6px 0 6px; font-size: 32px; font-weight: 800; color: var(--text-strong); letter-spacing: -0.01em; }
 p.lead { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
 
 .page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -136,12 +135,64 @@ select[name="cycle_filter"]:hover {
     box-shadow: 0 6px 32px 0 rgba(2,136,209,0.13), 0 2px 8px 0 rgba(2,136,209,0.10);
 }
 
+
 select[name="cycle_filter"]:focus {
     outline: 2px solid #0288D1;
     border-color: #0288D1;
     background: rgba(255,255,255,1);
     box-shadow: 0 0 0 3px #b2e0fc, 0 6px 32px 0 rgba(2,136,209,0.13);
 }
+#monthFilter,
+#yearFilter,
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+
+    padding: 12px 44px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0288D1;
+
+    border-radius: 14px;
+    border: 1.5px solid #b2d7f3;
+
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(6px);
+
+    box-shadow: 0 4px 18px rgba(2,136,209,0.08);
+    min-width: 160px;
+
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+#monthFilter:hover,
+#yearFilter:hover,
+#prevCycleFilter:hover,
+#prevMonthFilter:hover,
+#prevYearFilter:hover {
+    border-color: #0288D1;
+    box-shadow: 0 6px 24px rgba(2,136,209,0.12);
+}
+#resetFilters,
+#prevResetFilters {
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1.5px solid #b2d7f3;
+    background: #e3f2fd;
+    color: #0288D1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#resetFilters:hover,
+#prevResetFilters:hover {
+    background: #0288D1;
+    color: white;
+}
+
 
 select[name="cycle_filter"]::-ms-expand {
     display: none;
@@ -356,13 +407,15 @@ th { font-weight: 700; color: #475569; }
     text-align: center; 
 }
 
-h1 {
-    color: #0288D1;
-    font-family: 'Poppins', sans-serif;
-    font-size: 24px;
-    margin-top: 20px;
-    margin-bottom: 30px;
+.page-header h1,
+.dashboard-section h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0288D1;   /* Same blue as your header */
+    letter-spacing: -0.01em;
+    margin: 6px 0 6px;
 }
+
 
 /* --- ERROR PAGE STYLES --- */
 .flash-error { 
@@ -395,5 +448,51 @@ h1 {
 }
 .context-link.active {
     background: var(--primary);
+    color: white;
+}
+/* Apply same styling to previous section dropdowns */
+
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+    padding: 12px 44px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0288D1;
+
+    border-radius: 14px;
+    border: 1.5px solid #b2d7f3;
+
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(6px);
+
+    box-shadow: 0 4px 18px rgba(2,136,209,0.08);
+    min-width: 160px;
+
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#prevCycleFilter:hover,
+#prevMonthFilter:hover,
+#prevYearFilter:hover {
+    border-color: #0288D1;
+    box-shadow: 0 6px 24px rgba(2,136,209,0.12);
+}
+#prevResetFilters {
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1.5px solid #b2d7f3;
+    background: #e3f2fd;
+    color: #0288D1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#prevResetFilters:hover {
+    background: #0288D1;
     color: white;
 }
