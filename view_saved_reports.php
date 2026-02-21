@@ -7,32 +7,22 @@
 
 require_once 'auth.php';
 requireAuth();
+require_once 'env_loader.php';
+require_once 'parsers.php';
+require_once 'renderers.php';
+
+
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 const DEFAULT_GREETING  = 'Dear Mr.';
 const DEFAULT_INTRO     = 'Introduction';
 const DEFAULT_CLOSING   = 'Closing remarks';
 const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
-require_once 'env_loader.php';
-
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_FILES['client_files'])
-    && isset($_POST['expected_client_id'])
-    && isset($_POST['expected_client_name'])
-) {
-
-    require_once 'parsers.php';
-    require_once 'renderers.php';
-
-    $expectedClientId = (int)($_POST['expected_client_id'] ?? 0);
-    if ($expectedClientId <= 0) {
-        throw new Exception('Invalid client upload request.');
-    }
-}
 
 
-use PhpOffice\PhpSpreadsheet\IOFactory;
+
+
 
 function extractSubCategoryAllocation(string $filePath): array
 {
@@ -89,7 +79,6 @@ function extractSubCategoryAllocation(string $filePath): array
 }
 
 
-
 function extractGlobalEquityFromScriptSheet(string $filePath): float
 {
     $spreadsheet = IOFactory::load($filePath);
@@ -144,6 +133,47 @@ $userDesignation = $currentUser['designation'] ?? '';
 $navUser = $currentUser['username'] ?? ($_SESSION['username'] ?? 'User');
 $myId = $currentUser['id'] ?? ($_SESSION['user_id'] ?? 0);
 $currentUserId = $myId;
+$filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
+$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+// ===============================
+// REVIEW CYCLE RESOLUTION (SINGLE SOURCE OF TRUTH)
+// ===============================
+
+if (isset($_GET['reset'])) {
+    $_GET = [];
+}
+
+
+function getCurrentReviewCycle(): string {
+    $month = (int)date('n');
+    if (in_array($month, [1,4,7,10])) return 'RJ';
+    if (in_array($month, [2,5,8,11])) return 'RF';
+    return 'RM';
+}
+
+$systemCurrentCycle = getCurrentReviewCycle();
+
+/**
+ * Reset clears everything
+ */
+if (isset($_GET['reset'])) {
+    $cycleFilter = '';
+}
+/**
+ * Coming from customer_list → show ALL cycles
+ */
+elseif (isset($_GET['from_customer_list'])) {
+    $cycleFilter = '';
+}
+/**
+ * Normal behavior
+ */
+else {
+    $cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
+}
+
+
+
 $successMessage = '';
 $errorMessage   = '';
 
@@ -172,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
         $allocationExcelPath = null;
 
 
+
         $fileCount = count($_FILES['client_files']['name']);
         for ($i = 0; $i < $fileCount; $i++) {
             $error = $_FILES['client_files']['error'][$i];
@@ -182,6 +213,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
             $name     = $_FILES['client_files']['name'][$i];
             $tmpPath  = $_FILES['client_files']['tmp_name'][$i];
             $ext      = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            $allowedExts = ['pdf', 'xls', 'xlsx', 'csv'];
+            if (!in_array($ext, $allowedExts, true)) {
+    continue;
+}
             $destName = uniqid('upload_', true) . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '_', $name);
             $destPath = $baseUploadDir . '/' . $destName;
             if (!move_uploaded_file($tmpPath, $destPath)) {
@@ -225,6 +260,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
 
         $expectedClientName = trim($_POST['expected_client_name'] ?? '');
 
+        $postedCycle = $_POST['review_cycle'] ?? '';
+
+if ($postedCycle !== $systemCurrentCycle) {
+    throw new Exception(
+        "Uploads are allowed only for the current review cycle."
+    );
+}
+
+
+
         $uploadedNames = array_values(array_unique(array_filter(array_map(
             fn($c) => trim($c['name'] ?? ''),
             $allClientReports
@@ -244,6 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
         if (strcasecmp($uploadedNames[0], $expectedClientName) !== 0) {
             throw new Exception("Please upload {$expectedClientName} files only.");
         }
+
 
 
 
@@ -521,6 +567,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
         }
 
         $pdo->commit();
+        if (is_dir($baseUploadDir)) {
+            $files = glob("$baseUploadDir/*");
+            if ($files) array_map('unlink', $files);
+            @rmdir($baseUploadDir);
+        }
+
 
         if ($firstClientId > 0) {
             header('Location: view_report.php?id=' . $firstClientId . '&initial_save=1');
@@ -641,10 +693,10 @@ $showReassignedSummary = false;
 $reassignedSummary = [];
 $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
+
+
 // Get filter values for summary
-$cycleFilter = isset($_GET['cycle_filter']) ? trim($_GET['cycle_filter']) : '';
-$filter = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+
 
 $summaryUserId = $myId;
 if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'])) {
@@ -708,9 +760,8 @@ if ($isAdmin || $myId) {
 
 // 1. Get Filter Inputs
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
-$filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
-$ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all'; // Default to 'all' for admin
-$cycleFilter = isset($_GET['cycle_filter']) ? trim($_GET['cycle_filter']) : '';
+
+
 $sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
 $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
 $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
@@ -720,8 +771,8 @@ $offset      = ($page - 1) * $limit;
 $whereParts = [];
 $params = [];
 
-// Always restrict to clients where the logged-in user is RM or Reviewer (except for admin)
-$isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
+
+
 
 // --- FIX: Only restrict for non-admin, do NOT add this clause for admin ---
 if (!$isAdmin) {
@@ -1448,7 +1499,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                 <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
                 <!-- Only Reset button remains -->
-                <a href="view_saved_reports.php" class="btn btn-reset">Reset Filters</a>
+                <a href="view_saved_reports.php?reset=1" class="btn btn-reset">Reset Filters</a>
+
             </form>
 
             <?php if (!$clients): ?>
@@ -1714,43 +1766,48 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                                         <td>
                                             <?php
                                             $hasReport = ($c['report_state'] !== 'pending');
+
+                                            $isUploadAllowed =
+                                                !$hasReport &&
+                                                isset($c['review_cycle']) &&
+                                                $c['review_cycle'] === $systemCurrentCycle;
+
                                             ?>
 
+                                            <!-- OPEN: only if uploaded at least once -->
                                             <?php if ($hasReport): ?>
-                                                <!-- OPEN -->
                                                 <a href="view_report.php?id=<?= (int)$c['id']; ?>"
                                                     class="action-link open-link">
                                                     Open
                                                 </a>
-
-                                                <span class="action-separator">|</span>
                                             <?php endif; ?>
 
-                                            <!-- UPLOAD -->
-                                            <button type="button"
-                                                class="action-link upload-link"
-                                                onclick="triggerUpload(<?= (int)$c['id']; ?>)">
-                                                Upload
-                                            </button>
+                                            <!-- UPLOAD: only if NO report yet AND SYSTEM CURRENT CYCLE -->
+                                            <?php if ($isUploadAllowed): ?>
+                                                <button type="button"
+                                                    class="action-link upload-link"
+                                                    onclick="triggerUpload(<?= (int)$c['id']; ?>)">
+                                                    Upload
+                                                </button>
 
+                                                <form id="uploadForm_<?= (int)$c['id']; ?>"
+                                                    method="post"
+                                                    enctype="multipart/form-data"
+                                                    style="display:none;">
 
-                                            <!-- HIDDEN FORM -->
-                                            <form id="uploadForm_<?= (int)$c['id']; ?>"
-                                                method="post"
-                                                enctype="multipart/form-data"
-                                                style="display:none;">
+                                                    <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
+                                                    <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
+                                                    <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
 
-                                                <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
-                                                <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
-                                                <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
-
-                                                <input type="file"
-                                                    name="client_files[]"
-                                                    multiple
-                                                    onchange="submitUpload(<?= (int)$c['id']; ?>)">
-                                            </form>
+                                                    <input type="file"
+                                                        name="client_files[]"
+                                                        multiple
+                                                        onchange="submitUpload(<?= (int)$c['id']; ?>)">
+                                                </form>
+                                            <?php endif; ?>
 
                                         </td>
+
 
                                     </tr>
                                 <?php endforeach; ?>
@@ -1867,13 +1924,12 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         <script>
             function triggerUpload(clientId) {
                 const form = document.getElementById('uploadForm_' + clientId);
-                const fileInput = form.querySelector('input[type="file"]');
-                fileInput.click(); // opens local file chooser
-            }
+                if (!form) return;
 
-            function submitUpload(clientId) {
-                const form = document.getElementById('uploadForm_' + clientId);
-                form.submit(); // submits to SAME page
+                const fileInput = form.querySelector('input[type="file"]');
+                if (!fileInput) return;
+
+                fileInput.click();
             }
         </script>
 

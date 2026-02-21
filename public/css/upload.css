@@ -93,7 +93,7 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 a { color: var(--primary); text-decoration: none; }
 a:hover { color: var(--primary-dark); }
 
-.wrap { max-width: 1260px; margin: 0 auto; padding: 28px 20px 60px; }
+.wrap { max-width: 1260px; margin: 0 auto;margin-top:75px; padding: 28px 20px 60px; }
 .main-scroll-container { height: calc(100vh - 72px); overflow-y: auto; }
 p.lead { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
 

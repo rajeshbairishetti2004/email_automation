@@ -89,7 +89,14 @@ $userDesignation = $_SESSION['designation'] ?? '';
                     Manage Schemes
                 </a>
 
+
             <?php endif; ?>
+
+                            <a href="<?php echo getNavLink('customer_list.php'); ?>"
+                    class="<?= ($currentPage === 'customer_list.php') ? 'active' : '' ?>">
+                    Customer List
+                </a>
+
             <!-- Report Generation link: if we're already in report_generation folder, link to index.php, otherwise link to report_generation/index.php -->
             <a href="<?php echo $isInReportGenFolder ? 'coming_soon.php' : 'report_generation/coming_soon.php'; ?>"
                 class="<?= $isReportGeneration ? 'active' : '' ?>">
