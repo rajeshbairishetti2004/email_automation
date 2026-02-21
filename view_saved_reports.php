@@ -153,19 +153,24 @@ function getCurrentReviewCycle(): string {
 
 $systemCurrentCycle = getCurrentReviewCycle();
 
+/**
+ * Reset clears everything
+ */
 if (isset($_GET['reset'])) {
-    $_GET = [];
+    $cycleFilter = '';
 }
-
-$cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
-
-
-
-
-
-
-$systemCurrentCycle = getCurrentReviewCycle();
-$cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
+/**
+ * Coming from customer_list → show ALL cycles
+ */
+elseif (isset($_GET['from_customer_list'])) {
+    $cycleFilter = '';
+}
+/**
+ * Normal behavior
+ */
+else {
+    $cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
+}
 
 
 

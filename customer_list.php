@@ -3,11 +3,11 @@
 
 require_once 'auth.php';
 require_once 'db_config.php';
-
 requireAuth();
-$pdo = getPdo();
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+
+$pdo = getPdo();
 
 /* ===============================
    EXCEL UPLOAD HANDLER (ADMIN)
@@ -23,18 +23,29 @@ if (
         die("Excel upload failed");
     }
 
+    /* 🔒 Strict filename check (NEW FORMAT ONLY) */
     $originalName = $_FILES['customer_excel']['name'];
-    if (stripos($originalName, 'customer_list') === false) {
-        die("Invalid file. Please upload customer_list.xlsx");
+    if (stripos($originalName, 'Client details') === false) {
+        die("Invalid file. Please upload the latest Client details Excel only.");
     }
 
     $spreadsheet = IOFactory::load($_FILES['customer_excel']['tmp_name']);
-    $rows = $spreadsheet->getActiveSheet()->toArray();
-    unset($rows[0]); // header row
+    $sheet = $spreadsheet->getActiveSheet();
+    $rows  = $sheet->toArray(null, true, true, true);
+
+    /* ---- Header mapping ---- */
+    $header = array_shift($rows);
+    $map = [];
+    foreach ($header as $col => $name) {
+        $map[trim($name)] = $col;
+    }
+
+    $get = fn($row, $key) => trim($row[$map[$key]] ?? '');
 
     $stmt = $pdo->prepare("
         INSERT INTO customer_list
-        (name, pan, email, mobile, family_head, city, company, first_investment, aum, tags, rm)
+        (name, pan, email, mobile, family_head, city, company,
+         first_investment, aum, tags, rm)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             name = VALUES(name),
@@ -50,28 +61,23 @@ if (
     ");
 
     foreach ($rows as $row) {
-        $name   = trim($row[0] ?? '');
-        $pan    = trim($row[1] ?? '');
+        $pan = $get($row, 'PAN');
         if ($pan === '') continue;
 
-        $email  = trim($row[2] ?? '');
-        $mobile = trim($row[3] ?? '');
-        $fh     = trim($row[4] ?? '');
-        $city   = trim($row[5] ?? '');
-        $company= trim($row[6] ?? '');
-        $dateIn = trim($row[7] ?? '');
-        $aumTxt = trim($row[8] ?? '');
-        $tags   = trim($row[9] ?? '');
-        $rm     = trim($row[10] ?? '');
+        $name    = $get($row, 'NAME');
+        $email   = $get($row, 'EMAIL');
+        $mobile  = $get($row, 'MOBILE');
+        $fh      = $get($row, 'FAMILY HEAD');
+        $city    = $get($row, 'CITY');
+        $company = $get($row, 'MODEL NAME');
+        $tags    = $get($row, 'TAGS');
+        $rm      = $get($row, 'RELATIONSHIP  MANAGER');
 
-        $date = $dateIn ? date('Y-m-d', strtotime($dateIn)) : null;
+        $dateRaw = $get($row, 'First Investment Date');
+        $date = $dateRaw ? date('Y-m-d', strtotime($dateRaw)) : null;
 
-        $aum = 0;
-        if (preg_match('/([\d.]+)\s*Lakhs/i', $aumTxt, $m)) {
-            $aum = $m[1] * 100000;
-        } elseif (preg_match('/([\d.]+)\s*Cr/i', $aumTxt, $m)) {
-            $aum = $m[1] * 10000000;
-        }
+        $aumRaw = $get($row, 'AUM');
+        $aum = is_numeric($aumRaw) ? (float)$aumRaw : 0;
 
         $stmt->execute([
             $name, $pan, $email, $mobile, $fh,
@@ -93,9 +99,8 @@ $customers = $pdo->query("
     ORDER BY name ASC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-/* Dropdown values */
-$cities = array_unique(array_column($customers, 'city'));
-$rms    = array_unique(array_column($customers, 'rm'));
+$cities = array_unique(array_filter(array_column($customers, 'city')));
+$rms    = array_unique(array_filter(array_column($customers, 'rm')));
 sort($cities);
 sort($rms);
 ?>
@@ -110,8 +115,22 @@ sort($rms);
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
 
 <style>
-.page-container { padding: 50px; font-family: 'Inter', sans-serif; }
-.page-title { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+html, body {
+    height: 100%;
+    overflow-y: auto; /* ✅ restore scrollbar */
+}
+
+.page-container {
+    padding: 50px;
+    font-family: 'Inter', sans-serif;
+    min-height: calc(100vh - 60px);
+}
+
+.page-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
 
 /* Toolbar */
 .toolbar {
@@ -129,16 +148,7 @@ sort($rms);
     align-items: center;
 }
 
- select {
-    height: 40px;
-    padding: 0 12px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 14px;
-}
-.search-box {
-    width: 420px;          /* ⬅ increase width here */
-    min-width: 420px;
+select, .search-box {
     height: 40px;
     padding: 0 12px;
     border: 1px solid #ccc;
@@ -146,6 +156,9 @@ sort($rms);
     font-size: 14px;
 }
 
+.search-box {
+    width: 420px;
+}
 
 .action-btn {
     height: 40px;
@@ -183,21 +196,37 @@ sort($rms);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 70vh; /* ✅ table scroll */
 }
+
 .customer-table {
     width: 100%;
     border-collapse: collapse;
 }
+
 .customer-table th, .customer-table td {
     padding: 12px 14px;
     border-bottom: 1px solid #eaeaea;
     font-size: 14px;
 }
+
 .customer-table th {
     background: #f8f9fb;
     font-weight: 600;
 }
+
 .customer-table tr:hover { background: #fafafa; }
+
+.client-link {
+    color: #2563eb;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.client-link:hover {
+    text-decoration: underline;
+}
 
 @media (max-width: 900px) {
     .toolbar { flex-direction: column; align-items: stretch; }
@@ -214,7 +243,6 @@ sort($rms);
 
 <div class="toolbar">
 
-    <!-- SEARCH + FILTERS -->
     <div class="search-group">
         <input type="text" id="searchInput" class="search-box" placeholder="Search..." onkeyup="applyFilters()">
 
@@ -242,7 +270,6 @@ sort($rms);
         <button class="action-btn" onclick="resetFilters()">Reset</button>
     </div>
 
-    <!-- ADMIN UPLOAD -->
     <?php if (($_SESSION['designation'] ?? '') === 'Admin'): ?>
     <form method="POST" enctype="multipart/form-data" class="upload-form">
         <label class="file-label">
@@ -267,7 +294,17 @@ sort($rms);
 <tbody>
 <?php foreach ($customers as $c): ?>
 <tr>
-<td><?= htmlspecialchars($c['name']) ?></td>
+<td>
+<a class="client-link"
+   href="view_saved_reports.php?from_customer_list=1
+        &q=<?= urlencode($c['name']) ?>
+        &cycle=all
+        &owner=all
+        &state=all"
+   target="_blank">
+    <?= htmlspecialchars($c['name']) ?>
+</a>
+</td>
 <td><?= htmlspecialchars($c['pan']) ?></td>
 <td><?= htmlspecialchars($c['email']) ?></td>
 <td><?= htmlspecialchars($c['mobile']) ?></td>
@@ -295,10 +332,10 @@ else echo '₹'.number_format($a,2);
 
 <script>
 function applyFilters() {
-    const s = document.getElementById('searchInput').value.toLowerCase();
-    const city = document.getElementById('cityFilter').value.toLowerCase();
-    const rm = document.getElementById('rmFilter').value.toLowerCase();
-    const tag = document.getElementById('tagFilter').value.toLowerCase();
+    const s = searchInput.value.toLowerCase();
+    const city = cityFilter.value.toLowerCase();
+    const rm = rmFilter.value.toLowerCase();
+    const tag = tagFilter.value.toLowerCase();
 
     document.querySelectorAll('#customerTable tbody tr').forEach(r => {
         const t = r.innerText.toLowerCase();
