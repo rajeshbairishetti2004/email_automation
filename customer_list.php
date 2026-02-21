@@ -10,6 +10,25 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 $pdo = getPdo();
 
 /* ===============================
+   DELETE ALL CUSTOMERS (ADMIN)
+================================ */
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['delete_all_customers']) &&
+    ($_SESSION['designation'] ?? '') === 'Admin'
+) {
+    try {
+        // Safer than DELETE for full wipe (resets auto_increment)
+        $pdo->exec("TRUNCATE TABLE customer_list");
+
+        header("Location: customer_list.php?deleted=1");
+        exit;
+    } catch (Exception $e) {
+        die("Failed to delete customers: " . $e->getMessage());
+    }
+}
+
+/* ===============================
    EXCEL UPLOAD HANDLER (ADMIN)
 ================================ */
 if (
@@ -241,6 +260,12 @@ select, .search-box {
 
 <h2 class="page-title">Customer List</h2>
 
+<?php if (isset($_GET['deleted'])): ?>
+    <div style="margin-bottom:12px;color:#15803d;font-weight:600;">
+        ✅ All customers deleted successfully.
+    </div>
+<?php endif; ?>
+
 <div class="toolbar">
 
     <div class="search-group">
@@ -278,6 +303,17 @@ select, .search-box {
         </label>
         <button type="submit" name="upload_excel" class="action-btn">Upload Excel</button>
     </form>
+<form method="POST"
+      id="deleteAllForm"
+      style="margin-left:12px;">
+<button
+    type="button"
+    onclick="openDeleteModal()"
+    class="action-btn"
+    style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;">
+    🗑 Delete All Customers
+</button>
+</form>
     <?php endif; ?>
 
 </div>
@@ -329,7 +365,49 @@ else echo '₹'.number_format($a,2);
 </div>
 
 </div>
+<!-- Delete All Confirmation Modal -->
+<div id="deleteAllModal"
+     style="display:none;
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,0.5);
+            z-index:9999;
+            align-items:center;
+            justify-content:center;">
 
+    <div style="background:#fff;
+                padding:24px;
+                border-radius:10px;
+                width:420px;
+                max-width:90%;
+                box-shadow:0 20px 40px rgba(0,0,0,0.25);">
+
+        <h3 style="margin-top:0;color:#b91c1c;">
+            ⚠️ Confirm Delete
+        </h3>
+
+        <p style="font-size:14px;color:#333;line-height:1.5;">
+            This will <strong>permanently delete ALL customers</strong>
+            from the system.<br><br>
+            <strong>This action cannot be undone.</strong>
+        </p>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+            <button type="button"
+                    onclick="closeDeleteModal()"
+                    class="action-btn">
+                ❌ No, Cancel
+            </button>
+
+            <button type="button"
+                    onclick="submitDeleteAll()"
+                    class="action-btn"
+                    style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;">
+                ✅ Yes, Delete All
+            </button>
+        </div>
+    </div>
+</div>
 <script>
 function applyFilters() {
     const s = searchInput.value.toLowerCase();
@@ -362,6 +440,27 @@ function resetFilters() {
 
 function showFileName(i) {
     fileText.textContent = i.files.length ? i.files[0].name : 'Choose File';
+}
+
+function openDeleteModal() {
+    document.getElementById('deleteAllModal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteAllModal').style.display = 'none';
+}
+
+function submitDeleteAll() {
+    const form = document.getElementById('deleteAllForm');
+
+    // Add hidden input dynamically
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'delete_all_customers';
+    input.value = '1';
+    form.appendChild(input);
+
+    form.submit();
 }
 </script>
 
