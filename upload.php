@@ -123,16 +123,14 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
     $baseWhere = "1=1";
     $params = [];
 
-    // Apply context filters
-    if ($context === 'mine') {
-        $baseWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
-        $params[] = $userId;
-        $params[] = $userId;
-    } elseif (ctype_digit($context)) {
-        $baseWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
-        $params[] = (int)$context;
-        $params[] = (int)$context;
-    }
+// Apply context filters (RM ownership only)
+if ($context === 'mine') {
+    $baseWhere .= " AND assigned_to = ?";
+    $params[] = $userId;
+} elseif (ctype_digit($context)) {
+    $baseWhere .= " AND assigned_to = ?";
+    $params[] = (int)$context;
+}
 
     // Add cycle filter if set
     if ($cycleFilter === 'RJ') {
@@ -219,11 +217,11 @@ $aumWhere = "is_latest = TRUE";
 $aumParams = [];
 
 if ($viewContext === 'mine') {
-    $aumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
-    $aumParams = [$currentUserId, $currentUserId];
+    $aumWhere .= " AND assigned_to = ?";
+    $aumParams = [$currentUserId];
 } elseif (ctype_digit($viewContext)) {
-    $aumWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
-    $aumParams = [(int)$viewContext, (int)$viewContext];
+    $aumWhere .= " AND assigned_to = ?";
+    $aumParams = [$currentUserId];
 }
 
 if ($cycleFilter === 'RJ') {

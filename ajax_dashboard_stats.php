@@ -26,8 +26,7 @@ $params = [];
 
 /* Context */
 if ($viewContext === 'mine') {
-    $where .= " AND (assigned_to = ? OR review_assigned_to = ?)";
-    $params[] = $currentUserId;
+    $where .= " AND (assigned_to = ?)";
     $params[] = $currentUserId;
 }
 
