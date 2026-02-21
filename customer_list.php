@@ -117,7 +117,7 @@ sort($rms);
 <style>
 html, body {
     height: 100%;
-    overflow-y: auto; /* ✅ restore scrollbar */
+    overflow-y: hidden; /* ✅ restore scrollbar */
 }
 
 .page-container {
