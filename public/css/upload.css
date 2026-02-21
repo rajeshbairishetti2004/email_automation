@@ -239,12 +239,7 @@ select[name="cycle_filter"] option {
 .stats-card .label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
 .stats-card .number { margin-top: 6px; font-size: 26px; font-weight: 800; color: var(--text-strong); }
 .card-icon { position: absolute; top: 10px; right: 12px; color: var(--text); opacity: 0.15; font-size: 20px; }
-.card-blue { border-left: 4px solid #2563eb; }
-.card-red-outline { border-left: 4px solid #ef4444; }
-.card-grey { border-left: 4px solid #94a3b8; }
-.card-yellow { border-left: 4px solid #f59e0b; }
-.card-teal { border-left: 4px solid #0ea5e9; }
-.card-green { border-left: 4px solid #22c55e; }
+
 
 .completion-card { margin-top: 8px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .completion-title { font-weight: 700; color: var(--text-strong); font-size: 16px; margin: 0; }
@@ -406,10 +401,43 @@ th { font-weight: 700; color: #475569; }
     padding: 0 20px; 
     text-align: center; 
 }
+/* Make heading + filters + AUM in single line */
+.page-header > div {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+/* Remove unwanted spacing */
+.page-header h1 {
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Align right section properly */
+.page-header form {
+    margin: 0 !important;
+}
+
+/* Keep AUM aligned vertically */
+.aum-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+/* Prevent wrapping on smaller width */
+.page-header > div > div {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
 
 .page-header h1,
 .dashboard-section h1 {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 800;
     color: #0288D1;   /* Same blue as your header */
     letter-spacing: -0.01em;
@@ -496,3 +524,189 @@ th { font-weight: 700; color: #475569; }
     background: #0288D1;
     color: white;
 }
+
+
+/* =====================================================
+   FORCE HEADING + FILTERS + AUM IN SINGLE STRAIGHT LINE
+   (Works for BOTH current & previous sections)
+   ===================================================== */
+
+/* Header container alignment */
+.page-header > div,
+.dashboard-section > div {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    width: 100%;
+}
+
+/* Keep heading and right section aligned */
+.page-header h1,
+.dashboard-section h1 {
+    margin: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Right side (filters + AUM) */
+.page-header > div > div,
+.dashboard-section > div > div {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: nowrap;
+}
+
+/* Remove extra form margin */
+#filterForm {
+    margin: 0 !important;
+}
+
+/* AUM styling */
+.aum-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 140px;
+}
+
+/* Make sure dropdowns don’t wrap */
+#cycleFilter,
+#monthFilter,
+#yearFilter,
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+    flex-shrink: 0;
+}
+/* =====================================================
+   FIX PREVIOUS SECTION SPACING + KPI STYLE
+   ===================================================== */
+
+/* Increase gap between previous heading and KPI cards */
+.dashboard-section {
+    margin-top: 80px !important;   /* More space from above section */
+}
+
+.dashboard-section h1 {
+    margin-bottom: 30px !important;  /* Space between heading and KPIs */
+}
+
+/* Make previous KPI cards identical to current */
+.dashboard-section .kpi-grid {
+    margin-top: 10px;
+    gap: 14px; /* same as current */
+}
+
+/* Ensure previous cards use same size + shadow */
+.dashboard-section .stats-card {
+    padding: 16px 16px 14px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.dashboard-section .stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(15,23,42,0.08);
+}
+
+/* Make numbers same size as current */
+.dashboard-section .stats-card .number {
+    font-size: 26px;
+    font-weight: 800;
+}
+
+/* Make labels same */
+.dashboard-section .stats-card .label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+/* =====================================================
+   FORCE CURRENT & PREVIOUS KPI DESIGN TO BE IDENTICAL
+   ===================================================== */
+
+/* Make both KPI grids identical */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+/* Remove any extra margin differences */
+.dashboard-section .kpi-grid {
+    margin-top: 0 !important;
+}
+
+/* Make previous cards EXACT same as current */
+.stats-card {
+    position: relative;
+    display: block;
+    padding: 16px 16px 14px;
+    background: #ffffff;
+
+    /* IMPORTANT FIX */
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid transparent; /* allow color classes to override */
+
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+    color: #334155;
+    text-decoration: none;
+}
+
+
+
+/* Same hover effect */
+.stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(15,23,42,0.08);
+}
+
+/* Same number styling */
+.stats-card .number {
+    margin-top: 6px;
+    font-size: 26px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+/* Same label styling */
+.stats-card .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Same icon styling */
+.stats-card .card-icon {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    opacity: 0.15;
+    font-size: 20px;
+}
+
+/* Ensure dashboard-section doesn't change card layout */
+.dashboard-section .stats-card {
+    width: 100%;
+}
+/* =========================
+   KPI LEFT COLORS (KEEP LAST)
+   ========================= */
+
+.card-blue { border-left-color: #2563eb !important; }
+.card-red-outline { border-left-color: #ef4444 !important; }
+.card-grey { border-left-color: #94a3b8 !important; }
+.card-yellow { border-left-color: #f59e0b !important; }
+.card-teal { border-left-color: #0ea5e9 !important; }
+.card-green { border-left-color: #22c55e !important; }

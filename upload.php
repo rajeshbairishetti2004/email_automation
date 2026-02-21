@@ -301,8 +301,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
     <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
         <div class="wrap">
             <div class="page-header">
-                <div style="display: flex; justify-content: space-between; align-items: center; width:100%; margin-bottom:20px;">
-                    <h1 >
+                <div>
+                    <h1>
                         Quarterly Review of
                         <span id="reviewHeading">
                             <?php
@@ -389,8 +389,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         if ($yearFilter !== '') {
                             $cycleParam .= '&year_filter=' . urlencode($yearFilter);
                         } ?>
-                        <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
-                            <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">AUM Handled</div>
+                        <div class="aum-box">
+                            <div>AUM Handled</div>
                             <div id="aumValue">
                                 ₹<?= number_format($totalAum / 10000000, 2); ?> <span style="font-size: 13px;">Cr</span>
                             </div>
@@ -496,7 +496,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 <div class="dashboard-section" style="margin-top:60px;">
 
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:20px;">
+                    <div>
 
                         <h1>
                             Quarterly Review of
@@ -509,8 +509,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                             <!-- Cycle Dropdown -->
                             <select id="prevCycleFilter"
-                              style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
- 
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
                                 <option value="">All Cycles</option>
                                 <option value="RJ">RJ</option>
                                 <option value="RM">RM</option>
@@ -519,8 +519,8 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                             <!-- Month Dropdown -->
                             <select id="prevMonthFilter"
-                              style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
-  
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+
                                 <option value="">All Months</option>
                                 <option value="Jan">January</option>
                                 <option value="Feb">February</option>
@@ -537,26 +537,26 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                             </select>
 
                             <!-- Year Dropdown -->
-                          <select id="prevYearFilter"
-   style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
+                            <select id="prevYearFilter"
+                                style="padding:8px 18px 8px 10px; font-size:15px; font-weight:600; color:#0288D1; border-radius:8px; border:1px solid #e2e8f0; background:#fff;">
 
-    <option value="">All Years</option>
+                                <option value="">All Years</option>
 
-    <?php foreach ($availableYears as $year): ?>
-        <option value="<?= $year ?>" <?= ($year == $y) ? 'selected' : '' ?>>
-            <?= $year ?>
-        </option>
-    <?php endforeach; ?>
+                                <?php foreach ($availableYears as $year): ?>
+                                    <option value="<?= $year ?>" <?= ($year == $y) ? 'selected' : '' ?>>
+                                        <?= $year ?>
+                                    </option>
+                                <?php endforeach; ?>
 
-</select>
+                            </select>
 
-                            <button type="button" id="prevResetFilters"  style="padding:8px 14px; font-weight:600; border-radius:8px; 
+                            <button type="button" id="prevResetFilters" style="padding:8px 14px; font-weight:600; border-radius:8px; 
                                 border:1px solid #e2e8f0; background:#f1f5f9; cursor:pointer;" onmouseover="this.style.background='#c5eaf5'" onmouseout="this.style.background='#f8fafc'">
 
                                 Reset
                             </button>
-                            <div class="aum-box" style="text-align: right; border-left: 2px solid #e2e8f0; padding-left: 20px;">
-                                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">
+                            <div class="aum-box">
+                                <div>
                                     AUM Handled
                                 </div>
 
@@ -572,37 +572,50 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                     <div class="kpi-grid">
 
-                        <div class="stats-card card-blue">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>"
+                            class="stats-card card-blue">
+                            <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
                             <div class="label">Total Assigned</div>
                             <div class="number" id="prevTotalCount"><?= $stats['total']; ?></div>
-                        </div>
+                        </a>
 
-                        <div class="stats-card card-red-outline">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending"
+                            class="stats-card card-red-outline">
+                            <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
                             <div class="label">Review Not Started</div>
                             <div class="number" id="prevPendingCount"><?= $stats['count_pending']; ?></div>
-                        </div>
+                        </a>
 
-                        <div class="stats-card card-grey">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=draft"
+                            class="stats-card card-grey">
+                            <span class="card-icon"><i class="fa-regular fa-pen-to-square"></i></span>
                             <div class="label">Draft</div>
                             <div class="number" id="prevDraftCount"><?= $stats['count_draft']; ?></div>
-                        </div>
+                        </a>
 
-                        <div class="stats-card card-yellow">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready"
+                            class="stats-card card-yellow">
+                            <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
                             <div class="label">Ready</div>
                             <div class="number" id="prevReadyCount"><?= $stats['count_ready']; ?></div>
-                        </div>
+                        </a>
 
-                        <div class="stats-card card-teal">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed"
+                            class="stats-card card-teal">
+                            <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
                             <div class="label">Reviewed</div>
                             <div class="number" id="prevReviewedCount"><?= $stats['count_reviewed']; ?></div>
-                        </div>
+                        </a>
 
-                        <div class="stats-card card-green">
+                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=sent"
+                            class="stats-card card-green">
+                            <span class="card-icon"><i class="fa-solid fa-paper-plane"></i></span>
                             <div class="label">Sent</div>
                             <div class="number" id="prevSentCount"><?= $stats['count_sent']; ?></div>
-                        </div>
+                        </a>
 
                     </div>
+
                 </div> <!-- end .wrap -->
         </div>
 
@@ -639,19 +652,19 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
         };
         const prevResetBtn = document.getElementById("prevResetFilters");
         // 🔥 Auto select previous dropdown defaults on load
-if (prevCycle && defaultPrevCycle) {
-    prevCycle.value = defaultPrevCycle;
-}
+        if (prevCycle && defaultPrevCycle) {
+            prevCycle.value = defaultPrevCycle;
+        }
 
-if (prevMonth && defaultPrevMonth) {
-    prevMonth.value = defaultPrevMonth;
-}
+        if (prevMonth && defaultPrevMonth) {
+            prevMonth.value = defaultPrevMonth;
+        }
 
-if (prevYear && defaultPrevYear) {
-    prevYear.value = defaultPrevYear;
-}
+        if (prevYear && defaultPrevYear) {
+            prevYear.value = defaultPrevYear;
+        }
 
-filterPrevMonthDropdown();
+        filterPrevMonthDropdown();
 
 
         if (prevResetBtn) {
