@@ -123,14 +123,14 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
     $baseWhere = "1=1";
     $params = [];
 
-// Apply context filters (RM ownership only)
-if ($context === 'mine') {
-    $baseWhere .= " AND assigned_to = ?";
-    $params[] = $userId;
-} elseif (ctype_digit($context)) {
-    $baseWhere .= " AND assigned_to = ?";
-    $params[] = (int)$context;
-}
+    // Apply context filters (RM ownership only)
+    if ($context === 'mine') {
+        $baseWhere .= " AND assigned_to = ?";
+        $params[] = $userId;
+    } elseif (ctype_digit($context)) {
+        $baseWhere .= " AND assigned_to = ?";
+        $params[] = (int)$context;
+    }
 
     // Add cycle filter if set
     if ($cycleFilter === 'RJ') {
@@ -568,44 +568,56 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         </div>
                     </div>
 
+                    <?php
+                    $prevParams = [
+                        'owner_filter' => $filterParam,
+                        'cycle_filter' => $prevCycle,
+                        'month_filter' => $mShort,
+                        'year_filter'  => $y
+                    ];
+
+                    $prevQuery = http_build_query($prevParams);
+                    ?>
+
+
                     <div class="kpi-grid">
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>"
                             class="stats-card card-blue">
                             <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
                             <div class="label">Total Assigned</div>
                             <div class="number" id="prevTotalCount"><?= $stats['total']; ?></div>
                         </a>
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=pending"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=pending"
                             class="stats-card card-red-outline">
                             <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
                             <div class="label">Review Not Started</div>
                             <div class="number" id="prevPendingCount"><?= $stats['count_pending']; ?></div>
                         </a>
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=draft"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=draft"
                             class="stats-card card-grey">
                             <span class="card-icon"><i class="fa-regular fa-pen-to-square"></i></span>
                             <div class="label">Draft</div>
                             <div class="number" id="prevDraftCount"><?= $stats['count_draft']; ?></div>
                         </a>
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=ready"
                             class="stats-card card-yellow">
                             <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
                             <div class="label">Ready</div>
                             <div class="number" id="prevReadyCount"><?= $stats['count_ready']; ?></div>
                         </a>
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=reviewed"
                             class="stats-card card-teal">
                             <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
                             <div class="label">Reviewed</div>
                             <div class="number" id="prevReviewedCount"><?= $stats['count_reviewed']; ?></div>
                         </a>
 
-                        <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=sent"
+                        <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=sent"
                             class="stats-card card-green">
                             <span class="card-icon"><i class="fa-solid fa-paper-plane"></i></span>
                             <div class="label">Sent</div>

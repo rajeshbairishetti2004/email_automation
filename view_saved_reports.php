@@ -791,9 +791,22 @@ if ($filter !== '' && in_array($filter, ['pending', 'draft', 'ready', 'reviewed'
     $whereParts[] = "c.report_state = ?";
     $params[] = $filter;
 }
+$monthFilter = $_GET['month_filter'] ?? '';
+$yearFilter  = $_GET['year_filter'] ?? '';
+
 if ($cycleFilter !== '') {
     $whereParts[] = "c.review_cycle = ?";
     $params[] = $cycleFilter;
+}
+
+if ($monthFilter !== '') {
+    $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', 1) = ?";
+    $params[] = $monthFilter;
+}
+
+if ($yearFilter !== '') {
+    $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', -1) = ?";
+    $params[] = $yearFilter;
 }
 // Only apply ownerFilter for admin, for non-admin it's always "mine"
 if ($isAdmin) {
