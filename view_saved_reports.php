@@ -1486,8 +1486,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
                     <option value="pending" <?= ($filter === 'pending') ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending'] ?? 0 ?>)</option>
                     <option value="draft" <?= ($filter === 'draft') ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft'] ?? 0 ?>)</option>
-                    <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready'] ?? 0 ?>)</option>
-                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
+                    <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Review Prepared (<?= $statusTotals['ready'] ?? 0 ?>)</option>
+                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Review Prepared (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
                     <option value="sent" <?= ($filter === 'sent') ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent'] ?? 0 ?>)</option>
                 </select>
 

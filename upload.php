@@ -96,8 +96,7 @@ if (!$isFilterApplied) {
 
     $availableMonths = [$previousDate];
 
-    // IMPORTANT: Disable cycle filter influence in default mode
-    $cycleFilter = '';
+    
 } else {
 
     // Only get immediate previous calendar month
@@ -411,7 +410,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
             <div class="kpi-grid">
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>" class="stats-card card-blue">
                     <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
-                    <div class="label">Total Assigned</div>
+                    <div class="label">Total Reviews</div>
                     <div class="number" id="totalCount"><?= (int)$viewStats['total']; ?></div>
                 </a>
 
@@ -430,13 +429,13 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=ready" class="stats-card card-yellow">
                     <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
-                    <div class="label">Ready</div>
+                    <div class="label">Review Prepared</div>
                     <div class="number" id="readyCount"><?= (int)$viewStats['count_ready']; ?></div>
                 </a>
 
                 <a href="view_saved_reports.php?owner_filter=<?php echo $filterParam; ?>&filter=reviewed" class="stats-card card-teal">
                     <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                    <div class="label">Reviewed</div>
+                    <div class="label">Concerned Given</div>
                     <div class="number" id="reviewedCount"><?= (int)$viewStats['count_reviewed']; ?></div>
                 </a>
 
@@ -585,7 +584,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         <a href="view_saved_reports.php?<?= $prevQuery; ?>"
                             class="stats-card card-blue">
                             <span class="card-icon"><i class="fa-solid fa-layer-group"></i></span>
-                            <div class="label">Total Assigned</div>
+                            <div class="label">Total Reviewa</div>
                             <div class="number" id="prevTotalCount"><?= $stats['total']; ?></div>
                         </a>
 
@@ -606,14 +605,14 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=ready"
                             class="stats-card card-yellow">
                             <span class="card-icon"><i class="fa-solid fa-clipboard-check"></i></span>
-                            <div class="label">Ready</div>
+                            <div class="label">Review Prepared</div>
                             <div class="number" id="prevReadyCount"><?= $stats['count_ready']; ?></div>
                         </a>
 
                         <a href="view_saved_reports.php?<?= $prevQuery; ?>&filter=reviewed"
                             class="stats-card card-teal">
                             <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                            <div class="label">Reviewed</div>
+                            <div class="label">Concerned Given</div>
                             <div class="number" id="prevReviewedCount"><?= $stats['count_reviewed']; ?></div>
                         </a>
 
