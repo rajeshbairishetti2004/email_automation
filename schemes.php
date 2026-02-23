@@ -67,6 +67,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scheme Strategy Board | Finance Doctor</title>
+    <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
@@ -122,18 +123,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             max-width: 1300px;
             margin: 0 auto;
             padding: 0 40px 60px;
-        }
-
-        .page-header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .page-header h1 {
-            font-family: 'Poppins', sans-serif;
-            font-size: 32px;
-            color: var(--text-dark);
-            margin: 0 0 8px;
+            margin-top: 30px;
         }
 
         /* Grid Layout */
@@ -477,18 +467,10 @@ html::-webkit-scrollbar-thumb:hover {
 </head>
 
 <body>
-
-    <nav class="top-nav">
-        <a href="upload.php" class="btn-back">
-            <i class="fa-solid fa-arrow-left"></i> Dashboard
-        </a>
-    </nav>
+    <?php include 'navbar.php'; ?>
 
     <div class="content-wrap">
-        <div class="page-header">
-            <h1>Scheme Strategy Board</h1>
-            <p>Categorize and manage fund recommendations for client reports. <strong>Drag & Drop</strong> schemes between columns.</p>
-        </div>
+        
         <?php if (!empty($uploadError)): ?>
             <div style="
         background:#fef2f2;
@@ -506,7 +488,7 @@ html::-webkit-scrollbar-thumb:hover {
 
 
         <!-- XLSX Upload Form -->
-        <div style="display:flex; gap:15px; align-items:center; margin-bottom:32px;">
+        <div style="display:flex; gap:15px; align-items:center; margin-bottom:30px;">
 
             <form action="" method="post" enctype="multipart/form-data" class="add-form" style="margin:0;">
                 <input type="file" name="scheme_file" accept=".xlsx" required
