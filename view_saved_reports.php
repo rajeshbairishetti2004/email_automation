@@ -1538,7 +1538,7 @@ function fmtDateTime(?string $d): string {
 
         .action-btn { display: inline-flex; align-items: center; gap: 8px; }
 
-        /* Sticky group header row */
+        /* ── STICKY HEADER ROWS ──────────────────────────────────── */
         thead tr.group-header th {
             position: sticky;
             top: 0;
@@ -1550,6 +1550,64 @@ function fmtDateTime(?string $d): string {
             top: 26px;   /* height of group header */
             z-index: 2;
             background: #fff;
+        }
+
+        /* ── STICKY COLUMNS: col1=checkbox, col2=ID, col3=Client Name ── */
+        th:nth-child(1),
+        td:nth-child(1) {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: #fff;
+        }
+
+        th:nth-child(2),
+        td:nth-child(2) {
+            position: sticky;
+            left: 40px;   /* width of checkbox/action column */
+            z-index: 3;
+            background: #fff;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3) {
+            position: sticky;
+            left: 100px;  /* checkbox(40px) + ID col(60px) */
+            z-index: 3;
+            background: #fff;
+            /* Visual divider shadow so users can see where sticky columns end */
+            box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.15);
+        }
+
+        /* thead sticky cells must sit above tbody sticky cells on both axes */
+        thead tr.group-header th:nth-child(1),
+        thead tr.group-header th:nth-child(2),
+        thead tr.group-header th:nth-child(3),
+        thead tr.col-header   th:nth-child(1),
+        thead tr.col-header   th:nth-child(2),
+        thead tr.col-header   th:nth-child(3) {
+            z-index: 6;
+            background: #fff;
+        }
+
+        /* Keep section-coloured group header backgrounds on sticky cols */
+        thead tr.group-header th.th-section-current:nth-child(1),
+        thead tr.group-header th.th-section-current:nth-child(2),
+        thead tr.group-header th.th-section-current:nth-child(3) {
+            background: #e3f2fd;
+        }
+
+        thead tr.group-header th.th-section-prev:nth-child(1),
+        thead tr.group-header th.th-section-prev:nth-child(2),
+        thead tr.group-header th.th-section-prev:nth-child(3) {
+            background: #fce4ec;
+        }
+
+        /* Subtle blue tint on hovered rows so sticky cells don't look detached */
+        tbody tr:hover td:nth-child(1),
+        tbody tr:hover td:nth-child(2),
+        tbody tr:hover td:nth-child(3) {
+            background: #f0f7ff;
         }
 
         /* ── PREV REVIEW BUTTON ──────────────────────────────────── */
@@ -1601,6 +1659,8 @@ function fmtDateTime(?string $d): string {
 
         th.col-prev-review { background: #fdf6ff; }
         td.col-prev-review { background: #fdf6ff; text-align: center; }
+
+        
     </style>
 </head>
 
@@ -1816,7 +1876,7 @@ function fmtDateTime(?string $d): string {
                         <!-- ROW 1: section group labels -->
                         <tr class="group-header">
                             <?php
-                            $baseColCount = 11;
+                            $baseColCount = 9;
                             if ($deleteMode || $reassignMode) $baseColCount++;
                             ?>
                             <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
@@ -1858,13 +1918,13 @@ function fmtDateTime(?string $d): string {
                             </th>
                             <th>Drafted By</th>
                             <th>RM</th>
-                            <th>Cycle</th>
+                            <!-- <th>Cycle</th> -->
                             <th>Review Assigned to</th>
-                            <th>
+                            <!-- <th>
                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=priority&order=<?= ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
                                     Priority <?= $sortBy === 'priority' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
                                 </a>
-                            </th>
+                            </th> -->
                             <th>
                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
                                     Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
@@ -1962,11 +2022,11 @@ function fmtDateTime(?string $d): string {
                                 </td>
 
                                 <!-- Cycle -->
-                                <td>
+                                <!-- <td>
                                     <span class="badge" style="background:#f5f5f5; color:#333; border:1px solid #ddd; padding:2px 6px; border-radius:4px;">
                                         <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
                                     </span>
-                                </td>
+                                </td> -->
 
                                 <!-- Reviewer -->
                                 <td>
@@ -1986,7 +2046,7 @@ function fmtDateTime(?string $d): string {
                                 </td>
 
                                 <!-- Priority -->
-                                <td>
+                                <!-- <td>
                                     <?php
                                     $priority = strtolower($c['priority'] ?? '');
                                     switch ($priority) {
@@ -2000,7 +2060,7 @@ function fmtDateTime(?string $d): string {
                                     <?php else: ?>
                                         <span style="color:#999; font-size:0.85em;">Normal</span>
                                     <?php endif; ?>
-                                </td>
+                                </td> -->
 
                                 <!-- Last Updated -->
                                 <td>
