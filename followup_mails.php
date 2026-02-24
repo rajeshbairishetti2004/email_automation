@@ -192,6 +192,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
     }
 
+    // ── Log sent emails to followup_emails table ──
+    if ($sent > 0) {
+        // Ensure table exists
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `followup_emails` (
+                `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                `name`      VARCHAR(255) NOT NULL,
+                `email`     VARCHAR(255) NOT NULL,
+                `sent_date` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY `idx_email` (`email`),
+                KEY `idx_sent_date` (`sent_date`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $logInsert = $pdo->prepare("
+            INSERT INTO followup_emails (name, email, sent_date)
+            VALUES (?, ?, NOW())
+        ");
+
+        foreach ($clients as $client) {
+            // Only log clients that were actually sent (have email and not in failed list)
+            if (!empty($client['email']) && !in_array($client['name'], $failed)) {
+                $logInsert->execute([$client['name'], $client['email']]);
+            }
+        }
+    }
+
     echo json_encode([
         'success' => true,
         'sent'    => $sent,
@@ -611,13 +638,13 @@ ob_end_flush();
             <h2><i class="fa-solid fa-envelope-open-text" style="color:#0288D1;margin-right:8px;"></i>Follow-Up Mails</h2>
             <div class="cycle-tabs">
                 <button class="cycle-tab <?= $defaultCycle === 'RJ' ? 'active' : '' ?>" data-cycle="RJ">
-                    RJ 
+                    RJ <span style="font-size:10px;font-weight:500;display:block;">Jan · Apr · Jul · Oct</span>
                 </button>
                 <button class="cycle-tab <?= $defaultCycle === 'RF' ? 'active' : '' ?>" data-cycle="RF">
-                    RF 
+                    RF <span style="font-size:10px;font-weight:500;display:block;">Feb · May · Aug · Nov</span>
                 </button>
                 <button class="cycle-tab <?= $defaultCycle === 'RM' ? 'active' : '' ?>" data-cycle="RM">
-                    RM 
+                    RM <span style="font-size:10px;font-weight:500;display:block;">Mar · Jun · Sep · Dec</span>
                 </button>
             </div>
         </div>
