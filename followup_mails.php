@@ -12,15 +12,23 @@ $pdo         = getPdo();
 $currentUser = getCurrentUser();
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-// Current cycle detection
+// Current cycle dete
 $currentMonthShort = date('M');
+
 if (in_array($currentMonthShort, ['Jan', 'Apr', 'Jul', 'Oct'])) {
-    $defaultCycle = 'RJ';
+    $detectedCycle = 'RJ';
 } elseif (in_array($currentMonthShort, ['Feb', 'May', 'Aug', 'Nov'])) {
-    $defaultCycle = 'RF';
+    $detectedCycle = 'RF';
 } else {
-    $defaultCycle = 'RM';
+    $detectedCycle = 'RM';
 }
+
+$allowedCycles = ['RJ','RF','RM'];
+$urlCycle = strtoupper($_GET['cycle'] ?? '');
+
+$defaultCycle = in_array($urlCycle, $allowedCycles)
+    ? $urlCycle
+    : $detectedCycle;
 
 $cycleMap = [
     'RJ' => ['Jan', 'Apr', 'Jul', 'Oct'],
