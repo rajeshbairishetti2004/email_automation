@@ -4,6 +4,17 @@
 // - FIX: explicitly selects report_state to ensure badges appear
 // - Added: Bulk reassignment functionality and split owner columns
 // - Added: Delete mode with checkboxes that appear only when clicking action icons
+// - Added: Last Review columns (review_sent_date, meeting_date, modifications_action,
+//           meeting_comments, sip_amount_lakhs) + previous review data pulled via JOIN
+// - Added: View Previous Review column with modal to display stored HTML content
+// - FIX: Sticky ID + Client Name columns (stop at viewport edge)
+// - FIX: "Last Updated" now shows created_at of each row independently;
+//         rows with report_state='sent' are read-only (locked)
+// - FIX: markPreviousAsNotLatest no longer corrupts updated_at of old rows
+// - FIX: last_review_date uses created_at (not updated_at) for sent rows to avoid
+//         timestamp corruption caused by is_latest flag update
+// - FIX: last_meeting_date now sourced from the SAME record as last_review_date
+//         (both use identical ORDER BY so they always come from the same row)
 
 require_once 'auth.php';
 requireAuth();
@@ -20,10 +31,6 @@ const DEFAULT_CLOSING   = 'Closing remarks';
 const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 
-
-
-
-
 function extractSubCategoryAllocation(string $filePath): array
 {
     $spreadsheet = IOFactory::load($filePath);
@@ -34,7 +41,6 @@ function extractSubCategoryAllocation(string $filePath): array
             $sheet = $spreadsheet->getSheet($i);
             $rows  = $sheet->toArray(null, true, true, true);
 
-            // Detect header row
             $headerRow = null;
             foreach ($rows as $rIdx => $row) {
                 foreach ($row as $cell) {
@@ -95,7 +101,6 @@ function extractGlobalEquityFromScriptSheet(string $filePath): float
 
             $shareCol = null;
 
-            // Find SHARE column
             foreach ($rows as $row) {
                 foreach ($row as $col => $val) {
                     if (stripos($val, 'share') !== false) {
@@ -107,7 +112,6 @@ function extractGlobalEquityFromScriptSheet(string $filePath): float
 
             if (!$shareCol) return 0;
 
-            // Find "Equity: Global Total" row ONLY
             foreach ($rows as $row) {
 
                 $rowText = implode(' ', $row);
@@ -135,6 +139,7 @@ $myId = $currentUser['id'] ?? ($_SESSION['user_id'] ?? 0);
 $currentUserId = $myId;
 $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
+
 // ===============================
 // REVIEW CYCLE RESOLUTION (SINGLE SOURCE OF TRUTH)
 // ===============================
@@ -153,21 +158,12 @@ function getCurrentReviewCycle(): string {
 
 $systemCurrentCycle = getCurrentReviewCycle();
 
-/**
- * Reset clears everything
- */
 if (isset($_GET['reset'])) {
     $cycleFilter = '';
 }
-/**
- * Coming from customer_list → show ALL cycles
- */
 elseif (isset($_GET['from_customer_list'])) {
     $cycleFilter = '';
 }
-/**
- * Normal behavior
- */
 else {
     $cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
 }
@@ -183,6 +179,156 @@ require_once 'db_config.php';
 $pdo = getPdo();
 $pdoSlides = getSlidesPdo();
 
+// ============================================================
+// ONE-TIME BACKFILL: For any existing client rows that have
+// NULL in last_review_date / last_meeting_date /
+// prev_modifications_action / prev_meeting_comments,
+// populate them from the most recent prior record for that
+// client name. This fixes records created before the snapshot
+// logic was added. Runs only on GET (page load), not on POST.
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
+    try {
+        // Find all rows missing snapshot data that have a prior record
+        $backfillStmt = $pdo->query("
+            SELECT c.id, c.name, c.created_at
+            FROM clients c
+            WHERE (
+                c.last_review_date IS NULL
+                OR c.last_meeting_date IS NULL
+                OR c.prev_modifications_action IS NULL
+                OR c.prev_meeting_comments IS NULL
+            )
+            AND EXISTS (
+                SELECT 1 FROM clients p
+                WHERE p.name = c.name
+                  AND p.id  != c.id
+                  AND p.report_state != 'pending'
+                  AND p.created_at < c.created_at
+            )
+            LIMIT 50
+        ");
+        $toBackfill = $backfillStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!empty($toBackfill)) {
+            // FIX: Both last_review_datetime and last_meeting_datetime are derived
+            // from the SAME row (same ORDER BY), so they always stay in sync.
+            $findPrevStmt = $pdo->prepare("
+                SELECT
+                    review_sent_date,
+                    meeting_date,
+                    modifications_action,
+                    meeting_comments,
+                    created_at,
+                    updated_at,
+                    CASE
+                        WHEN report_state = 'sent' AND review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(created_at))
+                        WHEN report_state = 'sent'
+                            THEN created_at
+                        WHEN review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(COALESCE(updated_at, created_at)))
+                        WHEN updated_at IS NOT NULL
+                            THEN updated_at
+                        ELSE created_at
+                    END AS last_review_datetime,
+                    CASE
+                        WHEN meeting_date IS NOT NULL AND report_state = 'sent'
+                            THEN CONCAT(meeting_date, ' ', TIME(created_at))
+                        WHEN meeting_date IS NOT NULL
+                            THEN CONCAT(meeting_date, ' ', TIME(COALESCE(updated_at, created_at)))
+                        ELSE NULL
+                    END AS last_meeting_datetime
+                FROM clients
+                WHERE name = ?
+                  AND id  != ?
+                  AND report_state != 'pending'
+                  AND id < ?
+                ORDER BY
+                    (report_state = 'sent') DESC,
+                    (review_sent_date IS NOT NULL) DESC,
+                    id DESC
+                LIMIT 1
+            ");
+
+            $updateSnapshotStmt = $pdo->prepare("
+                UPDATE clients
+                SET last_review_date          = ?,
+                    last_meeting_date         = ?,
+                    prev_modifications_action = ?,
+                    prev_meeting_comments     = ?
+                WHERE id = ?
+            ");
+
+            foreach ($toBackfill as $row) {
+                $findPrevStmt->execute([$row['name'], $row['id'], $row['id']]);
+                $prev = $findPrevStmt->fetch(PDO::FETCH_ASSOC);
+                if ($prev) {
+                    $updateSnapshotStmt->execute([
+                        $prev['last_review_datetime']  ?? null,
+                        $prev['last_meeting_datetime'] ?? null,
+                        $prev['modifications_action']  ?? null,
+                        $prev['meeting_comments']      ?? null,
+                        $row['id'],
+                    ]);
+                }
+            }
+        }
+    } catch (Throwable $bfe) {
+        // Backfill is non-critical; swallow errors silently
+    }
+}
+
+// ============================================================
+// AJAX: Save inline fields (sip, review_sent_date, meeting_date,
+//       modifications_action, meeting_comments)
+//       BLOCKED if report_state = 'sent'
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_review_fields') {
+    header('Content-Type: application/json');
+    try {
+        $clientId          = (int)($_POST['client_id'] ?? 0);
+        $field             = $_POST['field'] ?? '';
+        $value             = $_POST['value'] ?? '';
+
+        $allowedFields = [
+            'sip_amount_lakhs',
+            'review_sent_date',
+            'meeting_date',
+            'modifications_action',
+            'meeting_comments',
+        ];
+
+        if (!$clientId || !in_array($field, $allowedFields, true)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid field or client id']);
+            exit;
+        }
+
+        // Block saves for sent reviews
+        $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
+        $checkState->execute([$clientId]);
+        $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
+        if ($stateRow && $stateRow['report_state'] === 'sent') {
+            echo json_encode(['success' => false, 'error' => 'This review has been sent and cannot be edited.']);
+            exit;
+        }
+
+        // For date fields, allow empty → NULL
+        $bindValue = ($value === '') ? null : $value;
+
+        $stmt = $pdo->prepare("UPDATE clients SET `$field` = ? WHERE id = ?");
+        $stmt->execute([$bindValue, $clientId]);
+
+        echo json_encode(['success' => true]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ============================================================
+// EXISTING: File upload handler
+// ============================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
 
     try {
@@ -215,8 +361,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
             $ext      = strtolower(pathinfo($name, PATHINFO_EXTENSION));
             $allowedExts = ['pdf', 'xls', 'xlsx', 'csv'];
             if (!in_array($ext, $allowedExts, true)) {
-    continue;
-}
+                continue;
+            }
             $destName = uniqid('upload_', true) . '_' . preg_replace('/[^a-zA-Z0-9_.-]/', '_', $name);
             $destPath = $baseUploadDir . '/' . $destName;
             if (!move_uploaded_file($tmpPath, $destPath)) {
@@ -236,7 +382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                     if (strpos($nameLower, 'valuation') !== false) {
                         mergeClientArrays($pv, parsePortfolioValuation($destPath));
                     } elseif (strpos($nameLower, 'allocation') !== false) {
-                        $allocationExcelPath = $destPath;   // 👈 STORE THIS
+                        $allocationExcelPath = $destPath;
                         mergeClientArrays($aa, parseAllocationAnalysis($destPath));
                     } elseif (strpos($nameLower, 'running') !== false || strpos($nameLower, 'systematic') !== false || strpos($nameLower, 'sip') !== false) {
                         mergeClientArrays($rst, parseRunningSystematicTransactions($destPath));
@@ -253,7 +399,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
 
         $allClientReports = buildClientReports($pv, $aa, $rst, $ps, $pdfGoal);
 
-        // 1️⃣ Nothing parsed at all
         if (empty($allClientReports)) {
             throw new Exception('No client data could be parsed from the uploaded files.');
         }
@@ -262,11 +407,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
 
         $postedCycle = $_POST['review_cycle'] ?? '';
 
-if ($postedCycle !== $systemCurrentCycle) {
-    throw new Exception(
-        "Uploads are allowed only for the current review cycle."
-    );
-}
+        if ($postedCycle !== $systemCurrentCycle) {
+            throw new Exception(
+                "Uploads are allowed only for the current review cycle."
+            );
+        }
 
 
 
@@ -275,30 +420,21 @@ if ($postedCycle !== $systemCurrentCycle) {
             $allClientReports
         ))));
 
-        // 2️⃣ No client name found inside files
         if (empty($uploadedNames)) {
             throw new Exception('Unable to detect client name from uploaded files.');
         }
 
-        // 3️⃣ Multiple clients in one upload
         if (count($uploadedNames) > 1) {
             throw new Exception("Please upload {$expectedClientName} files only.");
         }
 
-        // 4️⃣ Client mismatch
         if (strcasecmp($uploadedNames[0], $expectedClientName) !== 0) {
             throw new Exception("Please upload {$expectedClientName} files only.");
         }
 
 
-
-
-
-
-        // NEW: Get current month_year for the review
         $currentMonthYear = date('F Y');
 
-        // Check for existing client with same name/email in the SAME month
         $checkExistingReview = $pdo->prepare('
             SELECT id, review_attempt 
             FROM clients 
@@ -308,10 +444,16 @@ if ($postedCycle !== $systemCurrentCycle) {
             LIMIT 1
         ');
 
-        // Update previous versions to mark them as not latest
+        // =====================================================================
+        // FIX: Use updated_at = updated_at (no-op) so that marking the previous
+        // row as non-latest does NOT change its updated_at timestamp.
+        // Previously this UPDATE was omitting updated_at which caused MySQL's
+        // ON UPDATE CURRENT_TIMESTAMP to fire and corrupt the old row's timestamp.
+        // =====================================================================
         $markPreviousAsNotLatest = $pdo->prepare('
             UPDATE clients 
-            SET is_latest = FALSE 
+            SET is_latest = FALSE,
+                updated_at = updated_at
             WHERE name = :name 
             AND month_year = :month_year
         ');
@@ -321,13 +463,15 @@ if ($postedCycle !== $systemCurrentCycle) {
              total_goal_current, total_goal_target, total_sip,
              greeting_prefix, intro_text, closing_text, rationale_text,
              created_by, report_state, assigned_to, month_year, review_cycle,
-             is_latest, previous_version_id, review_attempt)
+             is_latest, previous_version_id, review_attempt,
+             last_review_date, last_meeting_date, prev_modifications_action, prev_meeting_comments)
             VALUES
             (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
              :total_goal_current, :total_goal_target, :total_sip,
              :greeting_prefix, :intro_text, :closing_text, :rationale_text,
              :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
-             :is_latest, :previous_version_id, :review_attempt)');
+             :is_latest, :previous_version_id, :review_attempt,
+             :last_review_date, :last_meeting_date, :prev_modifications_action, :prev_meeting_comments)');
 
         $stmtGoal = $pdo->prepare('INSERT INTO client_goals
             (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
@@ -354,14 +498,12 @@ if ($postedCycle !== $systemCurrentCycle) {
                 continue;
             }
 
-            // Check if this client already has a review this month
             $checkExistingReview->execute([
                 ':name' => $clientName,
                 ':month_year' => $currentMonthYear
             ]);
             $existingReview = $checkExistingReview->fetch(PDO::FETCH_ASSOC);
 
-            // Calculate review attempt number
             $reviewAttempt = 1;
             $previousVersionId = null;
 
@@ -369,7 +511,6 @@ if ($postedCycle !== $systemCurrentCycle) {
                 $reviewAttempt = (int)$existingReview['review_attempt'] + 1;
                 $previousVersionId = $existingReview['id'];
 
-                // Mark all previous versions for this month as not latest
                 $markPreviousAsNotLatest->execute([
                     ':name' => $clientName,
                     ':month_year' => $currentMonthYear
@@ -380,7 +521,6 @@ if ($postedCycle !== $systemCurrentCycle) {
             $summary = $clientData['current']['summary'] ?? null;
 
             $totalAmount    = $totals['current'] ?? 0;
-
             $aum = $totalAmount > 0 ? ($totalAmount / 10000000) : 0;
 
             $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
@@ -393,8 +533,7 @@ if ($postedCycle !== $systemCurrentCycle) {
             $schemes    = $clientData['schemes'] ?? [];
             $asOn       = $clientData['as_on'] ?? '';
 
-            // Determine review cycle (you might need to add this logic)
-            $reviewCycle = $_POST['review_cycle'] ?? 'RJ'; // Default or from form
+            $reviewCycle = $_POST['review_cycle'] ?? 'RJ';
 
             $totalSip         = 0;
             $totalGoalCurrent = 0;
@@ -405,13 +544,62 @@ if ($postedCycle !== $systemCurrentCycle) {
                 $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
             }
 
-            // INSERT NEW RECORD (not update!)
+            // =====================================================================
+            // FIX: Both last_review_datetime and last_meeting_datetime are derived
+            // from the SAME single row (identical ORDER BY), so they always stay
+            // in sync and come from the same review record.
+            // =====================================================================
+            $stmtLastReview = $pdo->prepare("
+                SELECT
+                    review_sent_date,
+                    meeting_date,
+                    modifications_action,
+                    meeting_comments,
+                    updated_at,
+                    created_at,
+                    CASE
+                        WHEN report_state = 'sent' AND review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(created_at))
+                        WHEN report_state = 'sent'
+                            THEN created_at
+                        WHEN review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(COALESCE(updated_at, created_at)))
+                        WHEN updated_at IS NOT NULL
+                            THEN updated_at
+                        ELSE created_at
+                    END AS last_review_datetime,
+                    CASE
+                        WHEN meeting_date IS NOT NULL AND report_state = 'sent'
+                            THEN CONCAT(meeting_date, ' ', TIME(created_at))
+                        WHEN meeting_date IS NOT NULL
+                            THEN CONCAT(meeting_date, ' ', TIME(COALESCE(updated_at, created_at)))
+                        ELSE NULL
+                    END AS last_meeting_datetime
+                FROM clients
+                WHERE name = ?
+                  AND report_state != 'pending'
+                  AND id != IFNULL(?, 0)
+                ORDER BY
+                    (report_state = 'sent') DESC,
+                    (review_sent_date IS NOT NULL) DESC,
+                    id DESC
+                LIMIT 1
+            ");
+            $pendingRowId = (int)($_POST['expected_client_id'] ?? 0);
+            $stmtLastReview->execute([$clientName, $pendingRowId]);
+            $lastReview = $stmtLastReview->fetch(PDO::FETCH_ASSOC);
+
+            $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
+            $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
+            $prevModificationsAction = $lastReview['modifications_action']  ?? null;
+            $prevMeetingComments     = $lastReview['meeting_comments']      ?? null;
+
             $insertClient->execute([
                 ':name'               => $clientName,
                 ':email'              => $email,
                 ':as_on'              => $asOn,
                 ':total_amount'       => $totalAmount,
-                ':aum'                => $aum,  // Store in crores (carried forward or calculated)
+                ':aum'                => $aum,
                 ':profit'             => $profit,
                 ':cagr'               => $cagr,
                 ':xirr'               => $xirr,
@@ -429,20 +617,18 @@ if ($postedCycle !== $systemCurrentCycle) {
                 ':month_year'         => $currentMonthYear,
                 ':review_cycle'       => $reviewCycle,
                 ':is_latest'          => true,
-                ':previous_version_id' => $previousVersionId,
-                ':review_attempt'     => $reviewAttempt
+                ':previous_version_id'       => $previousVersionId,
+                ':review_attempt'            => $reviewAttempt,
+                ':last_review_date'          => $lastReviewDate,
+                ':last_meeting_date'         => $lastMeetingDate,
+                ':prev_modifications_action' => $prevModificationsAction,
+                ':prev_meeting_comments'     => $prevMeetingComments,
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
-            // ======================================
-            // SLIDE 8 – SUB CATEGORY ALLOCATION
-            // ======================================
-            // ======================================
-            // SLIDE 8 – SUB CATEGORY ALLOCATION
-            // ======================================
+
             if ($allocationExcelPath && file_exists($allocationExcelPath)) {
 
-                // Clear old slide8 rows
                 $pdoSlides->prepare("DELETE FROM slide8 WHERE client_id = ?")
                     ->execute([$clientId]);
 
@@ -460,10 +646,10 @@ if ($postedCycle !== $systemCurrentCycle) {
                     $pct   = (float)$row['pct'];
 
                     $stmt = $pdoSlides->prepare("
-            INSERT INTO slide8
-            (client_id, asset, current_pct, recommended_pct, updated_at)
-            VALUES (?, ?, ?, ?, NOW())
-        ");
+                        INSERT INTO slide8
+                        (client_id, asset, current_pct, recommended_pct, updated_at)
+                        VALUES (?, ?, ?, ?, NOW())
+                    ");
 
                     $stmt->execute([
                         $clientId,
@@ -473,21 +659,16 @@ if ($postedCycle !== $systemCurrentCycle) {
                     ]);
                 }
 
-                // ======================================
-                // SLIDE 10 – GLOBAL EQUITY
-                // ======================================
-
                 $globalPct = extractGlobalEquityFromScriptSheet($allocationExcelPath);
 
-                // Remove old slide10 record
                 $pdoSlides->prepare("DELETE FROM slide10 WHERE client_id = ?")
                     ->execute([$clientId]);
 
                 $pdoSlides->prepare("
-        INSERT INTO slide10
-        (client_id, current_pct, recommended_pct, updated_at)
-        VALUES (?, ?, ?, NOW())
-    ")->execute([
+                    INSERT INTO slide10
+                    (client_id, current_pct, recommended_pct, updated_at)
+                    VALUES (?, ?, ?, NOW())
+                ")->execute([
                     $clientId,
                     $globalPct,
                     0
@@ -590,14 +771,10 @@ if ($postedCycle !== $systemCurrentCycle) {
 
 
 
-
-
-// Initialize action mode variables
 $deleteMode = false;
 $reassignMode = false;
 $showCheckboxes = false;
 
-// Check for action modes
 if (isset($_GET['mode'])) {
     if ($_GET['mode'] === 'delete') {
         $deleteMode = true;
@@ -608,7 +785,6 @@ if (isset($_GET['mode'])) {
     }
 }
 
-// Handle POST request for bulk reassignment and delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
     if ($_POST['action_type'] === 'reassign') {
         try {
@@ -625,11 +801,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
             } elseif (empty($selectedIds)) {
                 $errorMessage = "Please select at least one client to reassign.";
             } else {
-                // Sanitize selected IDs
                 $selectedIds = array_filter(array_map('intval', $selectedIds));
 
                 if (!empty($selectedIds)) {
-                    // Update reviewer assignment for selected clients
                     $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
                     $updateStmt = $pdo->prepare("UPDATE clients SET review_assigned_to = ?, updated_at = NOW() WHERE id IN ($placeholders)");
 
@@ -645,7 +819,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
         }
     }
 
-    // Handle bulk delete
     if ($_POST['action_type'] === 'delete') {
         try {
             $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
@@ -653,23 +826,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
             if (empty($selectedIds)) {
                 $errorMessage = "Please select at least one client to delete.";
             } else {
-                // Sanitize selected IDs
                 $selectedIds = array_filter(array_map('intval', $selectedIds));
 
                 if (!empty($selectedIds)) {
                     $pdo->beginTransaction();
 
-                    // Delete related records first (foreign key constraints)
                     $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
 
-                    // Delete from related tables
                     $tables = ['client_goals', 'client_allocations', 'client_schemes', 'client_annexures'];
                     foreach ($tables as $table) {
                         $deleteStmt = $pdo->prepare("DELETE FROM $table WHERE client_id IN ($placeholders)");
                         $deleteStmt->execute($selectedIds);
                     }
 
-                    // Now delete from clients table
                     $deleteClientStmt = $pdo->prepare("DELETE FROM clients WHERE id IN ($placeholders)");
                     $deleteClientStmt->execute($selectedIds);
 
@@ -688,14 +857,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_type'])) {
     }
 }
 
-// --- BEGIN: Reassigned summary logic (admin or logged-in user only) ---
+// --- BEGIN: Reassigned summary logic ---
 $showReassignedSummary = false;
 $reassignedSummary = [];
 $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
-
-
-// Get filter values for summary
 
 
 $summaryUserId = $myId;
@@ -706,14 +872,11 @@ if ($isAdmin && isset($_GET['owner_filter']) && ctype_digit($_GET['owner_filter'
 if ($isAdmin || $myId) {
     $showReassignedSummary = true;
 
-    // Build WHERE clause for reassigned summary
     $summaryWhereParts = [];
     $summaryParams = [];
 
-    // Only show reassigned (assigned_to != review_assigned_to)
     $summaryWhereParts[] = "c.assigned_to <> c.review_assigned_to";
 
-    // Owner filter
     if ($isAdmin) {
         if ($ownerFilter === 'mine') {
             $summaryWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
@@ -730,13 +893,11 @@ if ($isAdmin || $myId) {
         $summaryParams[] = $myId;
     }
 
-    // Cycle filter
     if ($cycleFilter !== '') {
         $summaryWhereParts[] = "c.review_cycle = ?";
         $summaryParams[] = $cycleFilter;
     }
 
-    // State filter
     if ($filter !== '' && in_array($filter, ['pending', 'draft', 'ready', 'reviewed', 'sent'])) {
         $summaryWhereParts[] = "c.report_state = ?";
         $summaryParams[] = $filter;
@@ -744,7 +905,6 @@ if ($isAdmin || $myId) {
 
     $summaryWhereClause = $summaryWhereParts ? 'WHERE ' . implode(' AND ', $summaryWhereParts) : '';
 
-    // Show summary for selected owner or global
     $stmtReassigned = $pdo->prepare("
         SELECT u.username, COUNT(c.id) as total
         FROM clients c
@@ -758,7 +918,6 @@ if ($isAdmin || $myId) {
 }
 // --- END: Reassigned summary logic ---
 
-// 1. Get Filter Inputs
 $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 
 
@@ -772,16 +931,12 @@ $whereParts = [];
 $params = [];
 
 
-
-
-// --- FIX: Only restrict for non-admin, do NOT add this clause for admin ---
 if (!$isAdmin) {
     $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
     $params[] = $myId;
     $params[] = $myId;
 }
 
-// Build WHERE clause
 if ($q !== '') {
     $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
     $params[] = '%' . $q . '%';
@@ -808,7 +963,7 @@ if ($yearFilter !== '') {
     $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', -1) = ?";
     $params[] = $yearFilter;
 }
-// Only apply ownerFilter for admin, for non-admin it's always "mine"
+
 if ($isAdmin) {
     if ($ownerFilter === 'mine') {
         $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
@@ -831,7 +986,6 @@ foreach ($cycleCountStmt as $row) {
 }
 $allCyclesTotal = array_sum($cycleTotals);
 
-// For Owner dropdown: only filter by cycle (not by state)
 $ownerWhereParts = [];
 $ownerParams = [];
 if ($cycleFilter !== '') {
@@ -853,7 +1007,6 @@ foreach ($ownerCountStmt as $row) {
     ];
 }
 
-// For State dropdown: filter by cycle + owner
 $stateWhereParts = [];
 $stateParams = [];
 if ($cycleFilter !== '') {
@@ -871,7 +1024,6 @@ if ($ownerFilter === 'mine') {
 }
 $whereState = $stateWhereParts ? 'WHERE ' . implode(' AND ', $stateWhereParts) : '';
 
-// --- FIX: Count DISTINCT client names for each state ---
 $statusTotals = [];
 $statusCountStmt = $pdo->prepare("
     SELECT c.report_state, COUNT(DISTINCT c.name) as total 
@@ -884,64 +1036,174 @@ foreach ($statusCountStmt as $row) {
 }
 $allStatesTotal = array_sum($statusTotals);
 
-// 1. Count Total Rows
 $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$whereClause}");
 $stmtCount->execute($params);
 $totalRows = (int)$stmtCount->fetchColumn();
 $totalPages = max(1, (int)ceil($totalRows / $limit));
 
-// --- ADD: Count distinct client names for display ---
 $stmtDistinctNames = $pdo->prepare("SELECT COUNT(DISTINCT c.name) FROM clients c {$whereClause}");
 $stmtDistinctNames->execute($params);
 $totalDistinctNames = (int)$stmtDistinctNames->fetchColumn();
 
-// 2. Fetch Data (INCLUDING NEW WORKFLOW COLUMNS AND CREATOR INFO)
 // Validate sort column to prevent SQL injection
 $allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state', 'aum'];
 $sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'updated_at';
 
-// Priority sorting needs special handling for NULL and High/Normal/Low ordering
-$orderByClause = '';
 if ($sortColumn === 'priority') {
-    // Sort: High -> Normal -> Low -> NULL
     $orderByClause = "ORDER BY CASE c.priority 
         WHEN 'High' THEN 1 
         WHEN 'Normal' THEN 2 
         WHEN 'Low' THEN 3 
         ELSE 4 END {$sortOrder}, c.id DESC";
 } elseif ($sortColumn === 'aum') {
-    // Sort by AUM (numeric sorting)
     $orderByClause = "ORDER BY CAST(c.aum AS DECIMAL(15,2)) {$sortOrder}, c.id DESC";
 } else {
     $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
 }
 
-// Update the SELECT query to include meeting_status and meeting_remarks:
-// Update the SELECT query to include aum column:
+// ============================================================
+// MAIN QUERY
+// - updated_at: shows the actual last-updated timestamp of each row
+//   (not shared between reviews)
+// - FIX: For 'sent' rows, last_review_date subquery uses created_at
+//   for the time component, not updated_at, to avoid corruption from
+//   the is_latest flag UPDATE touching updated_at via ON UPDATE CURRENT_TIMESTAMP
+// - FIX: last_meeting_date subquery now uses IDENTICAL ORDER BY as
+//   last_review_date so both columns always come from the SAME row.
+//   Previously last_meeting_date ordered by (meeting_date IS NOT NULL)
+//   which could select a DIFFERENT record than last_review_date.
+// ============================================================
 $stmt = $pdo->prepare("
-    SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
-           c.aum,
-           c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
-           c.priority, c.meeting_status, c.meeting_remarks,
-           c.review_cycle,
-           creator.username AS created_by_username,
-           rm.username AS rm_username,
-           reviewer.username AS reviewer_username
+    SELECT
+        c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
+        c.aum,
+        c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
+        c.priority, c.meeting_status, c.meeting_remarks,
+        c.review_cycle,
+        c.sip_amount_lakhs,
+        c.review_sent_date,
+        c.meeting_date,
+        c.modifications_action,
+        c.meeting_comments,
+        c.previous_version_id,
+        -- Fetch the report_state of the previous version
+        (
+            SELECT p.report_state
+            FROM clients p
+            WHERE p.id = c.previous_version_id
+            LIMIT 1
+        ) AS prev_version_state,
+
+        -- ── LAST REVIEW DATE ────────────────────────────────────────────────
+        -- Uses: sent > review_sent_date present > id DESC
+        COALESCE(
+            c.last_review_date,
+            (
+                SELECT
+                    CASE
+                        WHEN p.report_state = 'sent' AND p.review_sent_date IS NOT NULL
+                            THEN CONCAT(p.review_sent_date, ' ', TIME(p.created_at))
+                        WHEN p.report_state = 'sent'
+                            THEN p.created_at
+                        WHEN p.review_sent_date IS NOT NULL
+                            THEN CONCAT(p.review_sent_date, ' ', TIME(COALESCE(p.updated_at, p.created_at)))
+                        WHEN p.updated_at IS NOT NULL
+                            THEN p.updated_at
+                        ELSE p.created_at
+                    END
+                FROM clients p
+                WHERE p.name = c.name
+                  AND p.id != c.id
+                  AND p.report_state != 'pending'
+                  AND p.id < c.id
+                ORDER BY
+                    (p.report_state = 'sent') DESC,
+                    (p.review_sent_date IS NOT NULL) DESC,
+                    p.id DESC
+                LIMIT 1
+            )
+        ) AS last_review_date,
+
+        -- ── LAST MEETING DATE ────────────────────────────────────────────────
+        -- FIX: Uses IDENTICAL ORDER BY as last_review_date (sent > review_sent_date > id DESC)
+        -- so that both columns are ALWAYS sourced from the SAME review record.
+        -- Previously this used (meeting_date IS NOT NULL) in ORDER BY which could
+        -- select a different record, causing last_review_date and last_meeting_date
+        -- to show data from two different reviews.
+        COALESCE(
+            c.last_meeting_date,
+            (
+                SELECT
+                    CASE
+                        WHEN p.meeting_date IS NOT NULL AND p.report_state = 'sent'
+                            THEN CONCAT(p.meeting_date, ' ', TIME(p.created_at))
+                        WHEN p.meeting_date IS NOT NULL
+                            THEN CONCAT(p.meeting_date, ' ', TIME(COALESCE(p.updated_at, p.created_at)))
+                        ELSE NULL
+                    END
+                FROM clients p
+                WHERE p.name = c.name
+                  AND p.id != c.id
+                  AND p.report_state != 'pending'
+                  AND p.id < c.id
+                ORDER BY
+                    (p.report_state = 'sent') DESC,
+                    (p.review_sent_date IS NOT NULL) DESC,
+                    p.id DESC
+                LIMIT 1
+            )
+        ) AS last_meeting_date,
+
+        COALESCE(
+            c.prev_modifications_action,
+            (
+                SELECT p.modifications_action
+                FROM clients p
+                WHERE p.name = c.name
+                  AND p.id != c.id
+                  AND p.report_state != 'pending'
+                  AND p.id < c.id
+                ORDER BY
+                    (p.report_state = 'sent') DESC,
+                    p.id DESC
+                LIMIT 1
+            )
+        ) AS prev_modifications_action,
+
+        COALESCE(
+            c.prev_meeting_comments,
+            (
+                SELECT p.meeting_comments
+                FROM clients p
+                WHERE p.name = c.name
+                  AND p.id != c.id
+                  AND p.report_state != 'pending'
+                  AND p.id < c.id
+                ORDER BY
+                    (p.report_state = 'sent') DESC,
+                    p.id DESC
+                LIMIT 1
+            )
+        ) AS prev_meeting_comments,
+
+        creator.username  AS created_by_username,
+        rm.username       AS rm_username,
+        reviewer.username AS reviewer_username
+
     FROM clients c
-    LEFT JOIN users creator  ON c.created_by = creator.id
-    LEFT JOIN users rm       ON c.assigned_to = rm.id
-    LEFT JOIN users reviewer ON c.review_assigned_to = reviewer.id
+    LEFT JOIN users creator  ON c.created_by          = creator.id
+    LEFT JOIN users rm       ON c.assigned_to          = rm.id
+    LEFT JOIN users reviewer ON c.review_assigned_to   = reviewer.id
+
     {$whereClause}
     {$orderByClause}
     LIMIT ? OFFSET ?
 ");
 
-// Add pagination parameters to the params array
 $paramsData = $params;
 $paramsData[] = $limit;
 $paramsData[] = $offset;
 
-// Execute with all parameters
 $stmt->execute($paramsData);
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -964,6 +1226,21 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     echo json_encode($clients);
     exit;
 }
+
+// Helper: format a date/datetime value for display
+function fmtDate(?string $d, string $fmt = 'd-M-Y'): string {
+    if (empty($d)) return '—';
+    $ts = strtotime($d);
+    return $ts ? date($fmt, $ts) : '—';
+}
+
+// Helper: format datetime showing both date and time
+function fmtDateTime(?string $d): string {
+    if (empty($d)) return '—';
+    $ts = strtotime($d);
+    if (!$ts) return '—';
+    return date('d-M-Y', $ts) . '<br><span style="color:#999;font-size:11px;">' . date('h:i A', $ts) . '</span>';
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -974,380 +1251,21 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
     <link rel="stylesheet" href="public/css/view_saved_reports.css">
     <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-    <style>
-        /* Additional CSS for action modes */
-        .action-mode-active .bulk-actions-bar,
-        .action-mode-active .select-all-cell,
-        .action-mode-active .action-checkbox {
-            display: block !important;
-        }
-
-        .action-mode-active .action-icon-cell {
-            display: none !important;
-        }
-
-        .action-icons-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .action-icon-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-
-        .delete-icon-btn {
-            background-color: #e53935;
-        }
-
-        .delete-icon-btn:hover {
-            background-color: #c62828;
-            transform: scale(1.05);
-        }
-
-        .reassign-icon-btn {
-            background-color: #0288D1;
-        }
-
-        .reassign-icon-btn:hover {
-            background-color: #0277BD;
-            transform: scale(1.05);
-        }
-
-        .cancel-action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
-        }
-
-        .cancel-action-btn:hover {
-            background-color: #5a6268;
-        }
-
-        .select-all-cell,
-        .action-checkbox {
-            display: none;
-        }
-
-        .action-checkbox {
-            vertical-align: middle;
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-
-        .sort-dropdown {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 14px;
-            background-color: white;
-            cursor: pointer;
-            min-width: 160px;
-        }
-
-        .sort-dropdown:focus {
-            outline: none;
-            border-color: #0288D1;
-            box-shadow: 0 0 0 2px rgba(2, 136, 209, 0.2);
-        }
-
-        .bulk-actions-bar {
-            display: none;
-            background-color: #f8f9fa;
-            padding: 12px 20px;
-            margin: 15px 0;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .bulk-selection-info {
-            font-weight: 600;
-            color: #495057;
-        }
-
-        .delete-btn {
-            background-color: #e53935;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background-color 0.3s ease;
-        }
-
-        .delete-btn:hover {
-            background-color: #c62828;
-        }
-
-        .reassign-select {
-            padding: 8px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 14px;
-            min-width: 180px;
-        }
-
-        .reassign-submit-btn {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
-        }
-
-        .reassign-submit-btn:hover {
-            background-color: #218838;
-        }
-
-        .btn {
-            text-decoration: none;
-            border: none;
-            padding: 9px 18px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-
-            transition:
-                background 0.25s ease,
-                box-shadow 0.25s ease,
-                transform 0.2s ease,
-                filter 0.2s ease;
-        }
-
-        /* ---------- RESET BUTTON ---------- */
-        .btn-reset {
-            color: #fff;
-            background: linear-gradient(135deg, #757575, #616161);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-        }
-
-        .btn-reset:hover {
-            background: linear-gradient(135deg, #8E8E8E, #555);
-            box-shadow:
-                0 6px 14px rgba(0, 0, 0, 0.35),
-                inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-        }
-
-
-
-
-
-        .meet-select {
-            padding: 6px 12px;
-            font-size: 13px;
-            font-weight: 500;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            cursor: pointer;
-            background-color: #fff;
-            min-width: 110px;
-
-            /* remove default arrow */
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-
-            /* custom arrow */
-            background-image:
-                linear-gradient(45deg, transparent 50%, #555 50%),
-                linear-gradient(135deg, #555 50%, transparent 50%),
-                linear-gradient(to right, #e0e0e0, #e0e0e0);
-            background-position:
-                calc(100% - 18px) calc(50% - 3px),
-                calc(100% - 13px) calc(50% - 3px),
-                calc(100% - 2.2em) 50%;
-            background-size:
-                5px 5px,
-                5px 5px,
-                1px 1.5em;
-            background-repeat: no-repeat;
-
-            transition: all 0.25s ease;
-        }
-
-        /* Hover */
-        .meet-select:hover {
-            border-color: #0288D1;
-            box-shadow: 0 2px 6px rgba(2, 136, 209, 0.25);
-        }
-
-        /* Focus */
-        .meet-select:focus {
-            outline: none;
-            border-color: #0288D1;
-            box-shadow: 0 0 0 3px rgba(2, 136, 209, 0.25);
-        }
-
-        /* ---------- Status-based coloring ---------- */
-        .meet-select option[value="pending"] {
-            color: #f9a825;
-        }
-
-        .meet-select option[value="yes"] {
-            color: #2e7d32;
-        }
-
-        .meet-select option[value="no"] {
-            color: #c62828;
-        }
-
-        /* Overlay */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(3px);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Card */
-        .modal-card {
-            background: #fff;
-            width: 460px;
-            max-width: 92%;
-            padding: 22px 24px;
-            border-radius: 14px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
-            font-family: 'Inter', sans-serif;
-            animation: modalFadeIn 0.25s ease;
-        }
-
-        /* Header */
-        .modal-header {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .modal-icon {
-            background: linear-gradient(135deg, #1976d2, #42a5f5);
-            color: #fff;
-            width: 42px;
-            height: 42px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            font-size: 17px;
-            color: #1f2937;
-        }
-
-        .modal-header p {
-            margin: 2px 0 0;
-            font-size: 13px;
-            color: #6b7280;
-        }
-
-        /* Textarea */
-        #listModalRemarks {
-            width: 95%;
-            min-height: 110px;
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid #d1d5db;
-            font-size: 14px;
-            resize: vertical;
-            font-family: inherit;
-            transition: all 0.25s ease;
-        }
-
-        #listModalRemarks::placeholder {
-            color: #9ca3af;
-        }
-
-        #listModalRemarks:focus {
-            outline: none;
-            border-color: #1976d2;
-            box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.25);
-        }
-
-        /* Footer */
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        /* Animation */
-        @keyframes modalFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px) scale(0.98);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-
-        .action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-    </style>
 </head>
 
 <body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
     <?php include 'navbar.php'; ?>
+
+    <!-- Save toast notification -->
+    <div id="saveToast">✓ Saved</div>
+
     <div class="main-scroll-container" style="height: calc(100vh - 72px); overflow-y: auto;">
 
         <div class="container">
-            <?php
-            // --- Place dashboard summary OUTSIDE the .container and just after navbar ---
-            ?>
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
 
-                <!-- LEFT: Reassigned Summary (UNCHANGED) -->
+                <!-- LEFT: Reassigned Summary -->
                 <?php if ($showReassignedSummary && !empty($reassignedSummary)): ?>
                     <div class="dashboard-summary">
                         <div class="dashboard-summary-inner">
@@ -1382,10 +1300,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                     </div>
                 <?php endif; ?>
 
-                <!-- RIGHT: Reassign Button (UNCHANGED) -->
+                <!-- RIGHT: Action buttons -->
                 <div class="action-icons-container">
-
-
                     <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
                         <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>"
                             class="action-btn reassign-btn" title="Reassign Clients">
@@ -1401,10 +1317,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
             </div>
 
-            <!-- Show filtered row count above search bar -->
             <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
                 <?php
-                // Show count of distinct client names, not total rows
                 echo "Showing $totalDistinctNames client" . ($totalDistinctNames !== 1 ? "s" : "") . " for current filters.";
                 ?>
             </div>
@@ -1432,8 +1346,6 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             <?php endif; ?>
 
 
-
-            <!-- Move all filter controls inside the form and add auto-submit on change -->
             <form method="get" class="search-box" id="filterForm" style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                 <div style="position:relative; flex:1; max-width:60%;">
                     <input type="text"
@@ -1446,17 +1358,17 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
                     <div id="client-search-dropdown"
                         style="display:none;
-                    position:absolute;
-                    top:100%;
-                    left:0;
-                    width:60%;
-                    background:#fff;
-                    z-index:1000;
-                    border:1px solid #e2e8f0;
-                    border-top:none;
-                    max-height:200px;
-                    overflow-y:auto;
-                    box-sizing:border-box;">
+                            position:absolute;
+                            top:100%;
+                            left:0;
+                            width:60%;
+                            background:#fff;
+                            z-index:1000;
+                            border:1px solid #e2e8f0;
+                            border-top:none;
+                            max-height:200px;
+                            overflow-y:auto;
+                            box-sizing:border-box;">
                     </div>
                 </div>
 
@@ -1484,34 +1396,29 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 
                 <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
                     <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
-                    <option value="pending" <?= ($filter === 'pending') ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending'] ?? 0 ?>)</option>
-                    <option value="draft" <?= ($filter === 'draft') ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft'] ?? 0 ?>)</option>
-                    <option value="ready" <?= ($filter === 'ready') ? 'selected' : '' ?>>Review Prepared (<?= $statusTotals['ready'] ?? 0 ?>)</option>
-                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Review Prepared (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
-                    <option value="sent" <?= ($filter === 'sent') ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent'] ?? 0 ?>)</option>
+                    <option value="pending"  <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending']  ?? 0 ?>)</option>
+                    <option value="draft"    <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft']    ?? 0 ?>)</option>
+                    <option value="ready"    <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready']    ?? 0 ?>)</option>
+                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
+                    <option value="sent"     <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent']     ?? 0 ?>)</option>
                 </select>
 
                 <select name="sort" class="sort-dropdown">
                     <option value="updated_at" <?php echo $sortBy === 'updated_at' ? 'selected' : ''; ?>>Sort by: Last Updated</option>
-                    <option value="id" <?php echo $sortBy === 'id' ? 'selected' : ''; ?>>Sort by: ID</option>
-                    <option value="priority" <?php echo $sortBy === 'priority' ? 'selected' : ''; ?>>Sort by: Priority</option>
-                    <option value="aum" <?php echo $sortBy === 'aum' ? 'selected' : ''; ?>>Sort by: AUM</option>
-                    <option value="name" <?php echo $sortBy === 'name' ? 'selected' : ''; ?>>Sort by: Client Name</option>
+                    <option value="id"         <?php echo $sortBy === 'id'         ? 'selected' : ''; ?>>Sort by: ID</option>
+                    <option value="priority"   <?php echo $sortBy === 'priority'   ? 'selected' : ''; ?>>Sort by: Priority</option>
+                    <option value="aum"        <?php echo $sortBy === 'aum'        ? 'selected' : ''; ?>>Sort by: AUM</option>
+                    <option value="name"       <?php echo $sortBy === 'name'       ? 'selected' : ''; ?>>Sort by: Client Name</option>
                     <option value="report_state" <?php echo $sortBy === 'report_state' ? 'selected' : ''; ?>>Sort by: Status</option>
                 </select>
 
                 <select name="order" style="padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;">
                     <option value="desc" <?php echo $sortOrder === 'DESC' ? 'selected' : ''; ?>>Descending</option>
-                    <option value="asc" <?php echo $sortOrder === 'ASC' ? 'selected' : ''; ?>>Ascending</option>
+                    <option value="asc"  <?php echo $sortOrder === 'ASC'  ? 'selected' : ''; ?>>Ascending</option>
                 </select>
-
-
-
-
 
                 <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
-                <!-- Only Reset button remains -->
                 <a href="view_saved_reports.php?reset=1" class="btn btn-reset">Reset Filters</a>
 
             </form>
@@ -1519,7 +1426,8 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             <?php if (!$clients): ?>
                 <p>No reports found. Use the Upload button next to a client.</p>
             <?php else: ?>
-                <!-- Delete Mode Bulk Actions -->
+
+                <!-- ── BULK ACTION FORMS ───────────────────────────── -->
                 <?php if ($deleteMode): ?>
                     <form method="post" id="bulkDeleteForm">
                         <input type="hidden" name="action_type" value="delete">
@@ -1530,427 +1438,459 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                             </button>
                             <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
                         </div>
-                    <?php elseif ($reassignMode): ?>
-                        <!-- Reassignment Form -->
-                        <form method="post" id="bulkReassignForm">
-                            <input type="hidden" name="action_type" value="reassign">
-                            <div class="bulk-actions-bar">
-                                <span class="bulk-selection-info">With Selected:</span>
-                                <select name="new_owner_id" class="reassign-select" required>
-                                    <option value="">-- Assign to... --</option>
-                                    <?php foreach ($allUsers as $user): ?>
-                                        <option value="<?php echo (int)$user['id']; ?>">
-                                            <?php echo htmlspecialchars($user['username']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <button type="submit" class="reassign-submit-btn">Reassign</button>
-                                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
-                            </div>
-                        <?php else: ?>
-                            <!-- Default view (no form needed) -->
-                        <?php endif; ?>
+                <?php elseif ($reassignMode): ?>
+                    <form method="post" id="bulkReassignForm">
+                        <input type="hidden" name="action_type" value="reassign">
+                        <div class="bulk-actions-bar">
+                            <span class="bulk-selection-info">With Selected:</span>
+                            <select name="new_owner_id" class="reassign-select" required>
+                                <option value="">-- Assign to... --</option>
+                                <?php foreach ($allUsers as $user): ?>
+                                    <option value="<?php echo (int)$user['id']; ?>">
+                                        <?php echo htmlspecialchars($user['username']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="reassign-submit-btn">Reassign</button>
+                            <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
+                        </div>
+                <?php else: ?>
+                    <!-- No bulk-action form needed in normal view -->
+                <?php endif; ?>
 
-                        <table>
-                            <thead>
-                                <tr>
-                                    <!-- Show checkboxes only in action mode -->
-                                    <?php if ($deleteMode || $reassignMode): ?>
-                                        <th style="width: 40px;" class="select-all-cell">
-                                            <input type="checkbox" id="selectAllCheckbox" class="action-checkbox" onclick="toggleSelectAll(this)">
-                                            <span class="select-all-label">All</span>
-                                        </th>
+                <!-- ── MAIN TABLE inside scroll wrapper ───────────── -->
+                <div class="table-scroll-wrapper">
+                <table>
+                    <thead>
+                        <!-- ROW 1: section group labels -->
+                        <tr class="group-header">
+                            <?php
+                            $baseColCount = 9;
+                            if ($deleteMode || $reassignMode) $baseColCount++;
+                            ?>
+                            <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
+                            <th colspan="5" class="th-section-current">Current Review</th>
+                            <th colspan="4" class="th-section-prev">Last Review</th>
+                            <th colspan="1" class="th-section-prev-review">Prev Review</th>
+                            <th colspan="3" style="background:#f9f9f9; border:none;"></th>
+                        </tr>
+
+                        <!-- ROW 2: actual column headers -->
+                        <tr class="col-header">
+                            <!-- checkbox / empty -->
+                            <?php if ($deleteMode || $reassignMode): ?>
+                                <th style="width: 40px;" class="select-all-cell">
+                                    <input type="checkbox" id="selectAllCheckbox" class="action-checkbox" onclick="toggleSelectAll(this)">
+                                    <span class="select-all-label">All</span>
+                                </th>
+                            <?php else: ?>
+                                <th style="width: 40px;" class="action-icon-cell"></th>
+                            <?php endif; ?>
+
+                            <!-- Base columns -->
+                            <th>
+                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=id&order=<?= ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                    ID <?= $sortBy === 'id' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=name&order=<?= ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                    Client Name <?= $sortBy === 'name' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=aum&order=<?= ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                    AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                </a>
+                            </th>
+                            <th>Drafted By</th>
+                            <th>RM</th>
+                            <th>Review Assigned to</th>
+                            <th>
+                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                    Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                </a>
+                            </th>
+                            <th>
+                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=report_state&order=<?= ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                    Status <?= $sortBy === 'report_state' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                </a>
+                            </th>
+
+                            <!-- CURRENT REVIEW columns -->
+                            <th class="col-current">SIP (Lakhs)</th>
+                            <th class="col-current">Review Sent</th>
+                            <th class="col-current">Mtg Date</th>
+                            <th class="col-current">Modifications / Action</th>
+                            <th class="col-current">Mtg Comments</th>
+
+                            <!-- LAST REVIEW columns (read-only) -->
+                            <th class="col-prev">Last Review</th>
+                            <th class="col-prev">Last Meeting</th>
+                            <th class="col-prev">Prev Modifications</th>
+                            <th class="col-prev">Prev Mtg Comments</th>
+
+                            <!-- Previous Review HTML view -->
+                            <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
+
+                            <!-- Meeting status / remarks / action -->
+                            <th style="text-align:center; width:120px;">Meeting Status</th>
+                            <th style="text-align:center; width:140px;">Meeting Remarks</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($clients as $c): ?>
+                            <?php
+                            $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
+                            $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
+
+                            // Determine if this row is sent (locked)
+                            $isSent = (($c['report_state'] ?? '') === 'sent');
+                            $rowClass = $isSent ? 'row-sent' : '';
+                            ?>
+                            <tr class="<?= $rowClass ?>">
+                                <!-- Checkbox / empty -->
+                                <?php if ($deleteMode || $reassignMode): ?>
+                                    <td>
+                                        <input type="checkbox"
+                                            class="action-checkbox client-checkbox"
+                                            name="selected_ids[]"
+                                            value="<?php echo (int)$c['id']; ?>"
+                                            onchange="updateSelectedCount()">
+                                    </td>
+                                <?php else: ?>
+                                    <td class="action-icon-cell"></td>
+                                <?php endif; ?>
+
+                                <!-- ID -->
+                                <td><?php echo (int)$c['id']; ?></td>
+
+                                <!-- Client Name -->
+                                <td>
+                                    <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
+                                        <span><?php echo htmlspecialchars($c['name']); ?></span>
+                                        <?php if ($hasAttachments): ?>
+                                            <span title="Has Attachments">📎</span>
+                                        <?php endif; ?>
+                                        <?php if ($isSent): ?>
+                                            <span class="sent-lock-icon" title="Sent — read only"><i class="fa-solid fa-lock"></i></span>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+
+                                <!-- AUM -->
+                                <td>
+                                    <span style="font-weight:600; color:#1976d2;">
+                                        ₹<?= number_format((float)($c['aum'] ?? 0), 2); ?> Cr
+                                    </span>
+                                </td>
+
+                                <!-- Drafted By -->
+                                <td>
+                                    <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+                                    <?php if ($currState === 'pending'): ?>
+                                        <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
+                                    <?php else: ?>
+                                        <?php if (!empty($c['created_by_username'])): ?>
+                                            <span class="badge" style="background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;">
+                                                <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color:#999; font-size:0.85em;">System</span>
+                                        <?php endif; ?>
                                     <?php endif; ?>
+                                </td>
 
-                                    <?php if (!$deleteMode && !$reassignMode): ?>
-                                        <th style="width: 40px;" class="action-icon-cell">
-                                            <!-- Empty cell for icon column when not in action mode -->
-                                        </th>
-                                    <?php endif; ?>
+                                <!-- RM -->
+                                <td>
+                                    <span style="color:#333; font-weight:600;">
+                                        <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                                    </span>
+                                </td>
 
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=id&order=<?php echo ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            ID <?php if ($sortBy === 'id') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=name&order=<?php echo ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            Client Name <?php if ($sortBy === 'name') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=aum&order=<?php echo ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            AUM (Cr) <?php if ($sortBy === 'aum') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>Drafted By</th>
-                                    <th>RM</th>
-                                    <th>Cycle</th>
-                                    <th>Review Assigned to</th>
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=priority&order=<?php echo ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            Priority <?php if ($sortBy === 'priority') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=updated_at&order=<?php echo ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            Last Updated <?php if ($sortBy === 'updated_at') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=report_state&order=<?php echo ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                            Status <?php if ($sortBy === 'report_state') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th style="text-align: center; width: 120px;">
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=meeting_status&order=<?php echo ($sortBy === 'meeting_status' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
-                                            Meeting Status <?php if ($sortBy === 'meeting_status') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th style="text-align: center; width: 140px;">
-                                        <a href="?<?php echo $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : ''); ?>sort=meeting_remarks&order=<?php echo ($sortBy === 'meeting_remarks' && $sortOrder === 'DESC') ? 'asc' : 'desc'; ?><?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?>" style="color: #333; text-decoration: none;">
-                                            Meeting Remarks <?php if ($sortBy === 'meeting_remarks') echo ($sortOrder === 'ASC' ? '↑' : '↓'); ?>
-                                        </a>
-                                    </th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($clients as $c): ?>
+                                <!-- Reviewer -->
+                                <td>
                                     <?php
-                                    $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
-                                    $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
+                                    $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                                    $reviewerStyle = 'background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;';
+                                    if ($isReviewer) $reviewerStyle .= ' font-weight:800; border-color:#1565c0;';
+                                    ?>
+                                    <?php if (!empty($c['reviewer_username'])): ?>
+                                        <span class="badge" style="<?php echo $reviewerStyle; ?>">
+                                            <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                                            <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#999; font-size:0.85em;">Unassigned</span>
+                                    <?php endif; ?>
+                                </td>
+
+                                <!-- Last Updated
+                                     FIX: For 'sent' rows, always use created_at since updated_at
+                                     can be corrupted by the is_latest flag UPDATE on new upload.
+                                     For non-sent rows, use updated_at if it's newer than created_at. -->
+                                <td>
+                                    <?php
+                                    if ($isSent) {
+                                        // Sent rows: always show created_at (immutable, reflects when row was created/sent)
+                                        $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                    } else {
+                                        // Non-sent rows: show updated_at if newer, else created_at
+                                        $tsUpdated = !empty($c['updated_at']) ? strtotime($c['updated_at']) : 0;
+                                        $tsCreated = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                        $displayTs = ($tsUpdated > $tsCreated) ? $tsUpdated : $tsCreated;
+                                    }
+                                    ?>
+                                    <?php if ($displayTs): ?>
+                                        <span style="color:#555; font-size:0.9em;">
+                                            <?php echo date('d-M-Y', $displayTs); ?>
+                                            <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', $displayTs); ?></span>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#999; font-size:0.85em;">N/A</span>
+                                    <?php endif; ?>
+                                </td>
+
+                                <!-- Status badge -->
+                                <?php
+                                $state = $c['report_state'] ?? 'draft';
+                                $statusMap = [
+                                    'pending'  => '<span class="badge badge-grey">Pending</span>',
+                                    'draft'    => '<span class="badge badge-yellow">Draft</span>',
+                                    'ready'    => '<span class="badge badge-blue">Ready</span>',
+                                    'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
+                                    'sent'     => '<span class="badge badge-green">Sent &#x1F512;</span>',
+                                ];
+                                $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
+                                ?>
+                                <td><?php echo $statusHtml; ?></td>
+
+                                <!-- ════════════════════════════════════════
+                                     CURRENT REVIEW — inline-editable (locked for sent)
+                                     ════════════════════════════════════════ -->
+
+                                <!-- SIP (Lakhs) -->
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555;">
+                                        <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
+                                        <span class="display-val <?= empty($c['sip_amount_lakhs']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : 'click to edit' ?>
+                                        </span>
+                                        <input type="number" step="0.01" value="<?= htmlspecialchars($c['sip_amount_lakhs'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
+
+                                <!-- Review Sent Date -->
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
+                                        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
+                                        <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
+                                            <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+                                        </span>
+                                        <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
+
+                                <!-- Meeting Date -->
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
+                                        <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
+                                        <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
+                                            <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                        </span>
+                                        <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
+
+                                <!-- Modifications / Action -->
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
+                                        <?php $ma = $c['modifications_action'] ?? ''; ?>
+                                        <?= $ma ? htmlspecialchars(mb_strimwidth($ma, 0, 80, '…')) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:180px;">
+                                        <span class="display-val <?= empty($c['modifications_action']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['modifications_action']) ? htmlspecialchars($c['modifications_action']) : 'click to edit' ?>
+                                        </span>
+                                        <textarea><?= htmlspecialchars($c['modifications_action'] ?? '') ?></textarea>
+                                    </td>
+                                <?php endif; ?>
+
+                                <!-- Meeting Comments -->
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
+                                        <?php $mc = $c['meeting_comments'] ?? ''; ?>
+                                        <?= $mc ? htmlspecialchars(mb_strimwidth($mc, 0, 80, '…')) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
+                                        <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars($c['meeting_comments']) : 'click to edit' ?>
+                                        </span>
+                                        <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
+                                    </td>
+                                <?php endif; ?>
+
+                                <!-- ════════════════════════════════════════
+                                     LAST REVIEW — read-only, from previous record
+                                     ════════════════════════════════════════ -->
+
+                                <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
+                                    <?= fmtDateTime($c['last_review_date'] ?? null) ?>
+                                </td>
+
+                                <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
+                                    <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
+                                </td>
+
+                                <td class="col-prev" style="max-width:160px; font-size:12px;">
+                                    <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
+                                    <?php if ($prevMod): ?>
+                                        <span title="<?= htmlspecialchars($prevMod) ?>">
+                                            <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 60, '…')) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#ccc;">—</span>
+                                    <?php endif; ?>
+                                </td>
+
+                                <td class="col-prev" style="max-width:160px; font-size:12px;">
+                                    <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
+                                    <?php if ($prevCmt): ?>
+                                        <span title="<?= htmlspecialchars($prevCmt) ?>">
+                                            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 60, '…')) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#ccc;">—</span>
+                                    <?php endif; ?>
+                                </td>
+
+                                <!-- View Previous Review -->
+                                <td class="col-prev-review">
+                                    <?php
+                                    $prevId    = (int)($c['previous_version_id'] ?? 0);
+                                    $prevState = $c['prev_version_state'] ?? '';
+                                    $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
+                                    ?>
+                                    <?php if ($hasPrev): ?>
+                                        <a href="view_report.php?id=<?= $prevId ?>"
+                                           target="_blank"
+                                           class="btn-prev-review"
+                                           title="Open previous review report (ID <?= $prevId ?>)">
+                                            <i class="fa-solid fa-eye"></i> View
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="btn-prev-review no-data" title="No previous review available">
+                                            <i class="fa-solid fa-eye-slash"></i> None
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+
+                                <!-- Meeting Status dropdown -->
+                                <td style="text-align:center;">
+                                    <select
+                                        onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                                        class="meet-select"
+                                        id="meet_select_<?php echo $c['id']; ?>"
+                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
+                                        <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
+                                        <option value="yes"     <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
+                                        <option value="no"      <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
+                                    </select>
+                                </td>
+
+                                <!-- Meeting Remarks button -->
+                                <td style="text-align:center;">
+                                    <?php if (!$isSent): ?>
+                                        <button type="button"
+                                            id="meet_btn_<?php echo $c['id']; ?>"
+                                            class="meet-btn"
+                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                                        </button>
+                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
+                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
+                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#ccc; font-size:12px;">—</span>
+                                    <?php endif; ?>
+                                    <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+                                </td>
+
+                                <!-- Action links -->
+                                <td>
+                                    <?php
+                                    $hasReport = ($c['report_state'] !== 'pending');
+                                    $isUploadAllowed = !$hasReport && isset($c['review_cycle']) && $c['review_cycle'] === $systemCurrentCycle;
                                     ?>
 
+                                    <?php if ($hasReport): ?>
+                                        <a href="view_report.php?id=<?= (int)$c['id']; ?>" class="action-link open-link">Open</a>
+                                    <?php endif; ?>
 
-                                    <tr>
+                                    <?php if ($isUploadAllowed): ?>
+                                        <button type="button" class="action-link upload-link" onclick="triggerUpload(<?= (int)$c['id']; ?>)">Upload</button>
 
-                                        <!-- Show checkboxes only in action mode -->
-                                        <?php if ($deleteMode || $reassignMode): ?>
-                                            <td>
-                                                <input type="checkbox"
-                                                    class="action-checkbox client-checkbox"
-                                                    name="selected_ids[]"
-                                                    value="<?php echo (int)$c['id']; ?>"
-                                                    onchange="updateSelectedCount()">
-                                            </td>
-                                        <?php else: ?>
-                                            <td class="action-icon-cell"></td>
-                                        <?php endif; ?>
+                                        <form id="uploadForm_<?= (int)$c['id']; ?>" method="post" enctype="multipart/form-data" style="display:none;">
+                                            <input type="hidden" name="expected_client_id"   value="<?= (int)$c['id']; ?>">
+                                            <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
+                                            <input type="hidden" name="review_cycle"         value="<?= htmlspecialchars($c['review_cycle']); ?>">
+                                            <input type="file" name="client_files[]" multiple onchange="submitUpload(<?= (int)$c['id']; ?>)">
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
 
-                                        <td><?php echo (int)$c['id']; ?></td>
-                                        <td>
-                                            <div style="font-weight: 600; color: #333; display:flex; align-items:center; gap:8px;">
-                                                <span><?php echo htmlspecialchars($c['name']); ?></span>
-                                                <?php if ($hasAttachments): ?>
-                                                    <span title="Has Attachments">📎</span>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                        <!-- AUM Column - FIXED -->
-                                        <td>
-                                            <span style="font-weight:600; color:#1976d2;">
-                                                ₹<?= number_format(((float)($c['aum'] ?? 0)) / 10000000, 2); ?> Cr
-                                            </span>
-                                        </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div><!-- /table-scroll-wrapper -->
 
-                                        <td>
-                                            <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
-                                            <?php if ($currState === 'pending'): ?>
-                                                <span style="color: #999; font-size: 0.85em; font-weight:600;">Not Drafted</span>
-                                            <?php else: ?>
-                                                <?php if (!empty($c['created_by_username'])): ?>
-                                                    <span class="badge" style="background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                                                        <?php echo htmlspecialchars($c['created_by_username']); ?>
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span style="color: #999; font-size: 0.85em;">System</span>
-                                                <?php endif; ?>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <span style="color:#333; font-weight:600;">
-                                                <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge" style="background: #f5f5f5; color: #333; border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;">
-                                                <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <?php
-                                            $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
-                                            $reviewerStyle = 'background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; padding: 5px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;';
-                                            if ($isReviewer) {
-                                                $reviewerStyle .= ' font-weight: 800; border-color: #1565c0;';
-                                            }
-                                            ?>
-                                            <?php if (!empty($c['reviewer_username'])): ?>
-                                                <span class="badge" style="<?php echo $reviewerStyle; ?>">
-                                                    <?php echo htmlspecialchars($c['reviewer_username']); ?>
-                                                    <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span style="color: #999; font-size: 0.85em;">Unassigned</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <?php
-                                            $priority = strtolower($c['priority'] ?? '');
+                <?php if ($deleteMode || $reassignMode): ?>
+                    </form>
+                <?php endif; ?>
 
-                                            switch ($priority) {
-                                                case 'high':
-                                                    $priorityText = 'High';
-                                                    $priorityBadgeClass = 'badge badge-red';
-                                                    break;
-                                                case 'low':
-                                                    $priorityText = 'Low';
-                                                    $priorityBadgeClass = 'badge badge-grey';
-                                                    break;
-                                                default:
-                                                    $priorityText = 'Normal';
-                                                    $priorityBadgeClass = 'badge badge-blue';
-                                            }
-                                            ?>
-                                            <?php if (!empty($c['priority'])): ?>
-                                                <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;">
-                                                    <?php echo $priorityText; ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span style="color: #999; font-size: 0.85em;">Normal</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <?php if (!empty($c['updated_at'])): ?>
-                                                <span style="color: #555; font-size: 0.9em;">
-                                                    <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
-                                                    <span style="color: #999; font-size: 0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
-                                                </span>
-                                            <?php else: ?>
-                                                <span style="color: #999; font-size: 0.85em;">N/A</span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <?php
-                                        $state = $c['report_state'] ?? 'draft';
-
-                                        $statusMap = [
-                                            'pending'  => '<span class="badge badge-grey">Pending</span>',
-                                            'draft'    => '<span class="badge badge-yellow">Draft</span>',
-                                            'ready'    => '<span class="badge badge-blue">Ready</span>',
-                                            'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
-                                            'sent'     => '<span class="badge badge-green">Sent</span>',
-                                        ];
-
-                                        $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
-
-                                        ?>
-                                        <td><?php echo $statusHtml; ?></td>
-                                        <td style="text-align: center;">
-                                            <select
-                                                onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                                                class="meet-select"
-                                                id="meet_select_<?php echo $c['id']; ?>">
-
-                                                <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>
-                                                    ⏳ Pending
-                                                </option>
-                                                <option value="yes" <?php echo ($c['meeting_status'] === 'yes') ? 'selected' : ''; ?>>
-                                                    ✅ Yes
-                                                </option>
-                                                <option value="no" <?php echo ($c['meeting_status'] === 'no') ? 'selected' : ''; ?>>
-                                                    ❌ No
-                                                </option>
-                                            </select>
-                                        </td>
-
-
-                                        <td style="text-align: center;">
-                                            <button type="button"
-                                                id="meet_btn_<?php echo $c['id']; ?>"
-                                                class="meet-btn"
-                                                onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                                style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                                Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                            </button>
-
-                                            <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                                        </td>
-                                        <td>
-                                            <?php
-                                            $hasReport = ($c['report_state'] !== 'pending');
-
-                                            $isUploadAllowed =
-                                                !$hasReport &&
-                                                isset($c['review_cycle']) &&
-                                                $c['review_cycle'] === $systemCurrentCycle;
-
-                                            ?>
-
-                                            <!-- OPEN: only if uploaded at least once -->
-                                            <?php if ($hasReport): ?>
-                                                <a href="view_report.php?id=<?= (int)$c['id']; ?>"
-                                                    class="action-link open-link">
-                                                    Open
-                                                </a>
-                                            <?php endif; ?>
-
-                                            <!-- UPLOAD: only if NO report yet AND SYSTEM CURRENT CYCLE -->
-                                            <?php if ($isUploadAllowed): ?>
-                                                <button type="button"
-                                                    class="action-link upload-link"
-                                                    onclick="triggerUpload(<?= (int)$c['id']; ?>)">
-                                                    Upload
-                                                </button>
-
-                                                <form id="uploadForm_<?= (int)$c['id']; ?>"
-                                                    method="post"
-                                                    enctype="multipart/form-data"
-                                                    style="display:none;">
-
-                                                    <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
-                                                    <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
-                                                    <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
-
-                                                    <input type="file"
-                                                        name="client_files[]"
-                                                        multiple
-                                                        onchange="submitUpload(<?= (int)$c['id']; ?>)">
-                                                </form>
-                                            <?php endif; ?>
-
-                                        </td>
-
-
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                        </form>
-
-                        <div class="pagination">
-                            Page <?php echo $page; ?> of <?php echo $totalPages; ?>:
-                            <?php
-                            for ($p = 1; $p <= $totalPages; $p++) {
-                                if ($p == $page) {
-                                    echo "<strong>{$p}</strong> ";
-                                } else {
-                                    $params = ['page' => $p];
-                                    if ($deleteMode) $params['mode'] = 'delete';
-                                    if ($reassignMode) $params['mode'] = 'reassign';
-                                    if ($q !== '') $params['q'] = $q;
-                                    if ($filter !== '') $params['filter'] = $filter;
-                                    if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
-                                    if ($cycleFilter !== '') $params['cycle_filter'] = $cycleFilter;
-                                    if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
-                                    if ($sortOrder !== 'DESC') $params['order'] = strtolower($sortOrder);
-                                    $url = 'view_saved_reports.php?' . http_build_query($params);
-                                    echo "<a href=\"{$url}\">{$p}</a> ";
-                                }
-                            }
-                            ?>
-                        </div>
-                    <?php endif; ?>
-        </div>
-
-        <script>
-            // Toggle select all checkboxes
-            function toggleSelectAll(checkbox) {
-                const checkboxes = document.querySelectorAll('.client-checkbox');
-                checkboxes.forEach(cb => {
-                    cb.checked = checkbox.checked;
-                });
-                updateSelectedCount();
-            }
-
-            // Update selected count
-            function updateSelectedCount() {
-                const checkboxes = document.querySelectorAll('.client-checkbox');
-                const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-                const selectedCountElem = document.getElementById('selectedCount');
-                if (selectedCountElem) {
-                    selectedCountElem.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
-                }
-                // Update select all checkbox state
-                const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-                if (!selectAllCheckbox) return;
-                const allChecked = selectedCount > 0 && Array.from(checkboxes).every(c => c.checked);
-                const someChecked = Array.from(checkboxes).some(c => c.checked);
-                selectAllCheckbox.checked = allChecked;
-                selectAllCheckbox.indeterminate = someChecked && !allChecked;
-            }
-
-            // Show delete confirmation modal
-            function confirmDelete() {
-                const checkboxes = document.querySelectorAll('.client-checkbox');
-                const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-                if (selectedCount === 0) {
-                    alert('Please select at least one client to delete.');
-                    return;
-                }
-                document.getElementById('deleteCount').textContent = selectedCount;
-                document.getElementById('deleteConfirmModal').style.display = 'flex';
-            }
-
-            // Close delete modal
-            function closeDeleteModal() {
-                document.getElementById('deleteConfirmModal').style.display = 'none';
-            }
-
-            // Submit delete form
-            function submitDelete() {
-                document.getElementById('bulkDeleteForm').submit();
-            }
-
-            // Update count on page load
-            document.addEventListener('DOMContentLoaded', function() {
-                if (document.querySelector('.client-checkbox')) {
-                    updateSelectedCount();
-                }
-            });
-
-            // Add checkbox event listeners
-            document.addEventListener('DOMContentLoaded', function() {
-                const checkboxes = document.querySelectorAll('.client-checkbox');
-                checkboxes.forEach(cb => {
-                    cb.addEventListener('change', updateSelectedCount);
-                });
-            });
-
-            // Prevent reassignment form submission if no owner selected or no clients selected
-            const bulkReassignForm = document.getElementById('bulkReassignForm');
-            if (bulkReassignForm) {
-                bulkReassignForm.addEventListener('submit', function(e) {
-                    const newOwner = bulkReassignForm.querySelector('select[name="new_owner_id"]').value;
-                    const checkboxes = document.querySelectorAll('.client-checkbox');
-                    const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-                    if (!newOwner) {
-                        e.preventDefault();
-                        alert('Please select a user to assign to before clicking Reassign.');
-                    } else if (selectedCount === 0) {
-                        e.preventDefault();
-                        alert('Please select at least one client to reassign.');
+                <div class="pagination">
+                    Page <?php echo $page; ?> of <?php echo $totalPages; ?>:
+                    <?php
+                    for ($p = 1; $p <= $totalPages; $p++) {
+                        if ($p == $page) {
+                            echo "<strong>{$p}</strong> ";
+                        } else {
+                            $params = ['page' => $p];
+                            if ($deleteMode)   $params['mode'] = 'delete';
+                            if ($reassignMode) $params['mode'] = 'reassign';
+                            if ($q !== '')         $params['q']            = $q;
+                            if ($filter !== '')    $params['filter']       = $filter;
+                            if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
+                            if ($cycleFilter !== '') $params['cycle_filter'] = $cycleFilter;
+                            if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
+                            if ($sortOrder !== 'DESC')    $params['order'] = strtolower($sortOrder);
+                            $url = 'view_saved_reports.php?' . http_build_query($params);
+                            echo "<a href=\"{$url}\">{$p}</a> ";
+                        }
                     }
-                });
-            }
-        </script>
-        <script>
-            function triggerUpload(clientId) {
-                const form = document.getElementById('uploadForm_' + clientId);
-                if (!form) return;
+                    ?>
+                </div>
+            <?php endif; ?>
+        </div><!-- /container -->
 
-                const fileInput = form.querySelector('input[type="file"]');
-                if (!fileInput) return;
-
-                fileInput.click();
-            }
-        </script>
-
-        <!-- Meeting Remarks Modal -->
+        <!-- ────────────── Meeting Remarks Modal ────────────── -->
         <div id="listMeetingModal" class="modal-overlay" style="display:none;">
             <div class="modal-card">
-
-                <!-- Header -->
                 <div class="modal-header">
                     <div class="modal-icon">📝</div>
                     <div>
@@ -1958,212 +1898,276 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
                         <p>Enter details about the discussion</p>
                     </div>
                 </div>
-
-                <!-- Body -->
                 <input type="hidden" id="current_modal_client_id">
-
-                <textarea
-                    id="listModalRemarks"
-                    rows="5"
-                    placeholder="e.g., Client agreed to increase SIP, follow-up next month..."></textarea>
-
-                <!-- Footer -->
+                <textarea id="listModalRemarks" rows="5" placeholder="e.g., Client agreed to increase SIP, follow-up next month..."></textarea>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-reset" onclick="closeListMeetingModal()">
-                        Cancel
-                    </button>
-                    <button type="button" class="btn btn-search" onclick="saveListMeetingRemarks()">
-                        Save Remarks
-                    </button>
+                    <button type="button" class="btn btn-reset" onclick="closeListMeetingModal()">Cancel</button>
+                    <button type="button" class="btn btn-search" onclick="saveListMeetingRemarks()">Save Remarks</button>
                 </div>
-
             </div>
         </div>
 
+    </div><!-- /main-scroll-container -->
 
-        <script>
-            // 1. Handle Dropdown Change
-            function handleListMeetingChange(select, clientId) {
-                const status = select.value;
-                const remarksBtn = document.getElementById('meet_btn_' + clientId);
-                const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
+    <!-- ═══════════════════════════════════════════════════════════
+         JAVASCRIPT
+         ═══════════════════════════════════════════════════════════ -->
+    <script>
+    // ── INLINE EDIT ─────────────────────────────────────────────
+    function showToast(msg) {
+        const t = document.getElementById('saveToast');
+        t.textContent = msg || '✓ Saved';
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2200);
+    }
 
-                if (status === 'yes') {
-                    openListMeetingModal(clientId);
-                    remarksBtn.style.display = 'inline-block';
-                } else {
-                    // Save 'No' or 'Pending' immediately
-                    saveData(clientId, status, storedRemarks, false);
-                    remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.editable-cell').forEach(cell => {
+            const displayVal = cell.querySelector('.display-val');
+            const input      = cell.querySelector('input, textarea');
+            const clientId   = cell.dataset.client;
+            const field      = cell.dataset.field;
+
+            // Click to edit
+            displayVal.addEventListener('click', function () {
+                cell.classList.add('editing');
+                input.focus();
+                if (input.tagName === 'TEXTAREA') {
+                    input.selectionStart = input.selectionEnd = input.value.length;
                 }
+            });
+
+            // Save on blur
+            input.addEventListener('blur', function () {
+                saveField(cell, clientId, field, input.value);
+            });
+
+            // Save on Enter (for single-line inputs), Escape to cancel
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                    input.blur();
+                }
+                if (e.key === 'Escape') {
+                    cell.classList.remove('editing');
+                }
+            });
+        });
+    });
+
+    function saveField(cell, clientId, field, value) {
+        const input      = cell.querySelector('input, textarea');
+        const displayVal = cell.querySelector('.display-val');
+
+        fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action:    'save_review_fields',
+                client_id: clientId,
+                field:     field,
+                value:     value
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                let displayText = value;
+                if (field === 'sip_amount_lakhs' && value !== '') {
+                    displayText = parseFloat(value).toFixed(2);
+                } else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
+                    const d = new Date(value);
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    displayText = d.getDate() + '-' + months[d.getMonth()];
+                }
+                displayVal.textContent = displayText || '—';
+                displayVal.classList.toggle('placeholder-text', !displayText);
+                showToast('✓ Saved');
+            } else {
+                alert('Save failed: ' + (data.error || 'Unknown error'));
             }
+            cell.classList.remove('editing');
+        })
+        .catch(() => {
+            alert('Network error while saving.');
+            cell.classList.remove('editing');
+        });
+    }
 
-            // 2. Open Modal
-            function openListMeetingModal(clientId) {
-                const remarks = document.getElementById('remarks_store_' + clientId).value;
-                document.getElementById('current_modal_client_id').value = clientId;
-                document.getElementById('listModalRemarks').value = remarks;
-                document.getElementById('listMeetingModal').style.display = 'flex';
-                document.getElementById('listModalRemarks').focus();
+    // ── BULK ACTIONS ────────────────────────────────────────────
+    function toggleSelectAll(checkbox) {
+        document.querySelectorAll('.client-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        const checkboxes    = document.querySelectorAll('.client-checkbox');
+        const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const elem          = document.getElementById('selectedCount');
+        if (elem) elem.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+
+        const selectAll = document.getElementById('selectAllCheckbox');
+        if (!selectAll) return;
+        selectAll.checked       = selectedCount > 0 && Array.from(checkboxes).every(c => c.checked);
+        selectAll.indeterminate = Array.from(checkboxes).some(c => c.checked) && !selectAll.checked;
+    }
+
+    function confirmDelete() {
+        const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
+        if (selectedCount === 0) { alert('Please select at least one client to delete.'); return; }
+        if (confirm('Delete ' + selectedCount + ' selected client(s)? This cannot be undone.')) {
+            document.getElementById('bulkDeleteForm').submit();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (document.querySelector('.client-checkbox')) updateSelectedCount();
+
+        document.querySelectorAll('.client-checkbox').forEach(cb => {
+            cb.addEventListener('change', updateSelectedCount);
+        });
+
+        const bulkReassignForm = document.getElementById('bulkReassignForm');
+        if (bulkReassignForm) {
+            bulkReassignForm.addEventListener('submit', function (e) {
+                const newOwner      = bulkReassignForm.querySelector('select[name="new_owner_id"]').value;
+                const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
+                if (!newOwner) { e.preventDefault(); alert('Please select a user to assign to.'); }
+                else if (selectedCount === 0) { e.preventDefault(); alert('Please select at least one client.'); }
+            });
+        }
+    });
+
+    // ── UPLOAD ──────────────────────────────────────────────────
+    function triggerUpload(clientId) {
+        const form = document.getElementById('uploadForm_' + clientId);
+        if (!form) return;
+        form.querySelector('input[type="file"]').click();
+    }
+
+    function submitUpload(clientId) {
+        const form      = document.getElementById('uploadForm_' + clientId);
+        const fileInput = form.querySelector('input[type="file"]');
+        if (!fileInput.files.length) return;
+        form.submit();
+    }
+
+    // ── MEETING STATUS ───────────────────────────────────────────
+    function handleListMeetingChange(select, clientId) {
+        const status        = select.value;
+        const remarksBtn    = document.getElementById('meet_btn_' + clientId);
+        const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
+
+        if (status === 'yes') {
+            openListMeetingModal(clientId);
+            if (remarksBtn) remarksBtn.style.display = 'inline-block';
+        } else {
+            saveData(clientId, status, storedRemarks, false);
+            if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
+        }
+    }
+
+    function openListMeetingModal(clientId) {
+        const remarks = document.getElementById('remarks_store_' + clientId).value;
+        document.getElementById('current_modal_client_id').value = clientId;
+        document.getElementById('listModalRemarks').value         = remarks;
+        document.getElementById('listMeetingModal').style.display = 'flex';
+        document.getElementById('listModalRemarks').focus();
+    }
+
+    function closeListMeetingModal() { document.getElementById('listMeetingModal').style.display = 'none'; }
+
+    function saveListMeetingRemarks() {
+        const clientId = document.getElementById('current_modal_client_id').value;
+        const remarks  = document.getElementById('listModalRemarks').value;
+        const select   = document.getElementById('meet_select_' + clientId);
+        const status   = select ? select.value : 'yes';
+        saveData(clientId, status, remarks, true);
+    }
+
+    function saveData(clientId, status, remarks, isModal) {
+        const formData = new URLSearchParams();
+        formData.append('action',    'save_meeting_status');
+        formData.append('client_id', clientId);
+        formData.append('status',    status);
+        formData.append('remarks',   remarks);
+
+        fetch('meeting_tracker.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const store = document.getElementById('remarks_store_' + clientId);
+                if (store) store.value = remarks;
+                const btn = document.getElementById('meet_btn_' + clientId);
+                if (btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
+                if (isModal) { closeListMeetingModal(); showToast("Meeting remarks saved!"); }
+            } else {
+                alert("Error: " + data.error);
             }
+        });
+    }
 
-            // 3. Close Modal
-            function closeListMeetingModal() {
-                document.getElementById('listMeetingModal').style.display = 'none';
-            }
+    // ── CLIENT SEARCH AUTOCOMPLETE ───────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        const input    = document.getElementById('client-search');
+        const dropdown = document.getElementById('client-search-dropdown');
+        if (!input) return;
 
-            // 4. Save
-            function saveListMeetingRemarks() {
-                const clientId = document.getElementById('current_modal_client_id').value;
-                const remarks = document.getElementById('listModalRemarks').value;
-                const select = document.getElementById('meet_select_' + clientId);
-                const status = select ? select.value : 'yes'; // Default to yes if saving remarks
-
-                saveData(clientId, status, remarks, true);
-            }
-
-            // 5. AJAX Save
-            function saveData(clientId, status, remarks, isModal) {
-                const formData = new URLSearchParams();
-                formData.append('action', 'save_meeting_status');
-                formData.append('client_id', clientId);
-                formData.append('status', status);
-                formData.append('remarks', remarks);
-
-                fetch('meeting_tracker.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: formData
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            const store = document.getElementById('remarks_store_' + clientId);
-                            if (store) store.value = remarks;
-
-                            const btn = document.getElementById('meet_btn_' + clientId);
-                            if (btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
-
-                            if (isModal) {
-                                closeListMeetingModal();
-                                if (typeof showToast === 'function') showToast("Meeting remarks saved!");
-                            }
-                        } else {
-                            alert("Error: " + data.error);
-                        }
-                    });
-            }
-
-            // --- Client Name Autocomplete for Search Box ---
-            document.addEventListener('DOMContentLoaded', function() {
-                const input = document.getElementById('client-search');
-                const dropdown = document.getElementById('client-search-dropdown');
-                if (!input) return;
-                input.addEventListener('input', function() {
-                    let val = input.value.trim();
-                    if (val.length < 1) {
-                        dropdown.style.display = 'none';
-                        dropdown.innerHTML = '';
-                        return;
-                    }
-                    fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.length > 0) {
-                                dropdown.innerHTML = data.map(name =>
-                                    `<div style="padding:8px 12px;cursor:pointer;" 
+        input.addEventListener('input', function () {
+            const val = input.value.trim();
+            if (val.length < 1) { dropdown.style.display = 'none'; dropdown.innerHTML = ''; return; }
+            fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        dropdown.innerHTML = data.map(name =>
+                            `<div style="padding:8px 12px;cursor:pointer;"
                                 onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
-                                ).join('');
-                                dropdown.style.display = 'block';
-                            } else {
-                                dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
-                                dropdown.style.display = 'block';
-                            }
-                        });
-                });
-
-                document.addEventListener('click', function(e) {
-                    if (!dropdown.contains(e.target) && e.target !== input) {
-                        dropdown.style.display = 'none';
+                        ).join('');
+                        dropdown.style.display = 'block';
+                    } else {
+                        dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
+                        dropdown.style.display = 'block';
                     }
                 });
-            });
+        });
 
-            function selectClientName(name) {
-                document.getElementById('client-search').value = name;
-                document.getElementById('client-search-dropdown').style.display = 'none';
-                document.getElementById('filterForm').submit();
-            }
-        </script>
+        document.addEventListener('click', function (e) {
+            if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
+        });
+    });
 
-        <script>
-            // Auto-hide success message after 3 seconds
-            document.addEventListener('DOMContentLoaded', function() {
-                const successMessage = document.getElementById('successMessage');
-                if (successMessage) {
-                    setTimeout(function() {
-                        successMessage.style.transition = 'opacity 0.5s ease';
-                        successMessage.style.opacity = '0';
+    function selectClientName(name) {
+        document.getElementById('client-search').value = name;
+        document.getElementById('client-search-dropdown').style.display = 'none';
+        document.getElementById('filterForm').submit();
+    }
 
-                        // Remove from DOM after fade out
-                        setTimeout(function() {
-                            successMessage.style.display = 'none';
-                        }, 500); // Wait for fade out to complete
-                    }, 3000); // Show for 3 seconds
-                }
-            });
+    // ── AUTO-SUBMIT FILTER DROPDOWNS ────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        const filterForm = document.getElementById('filterForm');
+        if (!filterForm) return;
+        filterForm.querySelectorAll('select').forEach(select => {
+            select.addEventListener('change', function () { filterForm.submit(); });
+        });
+    });
 
-            function renderDropdown(names) {
-                const dropdown = document.getElementById("client-search-dropdown");
-                dropdown.innerHTML = "";
-
-                names.forEach(name => {
-                    const firstLetter = name.charAt(0);
-
-                    const item = document.createElement("div");
-                    item.className = "search-item";
-
-                    item.innerHTML = `
-            <div class="search-avatar">${firstLetter}</div>
-            <div class="search-name">${name}</div>
-        `;
-
-                    item.onclick = () => {
-                        document.getElementById("client-search").value = name;
-                        dropdown.style.display = "none";
-                    };
-
-                    dropdown.appendChild(item);
-                });
-
-                dropdown.style.display = names.length ? "block" : "none";
-            }
-
-            document.addEventListener('DOMContentLoaded', function() {
-                const filterForm = document.getElementById('filterForm');
-                if (!filterForm) return;
-
-                // Auto-submit on dropdown change
-                filterForm.querySelectorAll('select').forEach(select => {
-                    select.addEventListener('change', function() {
-                        filterForm.submit();
-                    });
-                });
-            });
-
-            function submitUpload(clientId) {
-                const form = document.getElementById('uploadForm_' + clientId);
-                const fileInput = form.querySelector('input[type="file"]');
-
-                if (!fileInput.files.length) return;
-                form.submit();
-            }
-        </script>
-
-    </div>
+    // ── AUTO-HIDE SUCCESS MESSAGE ───────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        const successMessage = document.getElementById('successMessage');
+        if (successMessage) {
+            setTimeout(function () {
+                successMessage.style.transition = 'opacity 0.5s ease';
+                successMessage.style.opacity    = '0';
+                setTimeout(() => successMessage.style.display = 'none', 500);
+            }, 3000);
+        }
+    });
+    </script>
 
 </body>
-
 </html>
