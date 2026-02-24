@@ -7,6 +7,14 @@
 // - Added: Last Review columns (review_sent_date, meeting_date, modifications_action,
 //           meeting_comments, sip_amount_lakhs) + previous review data pulled via JOIN
 // - Added: View Previous Review column with modal to display stored HTML content
+// - FIX: Sticky ID + Client Name columns (stop at viewport edge)
+// - FIX: "Last Updated" now shows created_at of each row independently;
+//         rows with report_state='sent' are read-only (locked)
+// - FIX: markPreviousAsNotLatest no longer corrupts updated_at of old rows
+// - FIX: last_review_date uses created_at (not updated_at) for sent rows to avoid
+//         timestamp corruption caused by is_latest flag update
+// - FIX: last_meeting_date now sourced from the SAME record as last_review_date
+//         (both use identical ORDER BY so they always come from the same row)
 
 require_once 'auth.php';
 requireAuth();
@@ -203,6 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
         $toBackfill = $backfillStmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (!empty($toBackfill)) {
+            // FIX: Both last_review_datetime and last_meeting_datetime are derived
+            // from the SAME row (same ORDER BY), so they always stay in sync.
             $findPrevStmt = $pdo->prepare("
                 SELECT
                     review_sent_date,
@@ -211,9 +221,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
                     meeting_comments,
                     created_at,
                     updated_at,
-                    -- Use review_sent_date+time if set; else fall back to updated_at
-                    -- This handles 'sent' records that never had review_sent_date filled
                     CASE
+                        WHEN report_state = 'sent' AND review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(created_at))
+                        WHEN report_state = 'sent'
+                            THEN created_at
                         WHEN review_sent_date IS NOT NULL
                             THEN CONCAT(review_sent_date, ' ', TIME(COALESCE(updated_at, created_at)))
                         WHEN updated_at IS NOT NULL
@@ -221,6 +233,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
                         ELSE created_at
                     END AS last_review_datetime,
                     CASE
+                        WHEN meeting_date IS NOT NULL AND report_state = 'sent'
+                            THEN CONCAT(meeting_date, ' ', TIME(created_at))
                         WHEN meeting_date IS NOT NULL
                             THEN CONCAT(meeting_date, ' ', TIME(COALESCE(updated_at, created_at)))
                         ELSE NULL
@@ -268,6 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
 // ============================================================
 // AJAX: Save inline fields (sip, review_sent_date, meeting_date,
 //       modifications_action, meeting_comments)
+//       BLOCKED if report_state = 'sent'
 // ============================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_review_fields') {
     header('Content-Type: application/json');
@@ -286,6 +301,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         if (!$clientId || !in_array($field, $allowedFields, true)) {
             echo json_encode(['success' => false, 'error' => 'Invalid field or client id']);
+            exit;
+        }
+
+        // Block saves for sent reviews
+        $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
+        $checkState->execute([$clientId]);
+        $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
+        if ($stateRow && $stateRow['report_state'] === 'sent') {
+            echo json_encode(['success' => false, 'error' => 'This review has been sent and cannot be edited.']);
             exit;
         }
 
@@ -420,9 +444,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
             LIMIT 1
         ');
 
+        // =====================================================================
+        // FIX: Use updated_at = updated_at (no-op) so that marking the previous
+        // row as non-latest does NOT change its updated_at timestamp.
+        // Previously this UPDATE was omitting updated_at which caused MySQL's
+        // ON UPDATE CURRENT_TIMESTAMP to fire and corrupt the old row's timestamp.
+        // =====================================================================
         $markPreviousAsNotLatest = $pdo->prepare('
             UPDATE clients 
-            SET is_latest = FALSE 
+            SET is_latest = FALSE,
+                updated_at = updated_at
             WHERE name = :name 
             AND month_year = :month_year
         ');
@@ -513,6 +544,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                 $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
             }
 
+            // =====================================================================
+            // FIX: Both last_review_datetime and last_meeting_datetime are derived
+            // from the SAME single row (identical ORDER BY), so they always stay
+            // in sync and come from the same review record.
+            // =====================================================================
             $stmtLastReview = $pdo->prepare("
                 SELECT
                     review_sent_date,
@@ -522,6 +558,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                     updated_at,
                     created_at,
                     CASE
+                        WHEN report_state = 'sent' AND review_sent_date IS NOT NULL
+                            THEN CONCAT(review_sent_date, ' ', TIME(created_at))
+                        WHEN report_state = 'sent'
+                            THEN created_at
                         WHEN review_sent_date IS NOT NULL
                             THEN CONCAT(review_sent_date, ' ', TIME(COALESCE(updated_at, created_at)))
                         WHEN updated_at IS NOT NULL
@@ -529,6 +569,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                         ELSE created_at
                     END AS last_review_datetime,
                     CASE
+                        WHEN meeting_date IS NOT NULL AND report_state = 'sent'
+                            THEN CONCAT(meeting_date, ' ', TIME(created_at))
                         WHEN meeting_date IS NOT NULL
                             THEN CONCAT(meeting_date, ' ', TIME(COALESCE(updated_at, created_at)))
                         ELSE NULL
@@ -1020,7 +1062,16 @@ if ($sortColumn === 'priority') {
 }
 
 // ============================================================
-// MAIN QUERY — includes previous_review_html flag
+// MAIN QUERY
+// - updated_at: shows the actual last-updated timestamp of each row
+//   (not shared between reviews)
+// - FIX: For 'sent' rows, last_review_date subquery uses created_at
+//   for the time component, not updated_at, to avoid corruption from
+//   the is_latest flag UPDATE touching updated_at via ON UPDATE CURRENT_TIMESTAMP
+// - FIX: last_meeting_date subquery now uses IDENTICAL ORDER BY as
+//   last_review_date so both columns always come from the SAME row.
+//   Previously last_meeting_date ordered by (meeting_date IS NOT NULL)
+//   which could select a DIFFERENT record than last_review_date.
 // ============================================================
 $stmt = $pdo->prepare("
     SELECT
@@ -1035,7 +1086,7 @@ $stmt = $pdo->prepare("
         c.modifications_action,
         c.meeting_comments,
         c.previous_version_id,
-        -- Fetch the report_state of the previous version so we can show/hide the View link
+        -- Fetch the report_state of the previous version
         (
             SELECT p.report_state
             FROM clients p
@@ -1043,11 +1094,17 @@ $stmt = $pdo->prepare("
             LIMIT 1
         ) AS prev_version_state,
 
+        -- ── LAST REVIEW DATE ────────────────────────────────────────────────
+        -- Uses: sent > review_sent_date present > id DESC
         COALESCE(
             c.last_review_date,
             (
                 SELECT
                     CASE
+                        WHEN p.report_state = 'sent' AND p.review_sent_date IS NOT NULL
+                            THEN CONCAT(p.review_sent_date, ' ', TIME(p.created_at))
+                        WHEN p.report_state = 'sent'
+                            THEN p.created_at
                         WHEN p.review_sent_date IS NOT NULL
                             THEN CONCAT(p.review_sent_date, ' ', TIME(COALESCE(p.updated_at, p.created_at)))
                         WHEN p.updated_at IS NOT NULL
@@ -1067,11 +1124,19 @@ $stmt = $pdo->prepare("
             )
         ) AS last_review_date,
 
+        -- ── LAST MEETING DATE ────────────────────────────────────────────────
+        -- FIX: Uses IDENTICAL ORDER BY as last_review_date (sent > review_sent_date > id DESC)
+        -- so that both columns are ALWAYS sourced from the SAME review record.
+        -- Previously this used (meeting_date IS NOT NULL) in ORDER BY which could
+        -- select a different record, causing last_review_date and last_meeting_date
+        -- to show data from two different reviews.
         COALESCE(
             c.last_meeting_date,
             (
                 SELECT
                     CASE
+                        WHEN p.meeting_date IS NOT NULL AND p.report_state = 'sent'
+                            THEN CONCAT(p.meeting_date, ' ', TIME(p.created_at))
                         WHEN p.meeting_date IS NOT NULL
                             THEN CONCAT(p.meeting_date, ' ', TIME(COALESCE(p.updated_at, p.created_at)))
                         ELSE NULL
@@ -1083,7 +1148,7 @@ $stmt = $pdo->prepare("
                   AND p.id < c.id
                 ORDER BY
                     (p.report_state = 'sent') DESC,
-                    (p.meeting_date IS NOT NULL) DESC,
+                    (p.review_sent_date IS NOT NULL) DESC,
                     p.id DESC
                 LIMIT 1
             )
@@ -1186,482 +1251,6 @@ function fmtDateTime(?string $d): string {
     <link rel="stylesheet" href="public/css/view_saved_reports.css">
     <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-    <style>
-        /* ── INLINE-EDIT CELLS ───────────────────────────────────── */
-        .editable-cell {
-            position: relative;
-            min-width: 80px;
-        }
-
-        .editable-cell .display-val {
-            cursor: pointer;
-            padding: 4px 6px;
-            border-radius: 4px;
-            border: 1px solid transparent;
-            font-size: 13px;
-            display: block;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 160px;
-            transition: border-color .2s, background .2s;
-        }
-
-        .editable-cell .display-val:hover {
-            border-color: #90caf9;
-            background: #e3f2fd;
-        }
-
-        .editable-cell .display-val.placeholder-text {
-            color: #bbb;
-            font-style: italic;
-        }
-
-        .editable-cell input[type="text"],
-        .editable-cell input[type="date"],
-        .editable-cell input[type="number"],
-        .editable-cell textarea {
-            display: none;
-            width: 100%;
-            padding: 4px 6px;
-            font-size: 13px;
-            border: 1px solid #1976d2;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-family: inherit;
-            background: #fff;
-            box-shadow: 0 2px 6px rgba(25,118,210,.2);
-        }
-
-        .editable-cell textarea {
-            resize: vertical;
-            min-height: 60px;
-        }
-
-        .editable-cell.editing .display-val   { display: none; }
-        .editable-cell.editing input,
-        .editable-cell.editing textarea        { display: block; }
-
-        /* ── SECTION HEADER CELLS (group labels) ────────────────── */
-        .th-section-current {
-            background: #e3f2fd;
-            color: #1565c0;
-            text-align: center;
-            font-weight: 700;
-            font-size: 11px;
-            letter-spacing: .5px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #90caf9;
-        }
-
-        .th-section-prev {
-            background: #fce4ec;
-            color: #880e4f;
-            text-align: center;
-            font-weight: 700;
-            font-size: 11px;
-            letter-spacing: .5px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #f48fb1;
-        }
-
-        th.col-current { background: #f5fbff; }
-        th.col-prev    { background: #fff5f8; }
-        td.col-prev    { background: #fffafa; color: #555; font-size: 12px; }
-
-        /* ── TOAST ───────────────────────────────────────────────── */
-        #saveToast {
-            position: fixed;
-            bottom: 28px;
-            right: 28px;
-            background: #2e7d32;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            z-index: 9999;
-            opacity: 0;
-            transition: opacity .4s ease;
-            pointer-events: none;
-        }
-
-        #saveToast.show { opacity: 1; }
-
-        /* ── EXISTING STYLES (unchanged) ─────────────────────────── */
-        .action-mode-active .bulk-actions-bar,
-        .action-mode-active .select-all-cell,
-        .action-mode-active .action-checkbox {
-            display: block !important;
-        }
-
-        .action-mode-active .action-icon-cell {
-            display: none !important;
-        }
-
-        .action-icons-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .action-icon-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-
-        .delete-icon-btn { background-color: #e53935; }
-        .delete-icon-btn:hover { background-color: #c62828; transform: scale(1.05); }
-
-        .reassign-icon-btn { background-color: #0288D1; }
-        .reassign-icon-btn:hover { background-color: #0277BD; transform: scale(1.05); }
-
-        .cancel-action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
-        }
-
-        .cancel-action-btn:hover { background-color: #5a6268; }
-
-        .select-all-cell,
-        .action-checkbox { display: none; }
-
-        .action-checkbox {
-            vertical-align: middle;
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-
-        .sort-dropdown {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 14px;
-            background-color: white;
-            cursor: pointer;
-            min-width: 160px;
-        }
-
-        .sort-dropdown:focus {
-            outline: none;
-            border-color: #0288D1;
-            box-shadow: 0 0 0 2px rgba(2, 136, 209, 0.2);
-        }
-
-        .bulk-actions-bar {
-            display: none;
-            background-color: #f8f9fa;
-            padding: 12px 20px;
-            margin: 15px 0;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .bulk-selection-info { font-weight: 600; color: #495057; }
-
-        .delete-btn {
-            background-color: #e53935;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background-color 0.3s ease;
-        }
-
-        .delete-btn:hover { background-color: #c62828; }
-
-        .reassign-select {
-            padding: 8px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 14px;
-            min-width: 180px;
-        }
-
-        .reassign-submit-btn {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
-        }
-
-        .reassign-submit-btn:hover { background-color: #218838; }
-
-        .btn {
-            text-decoration: none;
-            border: none;
-            padding: 9px 18px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease, filter 0.2s ease;
-        }
-
-        .btn-reset {
-            color: #fff;
-            background: linear-gradient(135deg, #757575, #616161);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-        }
-
-        .btn-reset:hover {
-            background: linear-gradient(135deg, #8E8E8E, #555);
-            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            transform: translateY(-2px);
-        }
-
-        .meet-select {
-            padding: 6px 12px;
-            font-size: 13px;
-            font-weight: 500;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            cursor: pointer;
-            background-color: #fff;
-            min-width: 110px;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background-image:
-                linear-gradient(45deg, transparent 50%, #555 50%),
-                linear-gradient(135deg, #555 50%, transparent 50%),
-                linear-gradient(to right, #e0e0e0, #e0e0e0);
-            background-position:
-                calc(100% - 18px) calc(50% - 3px),
-                calc(100% - 13px) calc(50% - 3px),
-                calc(100% - 2.2em) 50%;
-            background-size: 5px 5px, 5px 5px, 1px 1.5em;
-            background-repeat: no-repeat;
-            transition: all 0.25s ease;
-        }
-
-        .meet-select:hover { border-color: #0288D1; box-shadow: 0 2px 6px rgba(2, 136, 209, 0.25); }
-        .meet-select:focus { outline: none; border-color: #0288D1; box-shadow: 0 0 0 3px rgba(2, 136, 209, 0.25); }
-
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(3px);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-card {
-            background: #fff;
-            width: 460px;
-            max-width: 92%;
-            padding: 22px 24px;
-            border-radius: 14px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
-            font-family: 'Inter', sans-serif;
-            animation: modalFadeIn 0.25s ease;
-        }
-
-        .modal-header { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
-
-        .modal-icon {
-            background: linear-gradient(135deg, #1976d2, #42a5f5);
-            color: #fff;
-            width: 42px;
-            height: 42px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .modal-header h3 { margin: 0; font-size: 17px; color: #1f2937; }
-        .modal-header p  { margin: 2px 0 0; font-size: 13px; color: #6b7280; }
-
-        #listModalRemarks {
-            width: 95%;
-            min-height: 110px;
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid #d1d5db;
-            font-size: 14px;
-            resize: vertical;
-            font-family: inherit;
-            transition: all 0.25s ease;
-        }
-
-        #listModalRemarks::placeholder { color: #9ca3af; }
-        #listModalRemarks:focus { outline: none; border-color: #1976d2; box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.25); }
-
-        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-
-        @keyframes modalFadeIn {
-            from { opacity: 0; transform: translateY(10px) scale(0.98); }
-            to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        .action-btn { display: inline-flex; align-items: center; gap: 8px; }
-
-        /* ── STICKY HEADER ROWS ──────────────────────────────────── */
-        thead tr.group-header th {
-            position: sticky;
-            top: 0;
-            z-index: 2;
-        }
-
-        thead tr.col-header th {
-            position: sticky;
-            top: 26px;   /* height of group header */
-            z-index: 2;
-            background: #fff;
-        }
-
-        /* ── STICKY COLUMNS: col1=checkbox, col2=ID, col3=Client Name ── */
-        th:nth-child(1),
-        td:nth-child(1) {
-            position: sticky;
-            left: 0;
-            z-index: 3;
-            background: #fff;
-        }
-
-        th:nth-child(2),
-        td:nth-child(2) {
-            position: sticky;
-            left: 40px;   /* width of checkbox/action column */
-            z-index: 3;
-            background: #fff;
-        }
-
-        th:nth-child(3),
-        td:nth-child(3) {
-            position: sticky;
-            left: 100px;  /* checkbox(40px) + ID col(60px) */
-            z-index: 3;
-            background: #fff;
-            /* Visual divider shadow so users can see where sticky columns end */
-            box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.15);
-        }
-
-        /* thead sticky cells must sit above tbody sticky cells on both axes */
-        thead tr.group-header th:nth-child(1),
-        thead tr.group-header th:nth-child(2),
-        thead tr.group-header th:nth-child(3),
-        thead tr.col-header   th:nth-child(1),
-        thead tr.col-header   th:nth-child(2),
-        thead tr.col-header   th:nth-child(3) {
-            z-index: 6;
-            background: #fff;
-        }
-
-        /* Keep section-coloured group header backgrounds on sticky cols */
-        thead tr.group-header th.th-section-current:nth-child(1),
-        thead tr.group-header th.th-section-current:nth-child(2),
-        thead tr.group-header th.th-section-current:nth-child(3) {
-            background: #e3f2fd;
-        }
-
-        thead tr.group-header th.th-section-prev:nth-child(1),
-        thead tr.group-header th.th-section-prev:nth-child(2),
-        thead tr.group-header th.th-section-prev:nth-child(3) {
-            background: #fce4ec;
-        }
-
-        /* Subtle blue tint on hovered rows so sticky cells don't look detached */
-        tbody tr:hover td:nth-child(1),
-        tbody tr:hover td:nth-child(2),
-        tbody tr:hover td:nth-child(3) {
-            background: #f0f7ff;
-        }
-
-        /* ── PREV REVIEW BUTTON ──────────────────────────────────── */
-        .btn-prev-review {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 5px 10px;
-            font-size: 12px;
-            font-weight: 600;
-            border-radius: 6px;
-            border: 1px solid #7b1fa2;
-            color: #7b1fa2;
-            background: #f3e5f5;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-
-        .btn-prev-review:hover {
-            background: #7b1fa2;
-            color: #fff;
-            box-shadow: 0 2px 8px rgba(123, 31, 162, 0.3);
-        }
-
-        .btn-prev-review.no-data {
-            border-color: #ccc;
-            color: #aaa;
-            background: #f9f9f9;
-            cursor: default;
-        }
-
-        .btn-prev-review.no-data:hover {
-            background: #f9f9f9;
-            color: #aaa;
-            box-shadow: none;
-        }
-
-        .th-section-prev-review {
-            background: #f3e5f5;
-            color: #6a1b9a;
-            text-align: center;
-            font-weight: 700;
-            font-size: 11px;
-            letter-spacing: .5px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #ce93d8;
-        }
-
-        th.col-prev-review { background: #fdf6ff; }
-        td.col-prev-review { background: #fdf6ff; text-align: center; }
-
-        
-    </style>
 </head>
 
 <body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
@@ -1869,8 +1458,8 @@ function fmtDateTime(?string $d): string {
                     <!-- No bulk-action form needed in normal view -->
                 <?php endif; ?>
 
-                <!-- ── MAIN TABLE ──────────────────────────────────── -->
-                <div style="overflow-x: auto;">
+                <!-- ── MAIN TABLE inside scroll wrapper ───────────── -->
+                <div class="table-scroll-wrapper">
                 <table>
                     <thead>
                         <!-- ROW 1: section group labels -->
@@ -1882,9 +1471,7 @@ function fmtDateTime(?string $d): string {
                             <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
                             <th colspan="5" class="th-section-current">Current Review</th>
                             <th colspan="4" class="th-section-prev">Last Review</th>
-                            <!-- NEW: Previous Review column group -->
                             <th colspan="1" class="th-section-prev-review">Prev Review</th>
-                            <!-- meeting status + remarks + action -->
                             <th colspan="3" style="background:#f9f9f9; border:none;"></th>
                         </tr>
 
@@ -1918,13 +1505,7 @@ function fmtDateTime(?string $d): string {
                             </th>
                             <th>Drafted By</th>
                             <th>RM</th>
-                            <!-- <th>Cycle</th> -->
                             <th>Review Assigned to</th>
-                            <!-- <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=priority&order=<?= ($sortBy === 'priority' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    Priority <?= $sortBy === 'priority' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th> -->
                             <th>
                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
                                     Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
@@ -1936,20 +1517,20 @@ function fmtDateTime(?string $d): string {
                                 </a>
                             </th>
 
-                            <!-- ── CURRENT REVIEW columns ── -->
+                            <!-- CURRENT REVIEW columns -->
                             <th class="col-current">SIP (Lakhs)</th>
                             <th class="col-current">Review Sent</th>
                             <th class="col-current">Mtg Date</th>
                             <th class="col-current">Modifications / Action</th>
                             <th class="col-current">Mtg Comments</th>
 
-                            <!-- ── LAST REVIEW columns (read-only, from previous record) ── -->
+                            <!-- LAST REVIEW columns (read-only) -->
                             <th class="col-prev">Last Review</th>
                             <th class="col-prev">Last Meeting</th>
                             <th class="col-prev">Prev Modifications</th>
                             <th class="col-prev">Prev Mtg Comments</th>
 
-                            <!-- ── NEW: Previous Review HTML view column ── -->
+                            <!-- Previous Review HTML view -->
                             <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
 
                             <!-- Meeting status / remarks / action -->
@@ -1963,8 +1544,12 @@ function fmtDateTime(?string $d): string {
                             <?php
                             $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
                             $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
+
+                            // Determine if this row is sent (locked)
+                            $isSent = (($c['report_state'] ?? '') === 'sent');
+                            $rowClass = $isSent ? 'row-sent' : '';
                             ?>
-                            <tr>
+                            <tr class="<?= $rowClass ?>">
                                 <!-- Checkbox / empty -->
                                 <?php if ($deleteMode || $reassignMode): ?>
                                     <td>
@@ -1987,6 +1572,9 @@ function fmtDateTime(?string $d): string {
                                         <span><?php echo htmlspecialchars($c['name']); ?></span>
                                         <?php if ($hasAttachments): ?>
                                             <span title="Has Attachments">📎</span>
+                                        <?php endif; ?>
+                                        <?php if ($isSent): ?>
+                                            <span class="sent-lock-icon" title="Sent — read only"><i class="fa-solid fa-lock"></i></span>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -2021,13 +1609,6 @@ function fmtDateTime(?string $d): string {
                                     </span>
                                 </td>
 
-                                <!-- Cycle -->
-                                <!-- <td>
-                                    <span class="badge" style="background:#f5f5f5; color:#333; border:1px solid #ddd; padding:2px 6px; border-radius:4px;">
-                                        <?php echo htmlspecialchars($c['review_cycle'] ?? '—'); ?>
-                                    </span>
-                                </td> -->
-
                                 <!-- Reviewer -->
                                 <td>
                                     <?php
@@ -2045,29 +1626,26 @@ function fmtDateTime(?string $d): string {
                                     <?php endif; ?>
                                 </td>
 
-                                <!-- Priority -->
-                                <!-- <td>
+                                <!-- Last Updated
+                                     FIX: For 'sent' rows, always use created_at since updated_at
+                                     can be corrupted by the is_latest flag UPDATE on new upload.
+                                     For non-sent rows, use updated_at if it's newer than created_at. -->
+                                <td>
                                     <?php
-                                    $priority = strtolower($c['priority'] ?? '');
-                                    switch ($priority) {
-                                        case 'high': $priorityText = 'High'; $priorityBadgeClass = 'badge badge-red'; break;
-                                        case 'low':  $priorityText = 'Low';  $priorityBadgeClass = 'badge badge-grey'; break;
-                                        default:     $priorityText = 'Normal'; $priorityBadgeClass = 'badge badge-blue';
+                                    if ($isSent) {
+                                        // Sent rows: always show created_at (immutable, reflects when row was created/sent)
+                                        $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                    } else {
+                                        // Non-sent rows: show updated_at if newer, else created_at
+                                        $tsUpdated = !empty($c['updated_at']) ? strtotime($c['updated_at']) : 0;
+                                        $tsCreated = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                        $displayTs = ($tsUpdated > $tsCreated) ? $tsUpdated : $tsCreated;
                                     }
                                     ?>
-                                    <?php if (!empty($c['priority'])): ?>
-                                        <span class="<?php echo $priorityBadgeClass; ?>" style="text-transform:capitalize;"><?php echo $priorityText; ?></span>
-                                    <?php else: ?>
-                                        <span style="color:#999; font-size:0.85em;">Normal</span>
-                                    <?php endif; ?>
-                                </td> -->
-
-                                <!-- Last Updated -->
-                                <td>
-                                    <?php if (!empty($c['updated_at'])): ?>
+                                    <?php if ($displayTs): ?>
                                         <span style="color:#555; font-size:0.9em;">
-                                            <?php echo date('d-M-Y', strtotime($c['updated_at'])); ?>
-                                            <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', strtotime($c['updated_at'])); ?></span>
+                                            <?php echo date('d-M-Y', $displayTs); ?>
+                                            <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', $displayTs); ?></span>
                                         </span>
                                     <?php else: ?>
                                         <span style="color:#999; font-size:0.85em;">N/A</span>
@@ -2082,71 +1660,100 @@ function fmtDateTime(?string $d): string {
                                     'draft'    => '<span class="badge badge-yellow">Draft</span>',
                                     'ready'    => '<span class="badge badge-blue">Ready</span>',
                                     'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
-                                    'sent'     => '<span class="badge badge-green">Sent</span>',
+                                    'sent'     => '<span class="badge badge-green">Sent &#x1F512;</span>',
                                 ];
                                 $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
                                 ?>
                                 <td><?php echo $statusHtml; ?></td>
 
                                 <!-- ════════════════════════════════════════
-                                     CURRENT REVIEW — inline-editable cells
+                                     CURRENT REVIEW — inline-editable (locked for sent)
                                      ════════════════════════════════════════ -->
 
                                 <!-- SIP (Lakhs) -->
-                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
-                                    <span class="display-val <?= empty($c['sip_amount_lakhs']) ? 'placeholder-text' : '' ?>">
-                                        <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : 'click to edit' ?>
-                                    </span>
-                                    <input type="number" step="0.01" value="<?= htmlspecialchars($c['sip_amount_lakhs'] ?? '') ?>">
-                                </td>
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555;">
+                                        <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
+                                        <span class="display-val <?= empty($c['sip_amount_lakhs']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : 'click to edit' ?>
+                                        </span>
+                                        <input type="number" step="0.01" value="<?= htmlspecialchars($c['sip_amount_lakhs'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
 
                                 <!-- Review Sent Date -->
-                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
-                                    <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
                                         <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                    </span>
-                                    <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
-                                </td>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
+                                        <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
+                                            <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+                                        </span>
+                                        <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
 
                                 <!-- Meeting Date -->
-                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
-                                    <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
                                         <?= fmtDate($c['meeting_date'], 'd-M') ?>
-                                    </span>
-                                    <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
-                                </td>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
+                                        <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
+                                            <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                        </span>
+                                        <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
+                                    </td>
+                                <?php endif; ?>
 
                                 <!-- Modifications / Action -->
-                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:180px;">
-                                    <span class="display-val <?= empty($c['modifications_action']) ? 'placeholder-text' : '' ?>">
-                                        <?= !empty($c['modifications_action']) ? htmlspecialchars($c['modifications_action']) : 'click to edit' ?>
-                                    </span>
-                                    <textarea><?= htmlspecialchars($c['modifications_action'] ?? '') ?></textarea>
-                                </td>
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
+                                        <?php $ma = $c['modifications_action'] ?? ''; ?>
+                                        <?= $ma ? htmlspecialchars(mb_strimwidth($ma, 0, 80, '…')) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:180px;">
+                                        <span class="display-val <?= empty($c['modifications_action']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['modifications_action']) ? htmlspecialchars($c['modifications_action']) : 'click to edit' ?>
+                                        </span>
+                                        <textarea><?= htmlspecialchars($c['modifications_action'] ?? '') ?></textarea>
+                                    </td>
+                                <?php endif; ?>
 
                                 <!-- Meeting Comments -->
-                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
-                                    <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
-                                        <?= !empty($c['meeting_comments']) ? htmlspecialchars($c['meeting_comments']) : 'click to edit' ?>
-                                    </span>
-                                    <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
-                                </td>
+                                <?php if ($isSent): ?>
+                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
+                                        <?php $mc = $c['meeting_comments'] ?? ''; ?>
+                                        <?= $mc ? htmlspecialchars(mb_strimwidth($mc, 0, 80, '…')) : '—' ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
+                                        <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
+                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars($c['meeting_comments']) : 'click to edit' ?>
+                                        </span>
+                                        <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
+                                    </td>
+                                <?php endif; ?>
 
                                 <!-- ════════════════════════════════════════
                                      LAST REVIEW — read-only, from previous record
                                      ════════════════════════════════════════ -->
 
-                                <!-- Last Review (sent) date + time -->
                                 <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
                                     <?= fmtDateTime($c['last_review_date'] ?? null) ?>
                                 </td>
 
-                                <!-- Last Meeting date + time -->
                                 <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
                                     <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
                                 </td>
 
-                                <!-- Prev Modifications -->
                                 <td class="col-prev" style="max-width:160px; font-size:12px;">
                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                     <?php if ($prevMod): ?>
@@ -2158,7 +1765,6 @@ function fmtDateTime(?string $d): string {
                                     <?php endif; ?>
                                 </td>
 
-                                <!-- Prev Mtg Comments -->
                                 <td class="col-prev" style="max-width:160px; font-size:12px;">
                                     <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
                                     <?php if ($prevCmt): ?>
@@ -2170,10 +1776,7 @@ function fmtDateTime(?string $d): string {
                                     <?php endif; ?>
                                 </td>
 
-                                <!-- ════════════════════════════════════════
-                                     NEW: View Previous Review column
-                                     Links directly to the previous version's report
-                                     ════════════════════════════════════════ -->
+                                <!-- View Previous Review -->
                                 <td class="col-prev-review">
                                     <?php
                                     $prevId    = (int)($c['previous_version_id'] ?? 0);
@@ -2199,7 +1802,8 @@ function fmtDateTime(?string $d): string {
                                     <select
                                         onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
                                         class="meet-select"
-                                        id="meet_select_<?php echo $c['id']; ?>">
+                                        id="meet_select_<?php echo $c['id']; ?>"
+                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
                                         <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
                                         <option value="yes"     <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
                                         <option value="no"      <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
@@ -2208,13 +1812,21 @@ function fmtDateTime(?string $d): string {
 
                                 <!-- Meeting Remarks button -->
                                 <td style="text-align:center;">
-                                    <button type="button"
-                                        id="meet_btn_<?php echo $c['id']; ?>"
-                                        class="meet-btn"
-                                        onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                        style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                        Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                    </button>
+                                    <?php if (!$isSent): ?>
+                                        <button type="button"
+                                            id="meet_btn_<?php echo $c['id']; ?>"
+                                            class="meet-btn"
+                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                                        </button>
+                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
+                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
+                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span style="color:#ccc; font-size:12px;">—</span>
+                                    <?php endif; ?>
                                     <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
                                 </td>
 
@@ -2245,7 +1857,7 @@ function fmtDateTime(?string $d): string {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-                </div><!-- /overflow-x:auto -->
+                </div><!-- /table-scroll-wrapper -->
 
                 <?php if ($deleteMode || $reassignMode): ?>
                     </form>
@@ -2403,12 +2015,10 @@ function fmtDateTime(?string $d): string {
     function confirmDelete() {
         const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
         if (selectedCount === 0) { alert('Please select at least one client to delete.'); return; }
-        document.getElementById('deleteCount').textContent = selectedCount;
-        document.getElementById('deleteConfirmModal').style.display = 'flex';
+        if (confirm('Delete ' + selectedCount + ' selected client(s)? This cannot be undone.')) {
+            document.getElementById('bulkDeleteForm').submit();
+        }
     }
-
-    function closeDeleteModal()  { document.getElementById('deleteConfirmModal').style.display = 'none'; }
-    function submitDelete()      { document.getElementById('bulkDeleteForm').submit(); }
 
     document.addEventListener('DOMContentLoaded', function () {
         if (document.querySelector('.client-checkbox')) updateSelectedCount();
@@ -2442,7 +2052,7 @@ function fmtDateTime(?string $d): string {
         form.submit();
     }
 
-    // ── MEETING STATUS (existing logic) ─────────────────────────
+    // ── MEETING STATUS ───────────────────────────────────────────
     function handleListMeetingChange(select, clientId) {
         const status        = select.value;
         const remarksBtn    = document.getElementById('meet_btn_' + clientId);
@@ -2450,10 +2060,10 @@ function fmtDateTime(?string $d): string {
 
         if (status === 'yes') {
             openListMeetingModal(clientId);
-            remarksBtn.style.display = 'inline-block';
+            if (remarksBtn) remarksBtn.style.display = 'inline-block';
         } else {
             saveData(clientId, status, storedRemarks, false);
-            remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
+            if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
         }
     }
 
