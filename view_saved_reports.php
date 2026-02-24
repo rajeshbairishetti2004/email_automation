@@ -15,9 +15,9 @@
 //         timestamp corruption caused by is_latest flag update
 // - FIX: last_meeting_date now sourced from the SAME record as last_review_date
 //         (both use identical ORDER BY so they always come from the same row)
-// - NEW: SIP (Lakhs) auto-filled from SUM of client_goals.sip_swp on page load
-// - NEW: Modifications/Action auto-filled from client_schemes where action_step != 'Continue'
-//         formatted as "{scheme_name}-{action_step}", pipe-separated for multiple entries
+// - NEW: Mtg Comments from current review become Prev Mtg Comments in next review
+// - NEW: Modifications/Action from current review become Prev Modifications in next review
+// - NEW: Popup modal for Modifications/Action showing only schemes with non-Continue actions with checkboxes
 
 require_once 'auth.php';
 requireAuth();
@@ -86,7 +86,6 @@ function extractSubCategoryAllocation(string $filePath): array
 
     return [];
 }
-
 
 
 function extractGlobalEquityFromScriptSheet(string $filePath): float
@@ -428,6 +427,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // ============================================================
+// AJAX: Fetch scheme changes for Modifications/Action modal
+// Fetch ONLY schemes with non-Continue actions
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'fetch_scheme_changes') {
+    header('Content-Type: application/json');
+    try {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        if (!$clientId) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+            exit;
+        }
+
+        // Fetch ONLY schemes with action_step != 'Continue'
+        $stmt = $pdo->prepare("
+            SELECT id, scheme_name, action_step, recommended_scheme, recommended_amount
+            FROM client_schemes
+            WHERE client_id = ?
+              AND action_step != 'Continue'
+              AND action_step != ''
+              AND scheme_name != ''
+            ORDER BY id ASC
+        ");
+        $stmt->execute([$clientId]);
+        $schemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'schemes' => $schemes
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ============================================================
+// AJAX: Save scheme changes selections from modal
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_scheme_selections') {
+    header('Content-Type: application/json');
+    try {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        $selectedIds = json_decode($_POST['selected_ids'] ?? '[]', true);
+        
+        if (!$clientId) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+            exit;
+        }
+
+        // Check not sent
+        $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
+        $checkState->execute([$clientId]);
+        $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
+        if ($stateRow && $stateRow['report_state'] === 'sent') {
+            echo json_encode(['success' => false, 'error' => 'Sent rows cannot be edited.']);
+            exit;
+        }
+
+        // Build modifications string from selected schemes
+        if (!empty($selectedIds)) {
+            $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
+            $stmt = $pdo->prepare("
+                SELECT scheme_name, action_step
+                FROM client_schemes
+                WHERE client_id = ? AND id IN ($placeholders)
+                ORDER BY id ASC
+            ");
+            $params = array_merge([$clientId], $selectedIds);
+            $stmt->execute($params);
+            $selectedSchemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $parts = [];
+            foreach ($selectedSchemes as $s) {
+                $parts[] = trim($s['scheme_name']) . '-' . trim($s['action_step']);
+            }
+            $modificationsAction = implode(' | ', $parts);
+        } else {
+            $modificationsAction = null;
+        }
+
+        // Update client record
+        $updateStmt = $pdo->prepare("
+            UPDATE clients
+            SET modifications_action = ?,
+                updated_at = updated_at
+            WHERE id = ?
+        ");
+        $updateStmt->execute([$modificationsAction, $clientId]);
+
+        echo json_encode([
+            'success' => true,
+            'modifications_action' => $modificationsAction
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ============================================================
+// AJAX: Fetch historical meeting comments for Prev Mtg Comments modal
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'fetch_meeting_history') {
+    header('Content-Type: application/json');
+    try {
+        $clientName = $_POST['client_name'] ?? '';
+        $currentId = (int)($_POST['current_id'] ?? 0);
+        
+        if (empty($clientName)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client name']);
+            exit;
+        }
+
+        // Fetch previous reviews with meeting comments
+        $stmt = $pdo->prepare("
+            SELECT id, meeting_comments, meeting_date, created_at, report_state
+            FROM clients
+            WHERE name = ?
+              AND id != ?
+              AND meeting_comments IS NOT NULL
+              AND meeting_comments != ''
+              AND report_state != 'pending'
+            ORDER BY created_at DESC
+            LIMIT 10
+        ");
+        $stmt->execute([$clientName, $currentId]);
+        $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'success' => true,
+            'history' => $history
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ============================================================
 // AJAX: Recompute SIP and Modifications/Action for a single client
 //       Called after goals/schemes are updated in view_report.php
 // ============================================================
@@ -710,6 +848,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                 $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
             }
 
+            // =====================================================================
+            // CRITICAL FIX: Fetch the last review's data to populate prev_* fields
+            // This ensures that Mtg Comments and Modifications/Action from the
+            // current review become Prev Mtg Comments and Prev Modifications in the next review
+            // =====================================================================
             $stmtLastReview = $pdo->prepare("
                 SELECT
                     review_sent_date,
@@ -750,6 +893,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
             $stmtLastReview->execute([$clientName, $pendingRowId]);
             $lastReview = $stmtLastReview->fetch(PDO::FETCH_ASSOC);
 
+            // For the new review, we store the previous review's data in prev_* fields
+            // This ensures that when this review becomes "sent" and a new review is created,
+            // the prev_* fields will contain the data from this review
             $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
             $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
             $prevModificationsAction = $lastReview['modifications_action']  ?? null;
@@ -782,8 +928,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                 ':review_attempt'            => $reviewAttempt,
                 ':last_review_date'          => $lastReviewDate,
                 ':last_meeting_date'         => $lastMeetingDate,
-                ':prev_modifications_action' => $prevModificationsAction,
-                ':prev_meeting_comments'     => $prevMeetingComments,
+                ':prev_modifications_action' => $prevModificationsAction,  // This will be the current review's modifications_action when this review becomes the previous one
+                ':prev_meeting_comments'     => $prevMeetingComments,      // This will be the current review's meeting_comments when this review becomes the previous one
             ]);
 
             $clientId = (int)$pdo->lastInsertId();
@@ -1438,6 +1584,216 @@ function fmtDateTime(?string $d): string {
     <link rel="stylesheet" href="public/css/view_saved_reports.css">
     <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* Modal Styles */
+        .scheme-modal-overlay, .history-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        
+        .scheme-modal-card, .history-modal-card {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #0288D1;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #0288D1;
+            font-weight: 600;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        
+        .close-modal:hover {
+            color: #0288D1;
+        }
+        
+        .scheme-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .scheme-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #0288D1;
+            transition: all 0.2s;
+        }
+        
+        .scheme-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+        }
+        
+        .scheme-checkbox {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            cursor: pointer;
+            accent-color: #0288D1;
+        }
+        
+        .scheme-details {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .scheme-name {
+            font-weight: 600;
+            color: #0288D1;
+            min-width: 200px;
+            font-size: 14px;
+        }
+        
+        .scheme-action {
+            background: #ff9800;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .scheme-action.drop { background: #f44336; }
+        .scheme-action.switch { background: #9c27b0; }
+        .scheme-action.sip-cancellation { background: #ff5722; }
+        .scheme-action.under-observation { background: #607d8b; }
+        .scheme-action.partially-redeem { background: #795548; }
+        
+        .scheme-recommended {
+            color: #666;
+            font-size: 13px;
+            margin-left: auto;
+        }
+        
+        .modal-actions {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 20px;
+        }
+        
+        .btn-primary {
+            background: #0288D1;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-primary:hover {
+            background: #0277bd;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .clickable-cell {
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.2s;
+        }
+        
+        .clickable-cell:hover {
+            background-color: #e3f2fd !important;
+        }
+        
+        .clickable-cell:hover::after {
+            content: '✎';
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            color: #0288D1;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .history-item {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            background: #f9f9f9;
+            border-left: 4px solid #0288D1;
+        }
+        
+        .history-item .date {
+            font-weight: 600;
+            color: #0288D1;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .history-item .comments {
+            color: #333;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+        
+        .no-schemes-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 16px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+    </style>
 </head>
 
 <body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
@@ -1705,7 +2061,7 @@ function fmtDateTime(?string $d): string {
                             </th>
 
                             <!-- CURRENT REVIEW columns -->
-                            <th class="col-current">SIP</th>
+                            <th class="col-current">SIP (Lakhs)</th>
                             <th class="col-current">Review Sent</th>
                             <th class="col-current">Mtg Date</th>
                             <th class="col-current">Modifications / Action</th>
@@ -1740,7 +2096,7 @@ function fmtDateTime(?string $d): string {
                             $displaySip = $c['sip_amount_lakhs'] ?? '';
                             $displayMod = $c['modifications_action'] ?? '';
                             ?>
-                            <tr class="<?= $rowClass ?>" data-client-id="<?= (int)$c['id'] ?>">
+                            <tr class="<?= $rowClass ?>" data-client-id="<?= (int)$c['id'] ?>" data-client-name="<?= htmlspecialchars($c['name']) ?>">
                                 <!-- Checkbox / empty -->
                                 <?php if ($deleteMode || $reassignMode): ?>
                                     <td>
@@ -1898,23 +2254,25 @@ function fmtDateTime(?string $d): string {
                                     </td>
                                 <?php endif; ?>
 
-                                <!-- Modifications / Action — auto-filled from schemes -->
-                                <?php if ($isSent): ?>
-                                    <td class="col-current" style="max-width:200px; font-size:12px; color:#555;">
-                                        <?php $ma = $displayMod; ?>
-                                        <?= $ma ? htmlspecialchars(mb_strimwidth($ma, 0, 100, '…')) : '—' ?>
-                                    </td>
-                                <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:200px;">
-                                        <span class="display-val <?= empty($displayMod) ? 'placeholder-text' : '' ?>"
-                                              title="<?= htmlspecialchars($displayMod) ?>">
-                                            <?= !empty($displayMod) ? htmlspecialchars(mb_strimwidth($displayMod, 0, 80, '…')) : 'click to edit' ?>
-                                        </span>
-                                        <textarea><?= htmlspecialchars($displayMod) ?></textarea>
-                                    </td>
-                                <?php endif; ?>
+<!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
+<?php if ($isSent): ?>
+    <td class="col-current" style="min-width: 300px; max-width: 400px; font-size:12px; color:#555; white-space: normal; word-wrap: break-word;">
+        <?php $ma = $displayMod; ?>
+        <?= $ma ? htmlspecialchars($ma) : '—' ?>
+    </td>
+<?php else: ?>
+    <td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;" 
+        onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
+        <?php if (!empty($displayMod)): ?>
+            <?= htmlspecialchars($displayMod) ?>
+            <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>
+        <?php else: ?>
+            <span class="placeholder-text">Click to select scheme changes</span>
+        <?php endif; ?>
+    </td>
+<?php endif; ?>
 
-                                <!-- Meeting Comments -->
+                                <!-- Meeting Comments — editable textarea -->
                                 <?php if ($isSent): ?>
                                     <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
                                         <?php $mc = $c['meeting_comments'] ?? ''; ?>
@@ -1923,7 +2281,7 @@ function fmtDateTime(?string $d): string {
                                 <?php else: ?>
                                     <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
                                         <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
-                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars($c['meeting_comments']) : 'click to edit' ?>
+                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars(mb_strimwidth($c['meeting_comments'], 0, 70, '…')) : 'click to edit' ?>
                                         </span>
                                         <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
                                     </td>
@@ -1941,22 +2299,28 @@ function fmtDateTime(?string $d): string {
                                     <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
                                 </td>
 
+                                <!-- Prev Modifications — clickable to view history -->
                                 <td class="col-prev" style="max-width:160px; font-size:12px;">
                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                     <?php if ($prevMod): ?>
-                                        <span title="<?= htmlspecialchars($prevMod) ?>">
-                                            <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 60, '…')) ?>
+                                        <span class="clickable-cell" onclick="viewModificationsHistory('<?= htmlspecialchars(addslashes($prevMod)) ?>')" 
+                                              style="cursor:pointer; display:block; padding:2px;" title="Click to view full details">
+                                            <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 40, '…')) ?>
+                                            <span style="color:#0288D1; font-size:10px;">🔍</span>
                                         </span>
                                     <?php else: ?>
                                         <span style="color:#ccc;">—</span>
                                     <?php endif; ?>
                                 </td>
 
+                                <!-- Prev Mtg Comments — clickable to open history modal -->
                                 <td class="col-prev" style="max-width:160px; font-size:12px;">
                                     <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
                                     <?php if ($prevCmt): ?>
-                                        <span title="<?= htmlspecialchars($prevCmt) ?>">
-                                            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 60, '…')) ?>
+                                        <span class="clickable-cell" onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')" 
+                                              style="cursor:pointer; display:block; padding:2px;" title="Click to view meeting history">
+                                            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
+                                            <span style="color:#0288D1; font-size:10px;">📋</span>
                                         </span>
                                     <?php else: ?>
                                         <span style="color:#ccc;">—</span>
@@ -2094,6 +2458,57 @@ function fmtDateTime(?string $d): string {
             </div>
         </div>
 
+        <!-- ────────────── Scheme Selection Modal ────────────── -->
+        <div id="schemeModal" class="scheme-modal-overlay" style="display:none;">
+            <div class="scheme-modal-card">
+                <div class="modal-header">
+                    <h3>Select Scheme Changes</h3>
+                    <button class="close-modal" onclick="closeSchemeModal()">&times;</button>
+                </div>
+                <div id="schemeModalContent">
+                    <!-- Content loaded dynamically -->
+                    <div style="text-align:center; padding:20px;">Loading schemes...</div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeSchemeModal()">Cancel</button>
+                    <button type="button" class="btn-primary" onclick="saveSchemeSelections()">Save Selections</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ────────────── Meeting History Modal ────────────── -->
+        <div id="meetingHistoryModal" class="history-modal-overlay" style="display:none;">
+            <div class="history-modal-card">
+                <div class="modal-header">
+                    <h3>Meeting Comments History</h3>
+                    <button class="close-modal" onclick="closeMeetingHistoryModal()">&times;</button>
+                </div>
+                <div id="meetingHistoryContent">
+                    <!-- Content loaded dynamically -->
+                    <div style="text-align:center; padding:20px;">Loading history...</div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeMeetingHistoryModal()">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ────────────── Modifications History Modal ────────────── -->
+        <div id="modificationsHistoryModal" class="history-modal-overlay" style="display:none;">
+            <div class="history-modal-card">
+                <div class="modal-header">
+                    <h3>Previous Modifications / Actions</h3>
+                    <button class="close-modal" onclick="closeModificationsHistoryModal()">&times;</button>
+                </div>
+                <div id="modificationsHistoryContent" style="padding:20px;">
+                    <!-- Content set dynamically -->
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModificationsHistoryModal()">Close</button>
+                </div>
+            </div>
+        </div>
+
     </div><!-- /main-scroll-container -->
 
     <!-- ═══════════════════════════════════════════════════════════
@@ -2181,8 +2596,178 @@ function fmtDateTime(?string $d): string {
         });
     }
 
+    // ── SCHEME MODAL FUNCTIONS ─────────────────────────────────
+    let currentClientId = null;
+    
+    function openSchemeModal(clientId, currentValue) {
+        currentClientId = clientId;
+        const modal = document.getElementById('schemeModal');
+        const content = document.getElementById('schemeModalContent');
+        content.innerHTML = '<div style="text-align:center; padding:20px;">Loading scheme changes...</div>';
+        modal.style.display = 'flex';
+        
+        fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'fetch_scheme_changes',
+                client_id: clientId
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                if (data.schemes && data.schemes.length > 0) {
+                    renderSchemeModal(data.schemes, currentValue);
+                } else {
+                    content.innerHTML = '<div class="no-schemes-message">No scheme changes found for this client.</div>';
+                }
+            } else {
+                content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading scheme changes</div>';
+            }
+        })
+        .catch(err => {
+            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading schemes</div>';
+        });
+    }
+    
+    function renderSchemeModal(schemes, currentValue) {
+        const currentSelections = currentValue ? currentValue.split(' | ') : [];
+        let html = '<div class="scheme-list">';
+        
+        schemes.forEach(scheme => {
+            const schemeText = scheme.scheme_name + '-' + scheme.action_step;
+            const isChecked = currentSelections.includes(schemeText);
+            
+            // Get action class for styling
+            const actionClass = scheme.action_step.toLowerCase().replace(' ', '-');
+            
+            html += '<div class="scheme-item">';
+            html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${schemeText}" ${isChecked ? 'checked' : ''}>`;
+            html += '<div class="scheme-details">';
+            html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+            html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
+            if (scheme.recommended_scheme || scheme.recommended_amount) {
+                html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
+            }
+            html += '</div>';
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        document.getElementById('schemeModalContent').innerHTML = html;
+    }
+    
+    function saveSchemeSelections() {
+        const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
+        const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.schemeId);
+        
+        fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'save_scheme_selections',
+                client_id: currentClientId,
+                selected_ids: JSON.stringify(selectedIds)
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update the cell in the table
+                const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
+                if (row) {
+                    const modCell = row.querySelector('.clickable-cell');
+                    if (modCell) {
+                        if (data.modifications_action) {
+                            const truncated = data.modifications_action.length > 80 
+                                ? data.modifications_action.substring(0, 80) + '…' 
+                                : data.modifications_action;
+                            modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
+                        } else {
+                            modCell.innerHTML = '<span class="placeholder-text">Click to select scheme changes</span>';
+                        }
+                    }
+                }
+                closeSchemeModal();
+                showToast('Scheme selections saved!');
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            alert('Network error while saving selections');
+        });
+    }
+    
+    function closeSchemeModal() {
+        document.getElementById('schemeModal').style.display = 'none';
+        currentClientId = null;
+    }
+
+    // ── MEETING HISTORY MODAL ─────────────────────────────────
+    function openMeetingHistoryModal(clientId, clientName) {
+        const modal = document.getElementById('meetingHistoryModal');
+        const content = document.getElementById('meetingHistoryContent');
+        content.innerHTML = '<div style="text-align:center; padding:20px;">Loading meeting history...</div>';
+        modal.style.display = 'flex';
+        
+        fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'fetch_meeting_history',
+                client_name: clientName,
+                current_id: clientId
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.history.length > 0) {
+                let html = '';
+                data.history.forEach(item => {
+                    const date = new Date(item.created_at).toLocaleDateString('en-IN', {
+                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                    html += '<div class="history-item">';
+                    html += `<div class="date">${date} (Review ID: ${item.id})</div>`;
+                    html += `<div class="comments">${item.meeting_comments}</div>`;
+                    html += '</div>';
+                });
+                content.innerHTML = html;
+            } else {
+                content.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No meeting history found for this client.</div>';
+            }
+        })
+        .catch(err => {
+            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading meeting history</div>';
+        });
+    }
+    
+    function closeMeetingHistoryModal() {
+        document.getElementById('meetingHistoryModal').style.display = 'none';
+    }
+
+    // ── MODIFICATIONS HISTORY MODAL ───────────────────────────
+    function viewModificationsHistory(modifications) {
+        const modal = document.getElementById('modificationsHistoryModal');
+        const content = document.getElementById('modificationsHistoryContent');
+        const items = modifications.split(' | ');
+        let html = '<div style="margin-bottom:15px;"><strong>Previous Modifications:</strong></div>';
+        html += '<ul style="list-style-type:none; padding:0;">';
+        items.forEach(item => {
+            html += `<li style="padding:12px; margin-bottom:8px; background:#f5f5f5; border-radius:6px; border-left:3px solid #0288D1;">${item}</li>`;
+        });
+        html += '</ul>';
+        content.innerHTML = html;
+        modal.style.display = 'flex';
+    }
+    
+    function closeModificationsHistoryModal() {
+        document.getElementById('modificationsHistoryModal').style.display = 'none';
+    }
+
     // ── RECOMPUTE AUTO FIELDS (called after scheme/goal changes) ─
-    // Expose globally so view_report.php can call this via postMessage or direct JS
     window.recomputeAutoFields = function(clientId) {
         fetch('view_saved_reports.php', {
             method: 'POST',
@@ -2204,24 +2789,20 @@ function fmtDateTime(?string $d): string {
                     if (sipCell) {
                         const dv = sipCell.querySelector('.display-val');
                         const inp = sipCell.querySelector('input');
-                        if (dv) { dv.textContent = data.sip_amount_lakhs; dv.classList.remove('placeholder-text'); }
+                        if (dv) { 
+                            dv.textContent = data.sip_amount_lakhs + ' Lakh'; 
+                            dv.classList.remove('placeholder-text'); 
+                        }
                         if (inp) inp.value = data.sip_amount_lakhs;
                     }
                 }
                 if (data.modifications_action) {
-                    const modCell = row.querySelector('.editable-cell[data-field="modifications_action"]');
+                    const modCell = row.querySelector('.clickable-cell');
                     if (modCell) {
-                        const dv = modCell.querySelector('.display-val');
-                        const ta = modCell.querySelector('textarea');
                         const truncated = data.modifications_action.length > 80
                             ? data.modifications_action.substring(0, 80) + '…'
                             : data.modifications_action;
-                        if (dv) {
-                            dv.textContent = truncated;
-                            dv.title = data.modifications_action;
-                            dv.classList.remove('placeholder-text');
-                        }
-                        if (ta) ta.value = data.modifications_action;
+                        modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
                     }
                 }
             }
@@ -2400,6 +2981,16 @@ function fmtDateTime(?string $d): string {
                 successMessage.style.opacity    = '0';
                 setTimeout(() => successMessage.style.display = 'none', 500);
             }, 3000);
+        }
+    });
+
+    // ── CLOSE MODALS ON ESC ────────────────────────────────────
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeSchemeModal();
+            closeMeetingHistoryModal();
+            closeModificationsHistoryModal();
+            closeListMeetingModal();
         }
     });
     </script>

@@ -882,3 +882,62 @@ tr.row-sent .meet-select {
     vertical-align: middle;
     opacity: 0.7;
 }
+
+/* ================================
+   Modifications / Action column
+   ================================ */
+
+/* Target ONLY Modifications / Action cells */
+td[data-field="modifications_action"],
+td.editable-cell[data-field="modifications_action"] {
+    max-width: 260px;          /* adjust if needed */
+    min-width: 220px;
+    vertical-align: top;
+}
+
+/* Display text (non-edit mode) */
+td.editable-cell[data-field="modifications_action"] .display-val {
+    display: block;
+    white-space: normal;       /* allow wrapping */
+    word-break: break-word;    /* break long scheme names */
+    overflow-wrap: anywhere;   /* strongest wrap */
+    line-height: 1.4;
+    max-height: 4.2em;         /* ~3 lines */
+    overflow: hidden;
+}
+
+/* While editing */
+td.editable-cell[data-field="modifications_action"].editing .display-val {
+    display: none;
+}
+
+/* Textarea styling */
+td.editable-cell[data-field="modifications_action"] textarea {
+    width: 100%;
+    min-height: 70px;
+    max-height: 160px;
+    resize: vertical;
+    box-sizing: border-box;
+
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+
+    white-space: pre-wrap;     /* keep line breaks */
+    word-break: break-word;
+    overflow-wrap: anywhere;
+
+    padding: 6px 8px;
+    border: 1px solid #cfd8dc;
+    border-radius: 4px;
+}
+
+/* Prevent textarea from overlapping other rows */
+td.editable-cell {
+    overflow: hidden;
+}
+
+/* Optional: subtle background when editing */
+td.editable-cell.editing {
+    background: #f9fbff;
+}
