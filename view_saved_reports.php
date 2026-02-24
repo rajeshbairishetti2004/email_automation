@@ -133,6 +133,19 @@ function extractGlobalEquityFromScriptSheet(string $filePath): float
     return 0;
 }
 
+// Helper function to extract only actions from modifications string
+function extractActionsOnly($modificationsString)
+{
+    if (empty($modificationsString)) return '';
+
+    $items = explode(' | ', $modificationsString);
+    $actions = array_map(function ($item) {
+        $parts = explode('-', $item);
+        return trim(end($parts)); // Get the last part after the last hyphen
+    }, $items);
+
+    return implode(' | ', $actions);
+}
 
 
 $currentUser = getCurrentUser();
@@ -152,10 +165,11 @@ if (isset($_GET['reset'])) {
 }
 
 
-function getCurrentReviewCycle(): string {
+function getCurrentReviewCycle(): string
+{
     $month = (int)date('n');
-    if (in_array($month, [1,4,7,10])) return 'RJ';
-    if (in_array($month, [2,5,8,11])) return 'RF';
+    if (in_array($month, [1, 4, 7, 10])) return 'RJ';
+    if (in_array($month, [2, 5, 8, 11])) return 'RF';
     return 'RM';
 }
 
@@ -163,11 +177,9 @@ $systemCurrentCycle = getCurrentReviewCycle();
 
 if (isset($_GET['reset'])) {
     $cycleFilter = '';
-}
-elseif (isset($_GET['from_customer_list'])) {
+} elseif (isset($_GET['from_customer_list'])) {
     $cycleFilter = '';
-}
-else {
+} else {
     $cycleFilter = $_GET['cycle_filter'] ?? $systemCurrentCycle;
 }
 
@@ -470,7 +482,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     try {
         $clientId = (int)($_POST['client_id'] ?? 0);
         $selectedIds = json_decode($_POST['selected_ids'] ?? '[]', true);
-        
+
         if (!$clientId) {
             echo json_encode(['success' => false, 'error' => 'Invalid client id']);
             exit;
@@ -497,7 +509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $params = array_merge([$clientId], $selectedIds);
             $stmt->execute($params);
             $selectedSchemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
             $parts = [];
             foreach ($selectedSchemes as $s) {
                 $parts[] = trim($s['scheme_name']) . '-' . trim($s['action_step']);
@@ -534,7 +546,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     try {
         $clientName = $_POST['client_name'] ?? '';
         $currentId = (int)($_POST['current_id'] ?? 0);
-        
+
         if (empty($clientName)) {
             echo json_encode(['success' => false, 'error' => 'Invalid client name']);
             exit;
@@ -1561,14 +1573,16 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
 }
 
 // Helper: format a date/datetime value for display
-function fmtDate(?string $d, string $fmt = 'd-M-Y'): string {
+function fmtDate(?string $d, string $fmt = 'd-M-Y'): string
+{
     if (empty($d)) return '—';
     $ts = strtotime($d);
     return $ts ? date($fmt, $ts) : '—';
 }
 
 // Helper: format datetime showing both date and time
-function fmtDateTime(?string $d): string {
+function fmtDateTime(?string $d): string
+{
     if (empty($d)) return '—';
     $ts = strtotime($d);
     if (!$ts) return '—';
@@ -1586,20 +1600,22 @@ function fmtDateTime(?string $d): string {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         /* Modal Styles */
-        .scheme-modal-overlay, .history-modal-overlay {
+        .scheme-modal-overlay,
+        .history-modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 10000;
         }
-        
-        .scheme-modal-card, .history-modal-card {
+
+        .scheme-modal-card,
+        .history-modal-card {
             background: white;
             border-radius: 12px;
             width: 90%;
@@ -1607,9 +1623,9 @@ function fmtDateTime(?string $d): string {
             max-height: 80vh;
             overflow-y: auto;
             padding: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
-        
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -1618,13 +1634,13 @@ function fmtDateTime(?string $d): string {
             padding-bottom: 15px;
             border-bottom: 2px solid #0288D1;
         }
-        
+
         .modal-header h3 {
             margin: 0;
             color: #0288D1;
             font-weight: 600;
         }
-        
+
         .close-modal {
             background: none;
             border: none;
@@ -1632,18 +1648,18 @@ function fmtDateTime(?string $d): string {
             cursor: pointer;
             color: #666;
         }
-        
+
         .close-modal:hover {
             color: #0288D1;
         }
-        
+
         .scheme-list {
             display: flex;
             flex-direction: column;
             gap: 12px;
             margin-bottom: 20px;
         }
-        
+
         .scheme-item {
             display: flex;
             align-items: center;
@@ -1653,12 +1669,12 @@ function fmtDateTime(?string $d): string {
             border-left: 4px solid #0288D1;
             transition: all 0.2s;
         }
-        
+
         .scheme-item:hover {
             background: #e3f2fd;
             transform: translateX(5px);
         }
-        
+
         .scheme-checkbox {
             width: 20px;
             height: 20px;
@@ -1666,7 +1682,7 @@ function fmtDateTime(?string $d): string {
             cursor: pointer;
             accent-color: #0288D1;
         }
-        
+
         .scheme-details {
             flex: 1;
             display: flex;
@@ -1674,14 +1690,14 @@ function fmtDateTime(?string $d): string {
             gap: 10px;
             align-items: center;
         }
-        
+
         .scheme-name {
             font-weight: 600;
             color: #0288D1;
             min-width: 200px;
             font-size: 14px;
         }
-        
+
         .scheme-action {
             background: #ff9800;
             color: white;
@@ -1692,19 +1708,33 @@ function fmtDateTime(?string $d): string {
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
-        .scheme-action.drop { background: #f44336; }
-        .scheme-action.switch { background: #9c27b0; }
-        .scheme-action.sip-cancellation { background: #ff5722; }
-        .scheme-action.under-observation { background: #607d8b; }
-        .scheme-action.partially-redeem { background: #795548; }
-        
+
+        .scheme-action.drop {
+            background: #f44336;
+        }
+
+        .scheme-action.switch {
+            background: #9c27b0;
+        }
+
+        .scheme-action.sip-cancellation {
+            background: #ff5722;
+        }
+
+        .scheme-action.under-observation {
+            background: #607d8b;
+        }
+
+        .scheme-action.partially-redeem {
+            background: #795548;
+        }
+
         .scheme-recommended {
             color: #666;
             font-size: 13px;
             margin-left: auto;
         }
-        
+
         .modal-actions {
             margin-top: 20px;
             display: flex;
@@ -1713,7 +1743,7 @@ function fmtDateTime(?string $d): string {
             border-top: 1px solid #e0e0e0;
             padding-top: 20px;
         }
-        
+
         .btn-primary {
             background: #0288D1;
             color: white;
@@ -1724,11 +1754,11 @@ function fmtDateTime(?string $d): string {
             cursor: pointer;
             transition: background 0.2s;
         }
-        
+
         .btn-primary:hover {
             background: #0277bd;
         }
-        
+
         .btn-secondary {
             background: #f5f5f5;
             color: #333;
@@ -1739,21 +1769,21 @@ function fmtDateTime(?string $d): string {
             cursor: pointer;
             transition: background 0.2s;
         }
-        
+
         .btn-secondary:hover {
             background: #e0e0e0;
         }
-        
+
         .clickable-cell {
             cursor: pointer;
             position: relative;
             transition: background-color 0.2s;
         }
-        
+
         .clickable-cell:hover {
             background-color: #e3f2fd !important;
         }
-        
+
         .clickable-cell:hover::after {
             content: '✎';
             position: absolute;
@@ -1763,7 +1793,7 @@ function fmtDateTime(?string $d): string {
             font-size: 14px;
             font-weight: bold;
         }
-        
+
         .history-item {
             padding: 15px;
             margin-bottom: 15px;
@@ -1771,20 +1801,20 @@ function fmtDateTime(?string $d): string {
             background: #f9f9f9;
             border-left: 4px solid #0288D1;
         }
-        
+
         .history-item .date {
             font-weight: 600;
             color: #0288D1;
             margin-bottom: 8px;
             font-size: 13px;
         }
-        
+
         .history-item .comments {
             color: #333;
             line-height: 1.5;
             font-size: 14px;
         }
-        
+
         .no-schemes-message {
             text-align: center;
             padding: 40px;
@@ -1939,25 +1969,25 @@ function fmtDateTime(?string $d): string {
 
                 <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
                     <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
-                    <option value="pending"  <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending']  ?? 0 ?>)</option>
-                    <option value="draft"    <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft']    ?? 0 ?>)</option>
-                    <option value="ready"    <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready']    ?? 0 ?>)</option>
+                    <option value="pending" <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending']  ?? 0 ?>)</option>
+                    <option value="draft" <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft']    ?? 0 ?>)</option>
+                    <option value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready']    ?? 0 ?>)</option>
                     <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
-                    <option value="sent"     <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent']     ?? 0 ?>)</option>
+                    <option value="sent" <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent']     ?? 0 ?>)</option>
                 </select>
 
                 <select name="sort" class="sort-dropdown">
                     <option value="updated_at" <?php echo $sortBy === 'updated_at' ? 'selected' : ''; ?>>Sort by: Last Updated</option>
-                    <option value="id"         <?php echo $sortBy === 'id'         ? 'selected' : ''; ?>>Sort by: ID</option>
-                    <option value="priority"   <?php echo $sortBy === 'priority'   ? 'selected' : ''; ?>>Sort by: Priority</option>
-                    <option value="aum"        <?php echo $sortBy === 'aum'        ? 'selected' : ''; ?>>Sort by: AUM</option>
-                    <option value="name"       <?php echo $sortBy === 'name'       ? 'selected' : ''; ?>>Sort by: Client Name</option>
+                    <option value="id" <?php echo $sortBy === 'id'         ? 'selected' : ''; ?>>Sort by: ID</option>
+                    <option value="priority" <?php echo $sortBy === 'priority'   ? 'selected' : ''; ?>>Sort by: Priority</option>
+                    <option value="aum" <?php echo $sortBy === 'aum'        ? 'selected' : ''; ?>>Sort by: AUM</option>
+                    <option value="name" <?php echo $sortBy === 'name'       ? 'selected' : ''; ?>>Sort by: Client Name</option>
                     <option value="report_state" <?php echo $sortBy === 'report_state' ? 'selected' : ''; ?>>Sort by: Status</option>
                 </select>
 
                 <select name="order" style="padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;">
                     <option value="desc" <?php echo $sortOrder === 'DESC' ? 'selected' : ''; ?>>Descending</option>
-                    <option value="asc"  <?php echo $sortOrder === 'ASC'  ? 'selected' : ''; ?>>Ascending</option>
+                    <option value="asc" <?php echo $sortOrder === 'ASC'  ? 'selected' : ''; ?>>Ascending</option>
                 </select>
 
                 <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
@@ -1981,462 +2011,462 @@ function fmtDateTime(?string $d): string {
                             </button>
                             <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
                         </div>
-                <?php elseif ($reassignMode): ?>
-                    <form method="post" id="bulkReassignForm">
-                        <input type="hidden" name="action_type" value="reassign">
-                        <div class="bulk-actions-bar">
-                            <span class="bulk-selection-info">With Selected:</span>
-                            <select name="new_owner_id" class="reassign-select" required>
-                                <option value="">-- Assign to... --</option>
-                                <?php foreach ($allUsers as $user): ?>
-                                    <option value="<?php echo (int)$user['id']; ?>">
-                                        <?php echo htmlspecialchars($user['username']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button type="submit" class="reassign-submit-btn">Reassign</button>
-                            <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
-                        </div>
-                <?php else: ?>
-                    <!-- No bulk-action form needed in normal view -->
-                <?php endif; ?>
+                    <?php elseif ($reassignMode): ?>
+                        <form method="post" id="bulkReassignForm">
+                            <input type="hidden" name="action_type" value="reassign">
+                            <div class="bulk-actions-bar">
+                                <span class="bulk-selection-info">With Selected:</span>
+                                <select name="new_owner_id" class="reassign-select" required>
+                                    <option value="">-- Assign to... --</option>
+                                    <?php foreach ($allUsers as $user): ?>
+                                        <option value="<?php echo (int)$user['id']; ?>">
+                                            <?php echo htmlspecialchars($user['username']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="reassign-submit-btn">Reassign</button>
+                                <span id="selectedCount" style="color: #666; font-size: 13px;">0 items selected</span>
+                            </div>
+                        <?php else: ?>
+                            <!-- No bulk-action form needed in normal view -->
+                        <?php endif; ?>
 
-                <!-- ── MAIN TABLE inside scroll wrapper ───────────── -->
-                <div class="table-scroll-wrapper">
-                <table>
-                    <thead>
-                        <!-- ROW 1: section group labels -->
-                        <tr class="group-header">
-                            <?php
-                            $baseColCount = 9;
-                            if ($deleteMode || $reassignMode) $baseColCount++;
-                            ?>
-                            <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
-                            <th colspan="5" class="th-section-current">Current Review</th>
-                            <th colspan="4" class="th-section-prev">Last Review</th>
-                            <th colspan="1" class="th-section-prev-review">Prev Review</th>
-                            <th colspan="3" style="background:#f9f9f9; border:none;"></th>
-                        </tr>
+                        <!-- ── MAIN TABLE inside scroll wrapper ───────────── -->
+                        <div class="table-scroll-wrapper">
+                            <table>
+                                <thead>
+                                    <!-- ROW 1: section group labels -->
+                                    <tr class="group-header">
+                                        <?php
+                                        $baseColCount = 9;
+                                        if ($deleteMode || $reassignMode) $baseColCount++;
+                                        ?>
+                                        <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
+                                        <th colspan="5" class="th-section-current">Current Review</th>
+                                        <th colspan="4" class="th-section-prev">Last Review</th>
+                                        <th colspan="1" class="th-section-prev-review">Prev Review</th>
+                                        <th colspan="3" style="background:#f9f9f9; border:none;"></th>
+                                    </tr>
 
-                        <!-- ROW 2: actual column headers -->
-                        <tr class="col-header">
-                            <!-- checkbox / empty -->
-                            <?php if ($deleteMode || $reassignMode): ?>
-                                <th style="width: 40px;" class="select-all-cell">
-                                    <input type="checkbox" id="selectAllCheckbox" class="action-checkbox" onclick="toggleSelectAll(this)">
-                                    <span class="select-all-label">All</span>
-                                </th>
-                            <?php else: ?>
-                                <th style="width: 40px;" class="action-icon-cell"></th>
-                            <?php endif; ?>
-
-                            <!-- Base columns -->
-                            <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=id&order=<?= ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    ID <?= $sortBy === 'id' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=name&order=<?= ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    Client Name <?= $sortBy === 'name' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=aum&order=<?= ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th>
-                            <th>Drafted By</th>
-                            <th>RM</th>
-                            <th>Review Assigned to</th>
-                            <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th>
-                            <th>
-                                <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=report_state&order=<?= ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q='.urlencode($q) : '' ?><?= $filter ? '&filter='.urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter='.urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter='.urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                    Status <?= $sortBy === 'report_state' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
-                                </a>
-                            </th>
-
-                            <!-- CURRENT REVIEW columns -->
-                            <th class="col-current">SIP (Lakhs)</th>
-                            <th class="col-current">Review Sent</th>
-                            <th class="col-current">Mtg Date</th>
-                            <th class="col-current">Modifications / Action</th>
-                            <th class="col-current">Mtg Comments</th>
-
-                            <!-- LAST REVIEW columns (read-only) -->
-                            <th class="col-prev">Last Review</th>
-                            <th class="col-prev">Last Meeting</th>
-                            <th class="col-prev">Prev Modifications</th>
-                            <th class="col-prev">Prev Mtg Comments</th>
-
-                            <!-- Previous Review HTML view -->
-                            <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
-
-                            <!-- Meeting status / remarks / action -->
-                            <th style="text-align:center; width:120px;">Meeting Status</th>
-                            <th style="text-align:center; width:140px;">Meeting Remarks</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($clients as $c): ?>
-                            <?php
-                            $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
-                            $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
-
-                            // Determine if this row is sent (locked)
-                            $isSent = (($c['report_state'] ?? '') === 'sent');
-                            $rowClass = $isSent ? 'row-sent' : '';
-
-                            // Effective display values (stored takes priority, computed is fallback)
-                            $displaySip = $c['sip_amount_lakhs'] ?? '';
-                            $displayMod = $c['modifications_action'] ?? '';
-                            ?>
-                            <tr class="<?= $rowClass ?>" data-client-id="<?= (int)$c['id'] ?>" data-client-name="<?= htmlspecialchars($c['name']) ?>">
-                                <!-- Checkbox / empty -->
-                                <?php if ($deleteMode || $reassignMode): ?>
-                                    <td>
-                                        <input type="checkbox"
-                                            class="action-checkbox client-checkbox"
-                                            name="selected_ids[]"
-                                            value="<?php echo (int)$c['id']; ?>"
-                                            onchange="updateSelectedCount()">
-                                    </td>
-                                <?php else: ?>
-                                    <td class="action-icon-cell"></td>
-                                <?php endif; ?>
-
-                                <!-- ID -->
-                                <td><?php echo (int)$c['id']; ?></td>
-
-                                <!-- Client Name -->
-                                <td>
-                                    <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-                                        <span><?php echo htmlspecialchars($c['name']); ?></span>
-                                        <?php if ($hasAttachments): ?>
-                                            <span title="Has Attachments">📎</span>
-                                        <?php endif; ?>
-                                        <?php if ($isSent): ?>
-                                            <span class="sent-lock-icon" title="Sent — read only"><i class="fa-solid fa-lock"></i></span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-
-                                <!-- AUM -->
-                                <td>
-                                    <span style="font-weight:600; color:#1976d2;">
-                                        ₹<?= number_format((float)($c['aum'] ?? 0), 2); ?> Cr
-                                    </span>
-                                </td>
-
-                                <!-- Drafted By -->
-                                <td>
-                                    <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
-                                    <?php if ($currState === 'pending'): ?>
-                                        <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
-                                    <?php else: ?>
-                                        <?php if (!empty($c['created_by_username'])): ?>
-                                            <span class="badge" style="background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;">
-                                                <?php echo htmlspecialchars($c['created_by_username']); ?>
-                                            </span>
+                                    <!-- ROW 2: actual column headers -->
+                                    <tr class="col-header">
+                                        <!-- checkbox / empty -->
+                                        <?php if ($deleteMode || $reassignMode): ?>
+                                            <th style="width: 40px;" class="select-all-cell">
+                                                <input type="checkbox" id="selectAllCheckbox" class="action-checkbox" onclick="toggleSelectAll(this)">
+                                                <span class="select-all-label">All</span>
+                                            </th>
                                         <?php else: ?>
-                                            <span style="color:#999; font-size:0.85em;">System</span>
+                                            <th style="width: 40px;" class="action-icon-cell"></th>
                                         <?php endif; ?>
-                                    <?php endif; ?>
-                                </td>
 
-                                <!-- RM -->
-                                <td>
-                                    <span style="color:#333; font-weight:600;">
-                                        <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
-                                    </span>
-                                </td>
+                                        <!-- Base columns -->
+                                        <th>
+                                            <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=id&order=<?= ($sortBy === 'id' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                                ID <?= $sortBy === 'id' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                            </a>
+                                        </th>
+                                        <th>
+                                            <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=name&order=<?= ($sortBy === 'name' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                                Client Name <?= $sortBy === 'name' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                            </a>
+                                        </th>
+                                        <th>
+                                            <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=aum&order=<?= ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                                AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                            </a>
+                                        </th>
+                                        <th>Drafted By</th>
+                                        <th>RM</th>
+                                        <th>Review Assigned to</th>
+                                        <th>
+                                            <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                                Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                            </a>
+                                        </th>
+                                        <th>
+                                            <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=report_state&order=<?= ($sortBy === 'report_state' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
+                                                Status <?= $sortBy === 'report_state' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                            </a>
+                                        </th>
 
-                                <!-- Reviewer -->
-                                <td>
-                                    <?php
-                                    $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
-                                    $reviewerStyle = 'background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;';
-                                    if ($isReviewer) $reviewerStyle .= ' font-weight:800; border-color:#1565c0;';
-                                    ?>
-                                    <?php if (!empty($c['reviewer_username'])): ?>
-                                        <span class="badge" style="<?php echo $reviewerStyle; ?>">
-                                            <?php echo htmlspecialchars($c['reviewer_username']); ?>
-                                            <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
-                                        </span>
-                                    <?php else: ?>
-                                        <span style="color:#999; font-size:0.85em;">Unassigned</span>
-                                    <?php endif; ?>
-                                </td>
+                                        <!-- CURRENT REVIEW columns -->
+                                        <th class="col-current">SIP (Lakhs)</th>
+                                        <th class="col-current">Review Sent</th>
+                                        <th class="col-current">Mtg Date</th>
+                                        <th class="col-current">Modifications / Action</th>
+                                        <th class="col-current">Mtg Comments</th>
 
-                                <!-- Last Updated -->
-                                <td>
-                                    <?php
-                                    if ($isSent) {
-                                        $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
-                                    } else {
-                                        $tsUpdated = !empty($c['updated_at']) ? strtotime($c['updated_at']) : 0;
-                                        $tsCreated = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
-                                        $displayTs = ($tsUpdated > $tsCreated) ? $tsUpdated : $tsCreated;
-                                    }
-                                    ?>
-                                    <?php if ($displayTs): ?>
-                                        <span style="color:#555; font-size:0.9em;">
-                                            <?php echo date('d-M-Y', $displayTs); ?>
-                                            <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', $displayTs); ?></span>
-                                        </span>
-                                    <?php else: ?>
-                                        <span style="color:#999; font-size:0.85em;">N/A</span>
-                                    <?php endif; ?>
-                                </td>
+                                        <!-- LAST REVIEW columns (read-only) -->
+                                        <th class="col-prev">Last Review</th>
+                                        <th class="col-prev">Last Meeting</th>
+                                        <th class="col-prev">Prev Modifications</th>
+                                        <th class="col-prev">Prev Mtg Comments</th>
 
-                                <!-- Status badge -->
-                                <?php
-                                $state = $c['report_state'] ?? 'draft';
-                                $statusMap = [
-                                    'pending'  => '<span class="badge badge-grey">Pending</span>',
-                                    'draft'    => '<span class="badge badge-yellow">Draft</span>',
-                                    'ready'    => '<span class="badge badge-blue">Ready</span>',
-                                    'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
-                                    'sent'     => '<span class="badge badge-green">Sent &#x1F512;</span>',
-                                ];
-                                $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
-                                ?>
-                                <td><?php echo $statusHtml; ?></td>
+                                        <!-- Previous Review HTML view -->
+                                        <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
 
-                                <!-- ════════════════════════════════════════
+                                        <!-- Meeting status / remarks / action -->
+                                        <th style="text-align:center; width:120px;">Meeting Status</th>
+                                        <th style="text-align:center; width:140px;">Meeting Remarks</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($clients as $c): ?>
+                                        <?php
+                                        $clientAttachDir = __DIR__ . '/uploads/attachments/client_' . (int)$c['id'];
+                                        $hasAttachments = is_dir($clientAttachDir) && count(glob($clientAttachDir . '/*')) > 0;
+
+                                        // Determine if this row is sent (locked)
+                                        $isSent = (($c['report_state'] ?? '') === 'sent');
+                                        $rowClass = $isSent ? 'row-sent' : '';
+
+                                        // Effective display values (stored takes priority, computed is fallback)
+                                        $displaySip = $c['sip_amount_lakhs'] ?? '';
+                                        $displayMod = $c['modifications_action'] ?? '';
+                                        ?>
+                                        <tr class="<?= $rowClass ?>" data-client-id="<?= (int)$c['id'] ?>" data-client-name="<?= htmlspecialchars($c['name']) ?>">
+                                            <!-- Checkbox / empty -->
+                                            <?php if ($deleteMode || $reassignMode): ?>
+                                                <td>
+                                                    <input type="checkbox"
+                                                        class="action-checkbox client-checkbox"
+                                                        name="selected_ids[]"
+                                                        value="<?php echo (int)$c['id']; ?>"
+                                                        onchange="updateSelectedCount()">
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="action-icon-cell"></td>
+                                            <?php endif; ?>
+
+                                            <!-- ID -->
+                                            <td><?php echo (int)$c['id']; ?></td>
+
+                                            <!-- Client Name -->
+                                            <td>
+                                                <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
+                                                    <span><?php echo htmlspecialchars($c['name']); ?></span>
+                                                    <?php if ($hasAttachments): ?>
+                                                        <span title="Has Attachments">📎</span>
+                                                    <?php endif; ?>
+                                                    <?php if ($isSent): ?>
+                                                        <span class="sent-lock-icon" title="Sent — read only"><i class="fa-solid fa-lock"></i></span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+
+                                            <!-- AUM -->
+                                            <td>
+                                                <span style="font-weight:600; color:#1976d2;">
+                                                    ₹<?= number_format((float)($c['aum'] ?? 0), 2); ?> Cr
+                                                </span>
+                                            </td>
+
+                                            <!-- Drafted By -->
+                                            <td>
+                                                <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+                                                <?php if ($currState === 'pending'): ?>
+                                                    <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
+                                                <?php else: ?>
+                                                    <?php if (!empty($c['created_by_username'])): ?>
+                                                        <span class="badge" style="background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;">
+                                                            <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span style="color:#999; font-size:0.85em;">System</span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+
+                                            <!-- RM -->
+                                            <td>
+                                                <span style="color:#333; font-weight:600;">
+                                                    <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                                                </span>
+                                            </td>
+
+                                            <!-- Reviewer -->
+                                            <td>
+                                                <?php
+                                                $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                                                $reviewerStyle = 'background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;';
+                                                if ($isReviewer) $reviewerStyle .= ' font-weight:800; border-color:#1565c0;';
+                                                ?>
+                                                <?php if (!empty($c['reviewer_username'])): ?>
+                                                    <span class="badge" style="<?php echo $reviewerStyle; ?>">
+                                                        <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                                                        <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span style="color:#999; font-size:0.85em;">Unassigned</span>
+                                                <?php endif; ?>
+                                            </td>
+
+                                            <!-- Last Updated -->
+                                            <td>
+                                                <?php
+                                                if ($isSent) {
+                                                    $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                                } else {
+                                                    $tsUpdated = !empty($c['updated_at']) ? strtotime($c['updated_at']) : 0;
+                                                    $tsCreated = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
+                                                    $displayTs = ($tsUpdated > $tsCreated) ? $tsUpdated : $tsCreated;
+                                                }
+                                                ?>
+                                                <?php if ($displayTs): ?>
+                                                    <span style="color:#555; font-size:0.9em;">
+                                                        <?php echo date('d-M-Y', $displayTs); ?>
+                                                        <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', $displayTs); ?></span>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span style="color:#999; font-size:0.85em;">N/A</span>
+                                                <?php endif; ?>
+                                            </td>
+
+                                            <!-- Status badge -->
+                                            <?php
+                                            $state = $c['report_state'] ?? 'draft';
+                                            $statusMap = [
+                                                'pending'  => '<span class="badge badge-grey">Pending</span>',
+                                                'draft'    => '<span class="badge badge-yellow">Draft</span>',
+                                                'ready'    => '<span class="badge badge-blue">Ready</span>',
+                                                'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
+                                                'sent'     => '<span class="badge badge-green">Sent &#x1F512;</span>',
+                                            ];
+                                            $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
+                                            ?>
+                                            <td><?php echo $statusHtml; ?></td>
+
+                                            <!-- ════════════════════════════════════════
                                      CURRENT REVIEW — inline-editable (locked for sent)
                                      ════════════════════════════════════════ -->
 
-                                <!-- SIP (Lakhs) — auto-filled from goals total -->
-                                <?php if ($isSent): ?>
-                                    <td class="col-current" style="font-size:13px; color:#555;">
-                                        <?= !empty($displaySip) && (float)$displaySip > 0 ? number_format((float)$displaySip, 2) : '—' ?>
-                                    </td>
-                                <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
-                                        <span class="display-val <?= (empty($displaySip) || (float)$displaySip == 0) ? 'placeholder-text' : '' ?>">
-                                            <?= (!empty($displaySip) && (float)$displaySip > 0) ? number_format((float)$displaySip, 2) . ' Lakh' : 'click to edit' ?>
-                                        </span>
-                                        <input type="number" step="0.01" value="<?= htmlspecialchars($displaySip ?? '') ?>">
-                                    </td>
-                                <?php endif; ?>
+                                            <!-- SIP (Lakhs) — auto-filled from goals total -->
+                                            <?php if ($isSent): ?>
+                                                <td class="col-current" style="font-size:13px; color:#555;">
+                                                    <?= !empty($displaySip) && (float)$displaySip > 0 ? number_format((float)$displaySip, 2) : '—' ?>
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
+                                                    <span class="display-val <?= (empty($displaySip) || (float)$displaySip == 0) ? 'placeholder-text' : '' ?>">
+                                                        <?= (!empty($displaySip) && (float)$displaySip > 0) ? number_format((float)$displaySip, 2) . ' Lakh' : 'click to edit' ?>
+                                                    </span>
+                                                    <input type="number" step="0.01" value="<?= htmlspecialchars($displaySip ?? '') ?>">
+                                                </td>
+                                            <?php endif; ?>
 
-                                <!-- Review Sent Date -->
-                                <?php if ($isSent): ?>
-                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
-                                        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                    </td>
-                                <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
-                                        <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
-                                            <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                        </span>
-                                        <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
-                                    </td>
-                                <?php endif; ?>
+                                            <!-- Review Sent Date -->
+                                            <?php if ($isSent): ?>
+                                                <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
+                                                    <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
+                                                    <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
+                                                        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+                                                    </span>
+                                                    <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
+                                                </td>
+                                            <?php endif; ?>
 
-                                <!-- Meeting Date -->
-                                <?php if ($isSent): ?>
-                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
-                                        <?= fmtDate($c['meeting_date'], 'd-M') ?>
-                                    </td>
-                                <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
-                                        <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
-                                            <?= fmtDate($c['meeting_date'], 'd-M') ?>
-                                        </span>
-                                        <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
-                                    </td>
-                                <?php endif; ?>
+                                            <!-- Meeting Date -->
+                                            <?php if ($isSent): ?>
+                                                <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
+                                                    <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
+                                                    <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
+                                                        <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                                    </span>
+                                                    <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
+                                                </td>
+                                            <?php endif; ?>
 
-<!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
-<?php if ($isSent): ?>
-    <td class="col-current" style="min-width: 300px; max-width: 400px; font-size:12px; color:#555; white-space: normal; word-wrap: break-word;">
-        <?php $ma = $displayMod; ?>
-        <?= $ma ? htmlspecialchars($ma) : '—' ?>
-    </td>
-<?php else: ?>
-    <td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;" 
-        onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
-        <?php if (!empty($displayMod)): ?>
-            <?= htmlspecialchars($displayMod) ?>
-            <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>
-        <?php else: ?>
-            <span class="placeholder-text">Click to select scheme changes</span>
-        <?php endif; ?>
-    </td>
-<?php endif; ?>
+                                            <!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
+                                            <?php if ($isSent): ?>
+                                                <td class="col-current" style="min-width: 300px; max-width: 400px; font-size:12px; color:#555; white-space: normal; word-wrap: break-word;">
+                                                    <?= !empty($displayMod) ? htmlspecialchars(extractActionsOnly($displayMod)) : '—' ?>
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;"
+                                                    onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
+                                                    <?php if (!empty($displayMod)): ?>
+                                                        <?= htmlspecialchars(extractActionsOnly($displayMod)) ?>
+                                                        <span style="color:#0288D1; font-size:10px; margin-left:5px;"></span>
+                                                    <?php else: ?>
+                                                        <!-- <span class="placeholder-text">Click to select scheme changes</span> -->
+                                                    <?php endif; ?>
+                                                </td>
+                                            <?php endif; ?>
 
-                                <!-- Meeting Comments — editable textarea -->
-                                <?php if ($isSent): ?>
-                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
-                                        <?php $mc = $c['meeting_comments'] ?? ''; ?>
-                                        <?= $mc ? htmlspecialchars(mb_strimwidth($mc, 0, 80, '…')) : '—' ?>
-                                    </td>
-                                <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
-                                        <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
-                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars(mb_strimwidth($c['meeting_comments'], 0, 70, '…')) : 'click to edit' ?>
-                                        </span>
-                                        <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
-                                    </td>
-                                <?php endif; ?>
 
-                                <!-- ════════════════════════════════════════
+                                            <!-- Meeting Comments — editable textarea -->
+                                            <?php if ($isSent): ?>
+                                                <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
+                                                    <?php $mc = $c['meeting_comments'] ?? ''; ?>
+                                                    <?= $mc ? htmlspecialchars(mb_strimwidth($mc, 0, 80, '…')) : '—' ?>
+                                                </td>
+                                            <?php else: ?>
+                                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
+                                                    <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
+                                                        <?= !empty($c['meeting_comments']) ? htmlspecialchars(mb_strimwidth($c['meeting_comments'], 0, 70, '…')) : 'click to edit' ?>
+                                                    </span>
+                                                    <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
+                                                </td>
+                                            <?php endif; ?>
+
+                                            <!-- ════════════════════════════════════════
                                      LAST REVIEW — read-only, from previous record
                                      ════════════════════════════════════════ -->
 
-                                <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
-                                    <?= fmtDateTime($c['last_review_date'] ?? null) ?>
-                                </td>
+                                            <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
+                                                <?= fmtDateTime($c['last_review_date'] ?? null) ?>
+                                            </td>
 
-                                <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
-                                    <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
-                                </td>
+                                            <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
+                                                <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
+                                            </td>
 
-                                <!-- Prev Modifications — clickable to view history -->
-                                <td class="col-prev" style="max-width:160px; font-size:12px;">
-                                    <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
-                                    <?php if ($prevMod): ?>
-                                        <span class="clickable-cell" onclick="viewModificationsHistory('<?= htmlspecialchars(addslashes($prevMod)) ?>')" 
-                                              style="cursor:pointer; display:block; padding:2px;" title="Click to view full details">
-                                            <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 40, '…')) ?>
-                                            <span style="color:#0288D1; font-size:10px;">🔍</span>
-                                        </span>
-                                    <?php else: ?>
-                                        <span style="color:#ccc;">—</span>
-                                    <?php endif; ?>
-                                </td>
+                                            <!-- Prev Modifications — clickable to view history -->
+                                            <td class="col-prev" style="max-width:160px; font-size:12px;">
+                                                <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
+                                                <?php if ($prevMod): ?>
+                                                    <span class="clickable-cell" onclick="viewModificationsHistory('<?= htmlspecialchars(addslashes($prevMod)) ?>')"
+                                                        style="cursor:pointer; display:block; padding:2px;" title="Click to view full details">
+                                                        <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 40, '…')) ?>
+                                                        <span style="color:#0288D1; font-size:10px;">🔍</span>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span style="color:#ccc;">—</span>
+                                                <?php endif; ?>
+                                            </td>
 
-                                <!-- Prev Mtg Comments — clickable to open history modal -->
-                                <td class="col-prev" style="max-width:160px; font-size:12px;">
-                                    <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
-                                    <?php if ($prevCmt): ?>
-                                        <span class="clickable-cell" onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')" 
-                                              style="cursor:pointer; display:block; padding:2px;" title="Click to view meeting history">
-                                            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
-                                            <span style="color:#0288D1; font-size:10px;">📋</span>
-                                        </span>
-                                    <?php else: ?>
-                                        <span style="color:#ccc;">—</span>
-                                    <?php endif; ?>
-                                </td>
+                                            <!-- Prev Mtg Comments — clickable to open history modal -->
+                                            <td class="col-prev" style="max-width:160px; font-size:12px;">
+                                                <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
+                                                <?php if ($prevCmt): ?>
+                                                    <span class="clickable-cell" onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')"
+                                                        style="cursor:pointer; display:block; padding:2px;" title="Click to view meeting history">
+                                                        <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
+                                                        <span style="color:#0288D1; font-size:10px;">📋</span>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span style="color:#ccc;">—</span>
+                                                <?php endif; ?>
+                                            </td>
 
-                                <!-- View Previous Review -->
-                                <td class="col-prev-review">
-                                    <?php
-                                    $prevId    = (int)($c['previous_version_id'] ?? 0);
-                                    $prevState = $c['prev_version_state'] ?? '';
-                                    $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
-                                    ?>
-                                    <?php if ($hasPrev): ?>
-                                        <a href="view_report.php?id=<?= $prevId ?>"
-                                           target="_blank"
-                                           class="btn-prev-review"
-                                           title="Open previous review report (ID <?= $prevId ?>)">
-                                            <i class="fa-solid fa-eye"></i> View
-                                        </a>
-                                    <?php else: ?>
-                                        <span class="btn-prev-review no-data" title="No previous review available">
-                                            <i class="fa-solid fa-eye-slash"></i> None
-                                        </span>
-                                    <?php endif; ?>
-                                </td>
+                                            <!-- View Previous Review -->
+                                            <td class="col-prev-review">
+                                                <?php
+                                                $prevId    = (int)($c['previous_version_id'] ?? 0);
+                                                $prevState = $c['prev_version_state'] ?? '';
+                                                $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
+                                                ?>
+                                                <?php if ($hasPrev): ?>
+                                                    <a href="view_report.php?id=<?= $prevId ?>"
+                                                        target="_blank"
+                                                        class="btn-prev-review"
+                                                        title="Open previous review report (ID <?= $prevId ?>)">
+                                                        <i class="fa-solid fa-eye"></i> View
+                                                    </a>
+                                                <?php else: ?>
+                                                    <span class="btn-prev-review no-data" title="No previous review available">
+                                                        <i class="fa-solid fa-eye-slash"></i> None
+                                                    </span>
+                                                <?php endif; ?>
+                                            </td>
 
-                                <!-- Meeting Status dropdown -->
-                                <td style="text-align:center;">
-                                    <select
-                                        onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                                        class="meet-select"
-                                        id="meet_select_<?php echo $c['id']; ?>"
-                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
-                                        <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
-                                        <option value="yes"     <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
-                                        <option value="no"      <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
-                                    </select>
-                                </td>
+                                            <!-- Meeting Status dropdown -->
+                                            <td style="text-align:center;">
+                                                <select
+                                                    onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                                                    class="meet-select"
+                                                    id="meet_select_<?php echo $c['id']; ?>"
+                                                    <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
+                                                    <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
+                                                    <option value="yes" <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
+                                                    <option value="no" <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
+                                                </select>
+                                            </td>
 
-                                <!-- Meeting Remarks button -->
-                                <td style="text-align:center;">
-                                    <?php if (!$isSent): ?>
-                                        <button type="button"
-                                            id="meet_btn_<?php echo $c['id']; ?>"
-                                            class="meet-btn"
-                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                        </button>
-                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
-                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
-                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
-                                        </span>
-                                    <?php else: ?>
-                                        <span style="color:#ccc; font-size:12px;">—</span>
-                                    <?php endif; ?>
-                                    <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                                </td>
+                                            <!-- Meeting Remarks button -->
+                                            <td style="text-align:center;">
+                                                <?php if (!$isSent): ?>
+                                                    <button type="button"
+                                                        id="meet_btn_<?php echo $c['id']; ?>"
+                                                        class="meet-btn"
+                                                        onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                                        style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                                                        Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                                                    </button>
+                                                <?php elseif (!empty($c['meeting_remarks'])): ?>
+                                                    <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
+                                                        <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span style="color:#ccc; font-size:12px;">—</span>
+                                                <?php endif; ?>
+                                                <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+                                            </td>
 
-                                <!-- Action links -->
-                                <td>
-                                    <?php
-                                    $hasReport = ($c['report_state'] !== 'pending');
-                                    $isUploadAllowed = !$hasReport && isset($c['review_cycle']) && $c['review_cycle'] === $systemCurrentCycle;
-                                    ?>
+                                            <!-- Action links -->
+                                            <td>
+                                                <?php
+                                                $hasReport = ($c['report_state'] !== 'pending');
+                                                $isUploadAllowed = !$hasReport && isset($c['review_cycle']) && $c['review_cycle'] === $systemCurrentCycle;
+                                                ?>
 
-                                    <?php if ($hasReport): ?>
-                                        <a href="view_report.php?id=<?= (int)$c['id']; ?>" class="action-link open-link">Open</a>
-                                    <?php endif; ?>
+                                                <?php if ($hasReport): ?>
+                                                    <a href="view_report.php?id=<?= (int)$c['id']; ?>" class="action-link open-link">Open</a>
+                                                <?php endif; ?>
 
-                                    <?php if ($isUploadAllowed): ?>
-                                        <button type="button" class="action-link upload-link" onclick="triggerUpload(<?= (int)$c['id']; ?>)">Upload</button>
+                                                <?php if ($isUploadAllowed): ?>
+                                                    <button type="button" class="action-link upload-link" onclick="triggerUpload(<?= (int)$c['id']; ?>)">Upload</button>
 
-                                        <form id="uploadForm_<?= (int)$c['id']; ?>" method="post" enctype="multipart/form-data" style="display:none;">
-                                            <input type="hidden" name="expected_client_id"   value="<?= (int)$c['id']; ?>">
-                                            <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
-                                            <input type="hidden" name="review_cycle"         value="<?= htmlspecialchars($c['review_cycle']); ?>">
-                                            <input type="file" name="client_files[]" multiple onchange="submitUpload(<?= (int)$c['id']; ?>)">
-                                        </form>
-                                    <?php endif; ?>
-                                </td>
+                                                    <form id="uploadForm_<?= (int)$c['id']; ?>" method="post" enctype="multipart/form-data" style="display:none;">
+                                                        <input type="hidden" name="expected_client_id" value="<?= (int)$c['id']; ?>">
+                                                        <input type="hidden" name="expected_client_name" value="<?= htmlspecialchars($c['name']); ?>">
+                                                        <input type="hidden" name="review_cycle" value="<?= htmlspecialchars($c['review_cycle']); ?>">
+                                                        <input type="file" name="client_files[]" multiple onchange="submitUpload(<?= (int)$c['id']; ?>)">
+                                                    </form>
+                                                <?php endif; ?>
+                                            </td>
 
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                </div><!-- /table-scroll-wrapper -->
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div><!-- /table-scroll-wrapper -->
 
-                <?php if ($deleteMode || $reassignMode): ?>
-                    </form>
-                <?php endif; ?>
+                        <?php if ($deleteMode || $reassignMode): ?>
+                        </form>
+                    <?php endif; ?>
 
-                <div class="pagination">
-                    Page <?php echo $page; ?> of <?php echo $totalPages; ?>:
-                    <?php
-                    for ($p = 1; $p <= $totalPages; $p++) {
-                        if ($p == $page) {
-                            echo "<strong>{$p}</strong> ";
-                        } else {
-                            $params = ['page' => $p];
-                            if ($deleteMode)   $params['mode'] = 'delete';
-                            if ($reassignMode) $params['mode'] = 'reassign';
-                            if ($q !== '')         $params['q']            = $q;
-                            if ($filter !== '')    $params['filter']       = $filter;
-                            if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
-                            if ($cycleFilter !== '') $params['cycle_filter'] = $cycleFilter;
-                            if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
-                            if ($sortOrder !== 'DESC')    $params['order'] = strtolower($sortOrder);
-                            $url = 'view_saved_reports.php?' . http_build_query($params);
-                            echo "<a href=\"{$url}\">{$p}</a> ";
+                    <div class="pagination">
+                        Page <?php echo $page; ?> of <?php echo $totalPages; ?>:
+                        <?php
+                        for ($p = 1; $p <= $totalPages; $p++) {
+                            if ($p == $page) {
+                                echo "<strong>{$p}</strong> ";
+                            } else {
+                                $params = ['page' => $p];
+                                if ($deleteMode)   $params['mode'] = 'delete';
+                                if ($reassignMode) $params['mode'] = 'reassign';
+                                if ($q !== '')         $params['q']            = $q;
+                                if ($filter !== '')    $params['filter']       = $filter;
+                                if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
+                                if ($cycleFilter !== '') $params['cycle_filter'] = $cycleFilter;
+                                if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
+                                if ($sortOrder !== 'DESC')    $params['order'] = strtolower($sortOrder);
+                                $url = 'view_saved_reports.php?' . http_build_query($params);
+                                echo "<a href=\"{$url}\">{$p}</a> ";
+                            }
                         }
-                    }
-                    ?>
-                </div>
-            <?php endif; ?>
+                        ?>
+                    </div>
+                <?php endif; ?>
         </div><!-- /container -->
 
         <!-- ────────────── Meeting Remarks Modal ────────────── -->
@@ -2515,485 +2545,523 @@ function fmtDateTime(?string $d): string {
          JAVASCRIPT
          ═══════════════════════════════════════════════════════════ -->
     <script>
-    // ── INLINE EDIT ─────────────────────────────────────────────
-    function showToast(msg) {
-        const t = document.getElementById('saveToast');
-        t.textContent = msg || '✓ Saved';
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 2200);
-    }
+        // ── INLINE EDIT ─────────────────────────────────────────────
+        function showToast(msg) {
+            const t = document.getElementById('saveToast');
+            t.textContent = msg || '✓ Saved';
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2200);
+        }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.editable-cell').forEach(cell => {
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.editable-cell').forEach(cell => {
+                const displayVal = cell.querySelector('.display-val');
+                const input = cell.querySelector('input, textarea');
+                const clientId = cell.dataset.client;
+                const field = cell.dataset.field;
+
+                // Click to edit
+                displayVal.addEventListener('click', function() {
+                    cell.classList.add('editing');
+                    input.focus();
+                    if (input.tagName === 'TEXTAREA') {
+                        input.selectionStart = input.selectionEnd = input.value.length;
+                    }
+                });
+
+                // Save on blur
+                input.addEventListener('blur', function() {
+                    saveField(cell, clientId, field, input.value);
+                });
+
+                // Save on Enter (for single-line inputs), Escape to cancel
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        input.blur();
+                    }
+                    if (e.key === 'Escape') {
+                        cell.classList.remove('editing');
+                    }
+                });
+            });
+        });
+
+        function saveField(cell, clientId, field, value) {
+            const input = cell.querySelector('input, textarea');
             const displayVal = cell.querySelector('.display-val');
-            const input      = cell.querySelector('input, textarea');
-            const clientId   = cell.dataset.client;
-            const field      = cell.dataset.field;
 
-            // Click to edit
-            displayVal.addEventListener('click', function () {
-                cell.classList.add('editing');
-                input.focus();
-                if (input.tagName === 'TEXTAREA') {
-                    input.selectionStart = input.selectionEnd = input.value.length;
-                }
-            });
-
-            // Save on blur
-            input.addEventListener('blur', function () {
-                saveField(cell, clientId, field, input.value);
-            });
-
-            // Save on Enter (for single-line inputs), Escape to cancel
-            input.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
-                    e.preventDefault();
-                    input.blur();
-                }
-                if (e.key === 'Escape') {
-                    cell.classList.remove('editing');
-                }
-            });
-        });
-    });
-
-    function saveField(cell, clientId, field, value) {
-        const input      = cell.querySelector('input, textarea');
-        const displayVal = cell.querySelector('.display-val');
-
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action:    'save_review_fields',
-                client_id: clientId,
-                field:     field,
-                value:     value
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                let displayText = value;
-                if (field === 'sip_amount_lakhs' && value !== '') {
-                    displayText = parseFloat(value).toFixed(2);
-                } else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
-                    const d = new Date(value);
-                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                    displayText = d.getDate() + '-' + months[d.getMonth()];
-                }
-                displayVal.textContent = displayText || '—';
-                displayVal.classList.toggle('placeholder-text', !displayText);
-                showToast('✓ Saved');
-            } else {
-                alert('Save failed: ' + (data.error || 'Unknown error'));
-            }
-            cell.classList.remove('editing');
-        })
-        .catch(() => {
-            alert('Network error while saving.');
-            cell.classList.remove('editing');
-        });
-    }
-
-    // ── SCHEME MODAL FUNCTIONS ─────────────────────────────────
-    let currentClientId = null;
-    
-    function openSchemeModal(clientId, currentValue) {
-        currentClientId = clientId;
-        const modal = document.getElementById('schemeModal');
-        const content = document.getElementById('schemeModalContent');
-        content.innerHTML = '<div style="text-align:center; padding:20px;">Loading scheme changes...</div>';
-        modal.style.display = 'flex';
-        
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'fetch_scheme_changes',
-                client_id: clientId
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                if (data.schemes && data.schemes.length > 0) {
-                    renderSchemeModal(data.schemes, currentValue);
-                } else {
-                    content.innerHTML = '<div class="no-schemes-message">No scheme changes found for this client.</div>';
-                }
-            } else {
-                content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading scheme changes</div>';
-            }
-        })
-        .catch(err => {
-            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading schemes</div>';
-        });
-    }
-    
-    function renderSchemeModal(schemes, currentValue) {
-        const currentSelections = currentValue ? currentValue.split(' | ') : [];
-        let html = '<div class="scheme-list">';
-        
-        schemes.forEach(scheme => {
-            const schemeText = scheme.scheme_name + '-' + scheme.action_step;
-            const isChecked = currentSelections.includes(schemeText);
-            
-            // Get action class for styling
-            const actionClass = scheme.action_step.toLowerCase().replace(' ', '-');
-            
-            html += '<div class="scheme-item">';
-            html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${schemeText}" ${isChecked ? 'checked' : ''}>`;
-            html += '<div class="scheme-details">';
-            html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
-            html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
-            if (scheme.recommended_scheme || scheme.recommended_amount) {
-                html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
-            }
-            html += '</div>';
-            html += '</div>';
-        });
-        
-        html += '</div>';
-        document.getElementById('schemeModalContent').innerHTML = html;
-    }
-    
-    function saveSchemeSelections() {
-        const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
-        const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.schemeId);
-        
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'save_scheme_selections',
-                client_id: currentClientId,
-                selected_ids: JSON.stringify(selectedIds)
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                // Update the cell in the table
-                const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
-                if (row) {
-                    const modCell = row.querySelector('.clickable-cell');
-                    if (modCell) {
-                        if (data.modifications_action) {
-                            const truncated = data.modifications_action.length > 80 
-                                ? data.modifications_action.substring(0, 80) + '…' 
-                                : data.modifications_action;
-                            modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
-                        } else {
-                            modCell.innerHTML = '<span class="placeholder-text">Click to select scheme changes</span>';
-                        }
-                    }
-                }
-                closeSchemeModal();
-                showToast('Scheme selections saved!');
-            } else {
-                alert('Error: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(err => {
-            alert('Network error while saving selections');
-        });
-    }
-    
-    function closeSchemeModal() {
-        document.getElementById('schemeModal').style.display = 'none';
-        currentClientId = null;
-    }
-
-    // ── MEETING HISTORY MODAL ─────────────────────────────────
-    function openMeetingHistoryModal(clientId, clientName) {
-        const modal = document.getElementById('meetingHistoryModal');
-        const content = document.getElementById('meetingHistoryContent');
-        content.innerHTML = '<div style="text-align:center; padding:20px;">Loading meeting history...</div>';
-        modal.style.display = 'flex';
-        
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'fetch_meeting_history',
-                client_name: clientName,
-                current_id: clientId
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success && data.history.length > 0) {
-                let html = '';
-                data.history.forEach(item => {
-                    const date = new Date(item.created_at).toLocaleDateString('en-IN', {
-                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                    });
-                    html += '<div class="history-item">';
-                    html += `<div class="date">${date} (Review ID: ${item.id})</div>`;
-                    html += `<div class="comments">${item.meeting_comments}</div>`;
-                    html += '</div>';
-                });
-                content.innerHTML = html;
-            } else {
-                content.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No meeting history found for this client.</div>';
-            }
-        })
-        .catch(err => {
-            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading meeting history</div>';
-        });
-    }
-    
-    function closeMeetingHistoryModal() {
-        document.getElementById('meetingHistoryModal').style.display = 'none';
-    }
-
-    // ── MODIFICATIONS HISTORY MODAL ───────────────────────────
-    function viewModificationsHistory(modifications) {
-        const modal = document.getElementById('modificationsHistoryModal');
-        const content = document.getElementById('modificationsHistoryContent');
-        const items = modifications.split(' | ');
-        let html = '<div style="margin-bottom:15px;"><strong>Previous Modifications:</strong></div>';
-        html += '<ul style="list-style-type:none; padding:0;">';
-        items.forEach(item => {
-            html += `<li style="padding:12px; margin-bottom:8px; background:#f5f5f5; border-radius:6px; border-left:3px solid #0288D1;">${item}</li>`;
-        });
-        html += '</ul>';
-        content.innerHTML = html;
-        modal.style.display = 'flex';
-    }
-    
-    function closeModificationsHistoryModal() {
-        document.getElementById('modificationsHistoryModal').style.display = 'none';
-    }
-
-    // ── RECOMPUTE AUTO FIELDS (called after scheme/goal changes) ─
-    window.recomputeAutoFields = function(clientId) {
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action:    'recompute_auto_fields',
-                client_id: clientId
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                // Update SIP cell in the table row if present
-                const row = document.querySelector(`tr[data-client-id="${clientId}"]`);
-                if (!row) return;
-
-                if (data.sip_amount_lakhs) {
-                    const sipCell = row.querySelector('.editable-cell[data-field="sip_amount_lakhs"]');
-                    if (sipCell) {
-                        const dv = sipCell.querySelector('.display-val');
-                        const inp = sipCell.querySelector('input');
-                        if (dv) { 
-                            dv.textContent = data.sip_amount_lakhs + ' Lakh'; 
-                            dv.classList.remove('placeholder-text'); 
-                        }
-                        if (inp) inp.value = data.sip_amount_lakhs;
-                    }
-                }
-                if (data.modifications_action) {
-                    const modCell = row.querySelector('.clickable-cell');
-                    if (modCell) {
-                        const truncated = data.modifications_action.length > 80
-                            ? data.modifications_action.substring(0, 80) + '…'
-                            : data.modifications_action;
-                        modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
-                    }
-                }
-            }
-        })
-        .catch(err => console.warn('recomputeAutoFields failed:', err));
-    };
-
-    // ── BULK ACTIONS ────────────────────────────────────────────
-    function toggleSelectAll(checkbox) {
-        document.querySelectorAll('.client-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
-        updateSelectedCount();
-    }
-
-    function updateSelectedCount() {
-        const checkboxes    = document.querySelectorAll('.client-checkbox');
-        const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-        const elem          = document.getElementById('selectedCount');
-        if (elem) elem.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
-
-        const selectAll = document.getElementById('selectAllCheckbox');
-        if (!selectAll) return;
-        selectAll.checked       = selectedCount > 0 && Array.from(checkboxes).every(c => c.checked);
-        selectAll.indeterminate = Array.from(checkboxes).some(c => c.checked) && !selectAll.checked;
-    }
-
-    function confirmDelete() {
-        const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
-        if (selectedCount === 0) { alert('Please select at least one client to delete.'); return; }
-        if (confirm('Delete ' + selectedCount + ' selected client(s)? This cannot be undone.')) {
-            document.getElementById('bulkDeleteForm').submit();
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        if (document.querySelector('.client-checkbox')) updateSelectedCount();
-
-        document.querySelectorAll('.client-checkbox').forEach(cb => {
-            cb.addEventListener('change', updateSelectedCount);
-        });
-
-        const bulkReassignForm = document.getElementById('bulkReassignForm');
-        if (bulkReassignForm) {
-            bulkReassignForm.addEventListener('submit', function (e) {
-                const newOwner      = bulkReassignForm.querySelector('select[name="new_owner_id"]').value;
-                const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
-                if (!newOwner) { e.preventDefault(); alert('Please select a user to assign to.'); }
-                else if (selectedCount === 0) { e.preventDefault(); alert('Please select at least one client.'); }
-            });
-        }
-    });
-
-    // ── UPLOAD ──────────────────────────────────────────────────
-    function triggerUpload(clientId) {
-        const form = document.getElementById('uploadForm_' + clientId);
-        if (!form) return;
-        form.querySelector('input[type="file"]').click();
-    }
-
-    function submitUpload(clientId) {
-        const form      = document.getElementById('uploadForm_' + clientId);
-        const fileInput = form.querySelector('input[type="file"]');
-        if (!fileInput.files.length) return;
-        form.submit();
-    }
-
-    // ── MEETING STATUS ───────────────────────────────────────────
-    function handleListMeetingChange(select, clientId) {
-        const status        = select.value;
-        const remarksBtn    = document.getElementById('meet_btn_' + clientId);
-        const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
-
-        if (status === 'yes') {
-            openListMeetingModal(clientId);
-            if (remarksBtn) remarksBtn.style.display = 'inline-block';
-        } else {
-            saveData(clientId, status, storedRemarks, false);
-            if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
-        }
-    }
-
-    function openListMeetingModal(clientId) {
-        const remarks = document.getElementById('remarks_store_' + clientId).value;
-        document.getElementById('current_modal_client_id').value = clientId;
-        document.getElementById('listModalRemarks').value         = remarks;
-        document.getElementById('listMeetingModal').style.display = 'flex';
-        document.getElementById('listModalRemarks').focus();
-    }
-
-    function closeListMeetingModal() { document.getElementById('listMeetingModal').style.display = 'none'; }
-
-    function saveListMeetingRemarks() {
-        const clientId = document.getElementById('current_modal_client_id').value;
-        const remarks  = document.getElementById('listModalRemarks').value;
-        const select   = document.getElementById('meet_select_' + clientId);
-        const status   = select ? select.value : 'yes';
-        saveData(clientId, status, remarks, true);
-    }
-
-    function saveData(clientId, status, remarks, isModal) {
-        const formData = new URLSearchParams();
-        formData.append('action',    'save_meeting_status');
-        formData.append('client_id', clientId);
-        formData.append('status',    status);
-        formData.append('remarks',   remarks);
-
-        fetch('meeting_tracker.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const store = document.getElementById('remarks_store_' + clientId);
-                if (store) store.value = remarks;
-                const btn = document.getElementById('meet_btn_' + clientId);
-                if (btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
-                if (isModal) { closeListMeetingModal(); showToast("Meeting remarks saved!"); }
-            } else {
-                alert("Error: " + data.error);
-            }
-        });
-    }
-
-    // ── CLIENT SEARCH AUTOCOMPLETE ───────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
-        const input    = document.getElementById('client-search');
-        const dropdown = document.getElementById('client-search-dropdown');
-        if (!input) return;
-
-        input.addEventListener('input', function () {
-            const val = input.value.trim();
-            if (val.length < 1) { dropdown.style.display = 'none'; dropdown.innerHTML = ''; return; }
-            fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
-                .then(res => res.json())
+            fetch('view_saved_reports.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        action: 'save_review_fields',
+                        client_id: clientId,
+                        field: field,
+                        value: value
+                    })
+                })
+                .then(r => r.json())
                 .then(data => {
-                    if (data.length > 0) {
-                        dropdown.innerHTML = data.map(name =>
-                            `<div style="padding:8px 12px;cursor:pointer;"
-                                onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
-                        ).join('');
-                        dropdown.style.display = 'block';
+                    if (data.success) {
+                        let displayText = value;
+                        if (field === 'sip_amount_lakhs' && value !== '') {
+                            displayText = parseFloat(value).toFixed(2);
+                        } else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
+                            const d = new Date(value);
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                            displayText = d.getDate() + '-' + months[d.getMonth()];
+                        }
+                        displayVal.textContent = displayText || '—';
+                        displayVal.classList.toggle('placeholder-text', !displayText);
+                        showToast('✓ Saved');
                     } else {
-                        dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
-                        dropdown.style.display = 'block';
+                        alert('Save failed: ' + (data.error || 'Unknown error'));
+                    }
+                    cell.classList.remove('editing');
+                })
+                .catch(() => {
+                    alert('Network error while saving.');
+                    cell.classList.remove('editing');
+                });
+        }
+
+        // ── SCHEME MODAL FUNCTIONS ─────────────────────────────────
+        let currentClientId = null;
+
+        function openSchemeModal(clientId, currentValue) {
+            currentClientId = clientId;
+            const modal = document.getElementById('schemeModal');
+            const content = document.getElementById('schemeModalContent');
+            content.innerHTML = '<div style="text-align:center; padding:20px;">Loading scheme changes...</div>';
+            modal.style.display = 'flex';
+
+            fetch('view_saved_reports.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        action: 'fetch_scheme_changes',
+                        client_id: clientId
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.schemes && data.schemes.length > 0) {
+                            renderSchemeModal(data.schemes, currentValue);
+                        } else {
+                            content.innerHTML = '<div class="no-schemes-message">No scheme changes found for this client.</div>';
+                        }
+                    } else {
+                        content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading scheme changes</div>';
+                    }
+                })
+                .catch(err => {
+                    content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading schemes</div>';
+                });
+        }
+
+        function renderSchemeModal(schemes, currentValue) {
+            const currentSelections = currentValue ? currentValue.split(' | ') : [];
+            let html = '<div class="scheme-list">';
+
+            schemes.forEach(scheme => {
+                const schemeText = scheme.scheme_name + '-' + scheme.action_step;
+                const isChecked = currentSelections.includes(schemeText);
+
+                // Get action class for styling
+                const actionClass = scheme.action_step.toLowerCase().replace(' ', '-');
+
+                html += '<div class="scheme-item">';
+                html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${schemeText}" ${isChecked ? 'checked' : ''}>`;
+                html += '<div class="scheme-details">';
+                html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+                html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
+                if (scheme.recommended_scheme || scheme.recommended_amount) {
+                    html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
+                }
+                html += '</div>';
+                html += '</div>';
+            });
+
+            html += '</div>';
+            document.getElementById('schemeModalContent').innerHTML = html;
+        }
+
+        function saveSchemeSelections() {
+            const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
+            const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.schemeId);
+
+            fetch('view_saved_reports.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        action: 'save_scheme_selections',
+                        client_id: currentClientId,
+                        selected_ids: JSON.stringify(selectedIds)
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update the cell in the table
+                        const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
+                        if (row) {
+                            const modCell = row.querySelector('.clickable-cell');
+                            if (modCell) {
+                                if (data.modifications_action) {
+                                    const truncated = data.modifications_action.length > 80 ?
+                                        data.modifications_action.substring(0, 80) + '…' :
+                                        data.modifications_action;
+                                    modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
+                                } else {
+                                    // modCell.innerHTML = '<span class="placeholder-text">Click to select scheme changes</span>';
+                                }
+                            }
+                        }
+                        closeSchemeModal();
+                        showToast('Scheme selections saved!');
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    alert('Network error while saving selections');
+                });
+        }
+
+        function closeSchemeModal() {
+            document.getElementById('schemeModal').style.display = 'none';
+            currentClientId = null;
+        }
+
+        // ── MEETING HISTORY MODAL ─────────────────────────────────
+        function openMeetingHistoryModal(clientId, clientName) {
+            const modal = document.getElementById('meetingHistoryModal');
+            const content = document.getElementById('meetingHistoryContent');
+            content.innerHTML = '<div style="text-align:center; padding:20px;">Loading meeting history...</div>';
+            modal.style.display = 'flex';
+
+            fetch('view_saved_reports.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        action: 'fetch_meeting_history',
+                        client_name: clientName,
+                        current_id: clientId
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.history.length > 0) {
+                        let html = '';
+                        data.history.forEach(item => {
+                            const date = new Date(item.created_at).toLocaleDateString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                            html += '<div class="history-item">';
+                            html += `<div class="date">${date} (Review ID: ${item.id})</div>`;
+                            html += `<div class="comments">${item.meeting_comments}</div>`;
+                            html += '</div>';
+                        });
+                        content.innerHTML = html;
+                    } else {
+                        content.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">No meeting history found for this client.</div>';
+                    }
+                })
+                .catch(err => {
+                    content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Error loading meeting history</div>';
+                });
+        }
+
+        function closeMeetingHistoryModal() {
+            document.getElementById('meetingHistoryModal').style.display = 'none';
+        }
+
+        // ── MODIFICATIONS HISTORY MODAL ───────────────────────────
+        function viewModificationsHistory(modifications) {
+            const modal = document.getElementById('modificationsHistoryModal');
+            const content = document.getElementById('modificationsHistoryContent');
+            const items = modifications.split(' | ');
+            let html = '<div style="margin-bottom:15px;"><strong>Previous Modifications:</strong></div>';
+            html += '<ul style="list-style-type:none; padding:0;">';
+            items.forEach(item => {
+                html += `<li style="padding:12px; margin-bottom:8px; background:#f5f5f5; border-radius:6px; border-left:3px solid #0288D1;">${item}</li>`;
+            });
+            html += '</ul>';
+            content.innerHTML = html;
+            modal.style.display = 'flex';
+        }
+
+        function closeModificationsHistoryModal() {
+            document.getElementById('modificationsHistoryModal').style.display = 'none';
+        }
+
+        // ── RECOMPUTE AUTO FIELDS (called after scheme/goal changes) ─
+        window.recomputeAutoFields = function(clientId) {
+            fetch('view_saved_reports.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        action: 'recompute_auto_fields',
+                        client_id: clientId
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update SIP cell in the table row if present
+                        const row = document.querySelector(`tr[data-client-id="${clientId}"]`);
+                        if (!row) return;
+
+                        if (data.sip_amount_lakhs) {
+                            const sipCell = row.querySelector('.editable-cell[data-field="sip_amount_lakhs"]');
+                            if (sipCell) {
+                                const dv = sipCell.querySelector('.display-val');
+                                const inp = sipCell.querySelector('input');
+                                if (dv) {
+                                    dv.textContent = data.sip_amount_lakhs + ' Lakh';
+                                    dv.classList.remove('placeholder-text');
+                                }
+                                if (inp) inp.value = data.sip_amount_lakhs;
+                            }
+                        }
+                        if (data.modifications_action) {
+                            const modCell = row.querySelector('.clickable-cell');
+                            if (modCell) {
+                                const truncated = data.modifications_action.length > 80 ?
+                                    data.modifications_action.substring(0, 80) + '…' :
+                                    data.modifications_action;
+                                modCell.innerHTML = truncated + ' <span style="color:#0288D1; font-size:10px; margin-left:5px;">✎</span>';
+                            }
+                        }
+                    }
+                })
+                .catch(err => console.warn('recomputeAutoFields failed:', err));
+        };
+
+        // ── BULK ACTIONS ────────────────────────────────────────────
+        function toggleSelectAll(checkbox) {
+            document.querySelectorAll('.client-checkbox').forEach(cb => {
+                cb.checked = checkbox.checked;
+            });
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.client-checkbox');
+            const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            const elem = document.getElementById('selectedCount');
+            if (elem) elem.textContent = selectedCount + ' item' + (selectedCount !== 1 ? 's' : '') + ' selected';
+
+            const selectAll = document.getElementById('selectAllCheckbox');
+            if (!selectAll) return;
+            selectAll.checked = selectedCount > 0 && Array.from(checkboxes).every(c => c.checked);
+            selectAll.indeterminate = Array.from(checkboxes).some(c => c.checked) && !selectAll.checked;
+        }
+
+        function confirmDelete() {
+            const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
+            if (selectedCount === 0) {
+                alert('Please select at least one client to delete.');
+                return;
+            }
+            if (confirm('Delete ' + selectedCount + ' selected client(s)? This cannot be undone.')) {
+                document.getElementById('bulkDeleteForm').submit();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.querySelector('.client-checkbox')) updateSelectedCount();
+
+            document.querySelectorAll('.client-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateSelectedCount);
+            });
+
+            const bulkReassignForm = document.getElementById('bulkReassignForm');
+            if (bulkReassignForm) {
+                bulkReassignForm.addEventListener('submit', function(e) {
+                    const newOwner = bulkReassignForm.querySelector('select[name="new_owner_id"]').value;
+                    const selectedCount = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
+                    if (!newOwner) {
+                        e.preventDefault();
+                        alert('Please select a user to assign to.');
+                    } else if (selectedCount === 0) {
+                        e.preventDefault();
+                        alert('Please select at least one client.');
                     }
                 });
+            }
         });
 
-        document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
-        });
-    });
-
-    function selectClientName(name) {
-        document.getElementById('client-search').value = name;
-        document.getElementById('client-search-dropdown').style.display = 'none';
-        document.getElementById('filterForm').submit();
-    }
-
-    // ── AUTO-SUBMIT FILTER DROPDOWNS ────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
-        const filterForm = document.getElementById('filterForm');
-        if (!filterForm) return;
-        filterForm.querySelectorAll('select').forEach(select => {
-            select.addEventListener('change', function () { filterForm.submit(); });
-        });
-    });
-
-    // ── AUTO-HIDE SUCCESS MESSAGE ───────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
-        const successMessage = document.getElementById('successMessage');
-        if (successMessage) {
-            setTimeout(function () {
-                successMessage.style.transition = 'opacity 0.5s ease';
-                successMessage.style.opacity    = '0';
-                setTimeout(() => successMessage.style.display = 'none', 500);
-            }, 3000);
+        // ── UPLOAD ──────────────────────────────────────────────────
+        function triggerUpload(clientId) {
+            const form = document.getElementById('uploadForm_' + clientId);
+            if (!form) return;
+            form.querySelector('input[type="file"]').click();
         }
-    });
 
-    // ── CLOSE MODALS ON ESC ────────────────────────────────────
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeSchemeModal();
-            closeMeetingHistoryModal();
-            closeModificationsHistoryModal();
-            closeListMeetingModal();
+        function submitUpload(clientId) {
+            const form = document.getElementById('uploadForm_' + clientId);
+            const fileInput = form.querySelector('input[type="file"]');
+            if (!fileInput.files.length) return;
+            form.submit();
         }
-    });
+
+        // ── MEETING STATUS ───────────────────────────────────────────
+        function handleListMeetingChange(select, clientId) {
+            const status = select.value;
+            const remarksBtn = document.getElementById('meet_btn_' + clientId);
+            const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
+
+            if (status === 'yes') {
+                openListMeetingModal(clientId);
+                if (remarksBtn) remarksBtn.style.display = 'inline-block';
+            } else {
+                saveData(clientId, status, storedRemarks, false);
+                if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
+            }
+        }
+
+        function openListMeetingModal(clientId) {
+            const remarks = document.getElementById('remarks_store_' + clientId).value;
+            document.getElementById('current_modal_client_id').value = clientId;
+            document.getElementById('listModalRemarks').value = remarks;
+            document.getElementById('listMeetingModal').style.display = 'flex';
+            document.getElementById('listModalRemarks').focus();
+        }
+
+        function closeListMeetingModal() {
+            document.getElementById('listMeetingModal').style.display = 'none';
+        }
+
+        function saveListMeetingRemarks() {
+            const clientId = document.getElementById('current_modal_client_id').value;
+            const remarks = document.getElementById('listModalRemarks').value;
+            const select = document.getElementById('meet_select_' + clientId);
+            const status = select ? select.value : 'yes';
+            saveData(clientId, status, remarks, true);
+        }
+
+        function saveData(clientId, status, remarks, isModal) {
+            const formData = new URLSearchParams();
+            formData.append('action', 'save_meeting_status');
+            formData.append('client_id', clientId);
+            formData.append('status', status);
+            formData.append('remarks', remarks);
+
+            fetch('meeting_tracker.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        const store = document.getElementById('remarks_store_' + clientId);
+                        if (store) store.value = remarks;
+                        const btn = document.getElementById('meet_btn_' + clientId);
+                        if (btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
+                        if (isModal) {
+                            closeListMeetingModal();
+                            showToast("Meeting remarks saved!");
+                        }
+                    } else {
+                        alert("Error: " + data.error);
+                    }
+                });
+        }
+
+        // ── CLIENT SEARCH AUTOCOMPLETE ───────────────────────────────
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('client-search');
+            const dropdown = document.getElementById('client-search-dropdown');
+            if (!input) return;
+
+            input.addEventListener('input', function() {
+                const val = input.value.trim();
+                if (val.length < 1) {
+                    dropdown.style.display = 'none';
+                    dropdown.innerHTML = '';
+                    return;
+                }
+                fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            dropdown.innerHTML = data.map(name =>
+                                `<div style="padding:8px 12px;cursor:pointer;"
+                                onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
+                            ).join('');
+                            dropdown.style.display = 'block';
+                        } else {
+                            dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
+                            dropdown.style.display = 'block';
+                        }
+                    });
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
+            });
+        });
+
+        function selectClientName(name) {
+            document.getElementById('client-search').value = name;
+            document.getElementById('client-search-dropdown').style.display = 'none';
+            document.getElementById('filterForm').submit();
+        }
+
+        // ── AUTO-SUBMIT FILTER DROPDOWNS ────────────────────────────
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterForm = document.getElementById('filterForm');
+            if (!filterForm) return;
+            filterForm.querySelectorAll('select').forEach(select => {
+                select.addEventListener('change', function() {
+                    filterForm.submit();
+                });
+            });
+        });
+
+        // ── AUTO-HIDE SUCCESS MESSAGE ───────────────────────────────
+        document.addEventListener('DOMContentLoaded', function() {
+            const successMessage = document.getElementById('successMessage');
+            if (successMessage) {
+                setTimeout(function() {
+                    successMessage.style.transition = 'opacity 0.5s ease';
+                    successMessage.style.opacity = '0';
+                    setTimeout(() => successMessage.style.display = 'none', 500);
+                }, 3000);
+            }
+        });
+
+        // ── CLOSE MODALS ON ESC ────────────────────────────────────
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeSchemeModal();
+                closeMeetingHistoryModal();
+                closeModificationsHistoryModal();
+                closeListMeetingModal();
+            }
+        });
     </script>
 
 </body>
+
 </html>
