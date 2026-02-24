@@ -15,6 +15,9 @@
 //         timestamp corruption caused by is_latest flag update
 // - FIX: last_meeting_date now sourced from the SAME record as last_review_date
 //         (both use identical ORDER BY so they always come from the same row)
+// - NEW: SIP (Lakhs) auto-filled from SUM of client_goals.sip_swp on page load
+// - NEW: Modifications/Action auto-filled from client_schemes where action_step != 'Continue'
+//         formatted as "{scheme_name}-{action_step}", pipe-separated for multiple entries
 
 require_once 'auth.php';
 requireAuth();
@@ -83,6 +86,7 @@ function extractSubCategoryAllocation(string $filePath): array
 
     return [];
 }
+
 
 
 function extractGlobalEquityFromScriptSheet(string $filePath): float
@@ -280,6 +284,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
 }
 
 // ============================================================
+// NEW: Auto-fill SIP (Lakhs) from client_goals.sip_swp sum
+//      and Modifications/Action from client_schemes
+//      Runs on GET page load for non-sent rows where fields are empty
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
+    try {
+        // --- Auto-fill sip_amount_lakhs from SUM of client_goals.sip_swp ---
+        // Find clients where sip_amount_lakhs is NULL/0 and they have goals with sip_swp
+        $sipBackfillStmt = $pdo->query("
+            SELECT c.id
+            FROM clients c
+            WHERE c.report_state != 'sent'
+              AND (c.sip_amount_lakhs IS NULL OR c.sip_amount_lakhs = 0)
+              AND EXISTS (
+                  SELECT 1 FROM client_goals g
+                  WHERE g.client_id = c.id AND g.sip_swp > 0
+              )
+            LIMIT 100
+        ");
+        $sipBackfillIds = $sipBackfillStmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (!empty($sipBackfillIds)) {
+            $sipSumStmt = $pdo->prepare("
+                SELECT SUM(sip_swp) AS total_sip
+                FROM client_goals
+                WHERE client_id = ?
+            ");
+            $sipUpdateStmt = $pdo->prepare("
+                UPDATE clients
+                SET sip_amount_lakhs = ?,
+                    updated_at = updated_at
+                WHERE id = ?
+            ");
+            foreach ($sipBackfillIds as $cid) {
+                $sipSumStmt->execute([$cid]);
+                $totalSip = (float)($sipSumStmt->fetchColumn() ?? 0);
+                if ($totalSip > 0) {
+                    // Convert to lakhs (sip_swp stored in raw rupees)
+                    $sipLakhs = $totalSip / 100000;
+                    $sipUpdateStmt->execute([$sipLakhs, $cid]);
+                }
+            }
+        }
+
+        // --- Auto-fill modifications_action from client_schemes ---
+        // Find clients where modifications_action is NULL/empty and report_state != 'sent'
+        // and they have schemes with action_step != 'Continue'
+        $modBackfillStmt = $pdo->query("
+            SELECT c.id
+            FROM clients c
+            WHERE c.report_state != 'sent'
+              AND (c.modifications_action IS NULL OR c.modifications_action = '')
+              AND EXISTS (
+                  SELECT 1 FROM client_schemes s
+                  WHERE s.client_id = c.id
+                    AND s.action_step != 'Continue'
+                    AND s.action_step != ''
+                    AND s.scheme_name != ''
+              )
+            LIMIT 100
+        ");
+        $modBackfillIds = $modBackfillStmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (!empty($modBackfillIds)) {
+            $modSchemesStmt = $pdo->prepare("
+                SELECT scheme_name, action_step
+                FROM client_schemes
+                WHERE client_id = ?
+                  AND action_step != 'Continue'
+                  AND action_step != ''
+                  AND scheme_name != ''
+                ORDER BY id ASC
+            ");
+            $modUpdateStmt = $pdo->prepare("
+                UPDATE clients
+                SET modifications_action = ?,
+                    updated_at = updated_at
+                WHERE id = ?
+            ");
+            foreach ($modBackfillIds as $cid) {
+                $modSchemesStmt->execute([$cid]);
+                $schemeRows = $modSchemesStmt->fetchAll(PDO::FETCH_ASSOC);
+                $parts = [];
+                foreach ($schemeRows as $sr) {
+                    $parts[] = trim($sr['scheme_name']) . '-' . trim($sr['action_step']);
+                }
+                if (!empty($parts)) {
+                    $modUpdateStmt->execute([implode(' | ', $parts), $cid]);
+                }
+            }
+        }
+    } catch (Throwable $autoFillErr) {
+        // Non-critical, swallow silently
+    }
+}
+
+// ============================================================
 // AJAX: Save inline fields (sip, review_sent_date, meeting_date,
 //       modifications_action, meeting_comments)
 //       BLOCKED if report_state = 'sent'
@@ -320,6 +421,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt->execute([$bindValue, $clientId]);
 
         echo json_encode(['success' => true]);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ============================================================
+// AJAX: Recompute SIP and Modifications/Action for a single client
+//       Called after goals/schemes are updated in view_report.php
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'recompute_auto_fields') {
+    header('Content-Type: application/json');
+    try {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        if (!$clientId) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+            exit;
+        }
+
+        // Check not sent
+        $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
+        $checkState->execute([$clientId]);
+        $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
+        if ($stateRow && $stateRow['report_state'] === 'sent') {
+            echo json_encode(['success' => false, 'error' => 'Sent rows cannot be recomputed.']);
+            exit;
+        }
+
+        // Recompute SIP
+        $sipStmt = $pdo->prepare("SELECT SUM(sip_swp) FROM client_goals WHERE client_id = ?");
+        $sipStmt->execute([$clientId]);
+        $totalSip = (float)($sipStmt->fetchColumn() ?? 0);
+        $sipLakhs = $totalSip / 100000;
+
+        // Recompute Modifications
+        $modStmt = $pdo->prepare("
+            SELECT scheme_name, action_step
+            FROM client_schemes
+            WHERE client_id = ?
+              AND action_step != 'Continue'
+              AND action_step != ''
+              AND scheme_name != ''
+            ORDER BY id ASC
+        ");
+        $modStmt->execute([$clientId]);
+        $schemeRows = $modStmt->fetchAll(PDO::FETCH_ASSOC);
+        $parts = [];
+        foreach ($schemeRows as $sr) {
+            $parts[] = trim($sr['scheme_name']) . '-' . trim($sr['action_step']);
+        }
+        $modificationsAction = implode(' | ', $parts);
+
+        // Update
+        $updateStmt = $pdo->prepare("
+            UPDATE clients
+            SET sip_amount_lakhs = ?,
+                modifications_action = ?,
+                updated_at = updated_at
+            WHERE id = ?
+        ");
+        $updateStmt->execute([$sipLakhs ?: null, $modificationsAction ?: null, $clientId]);
+
+        echo json_encode([
+            'success'              => true,
+            'sip_amount_lakhs'     => $sipLakhs > 0 ? number_format($sipLakhs, 2) : null,
+            'modifications_action' => $modificationsAction ?: null,
+        ]);
     } catch (Throwable $e) {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
@@ -447,8 +615,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
         // =====================================================================
         // FIX: Use updated_at = updated_at (no-op) so that marking the previous
         // row as non-latest does NOT change its updated_at timestamp.
-        // Previously this UPDATE was omitting updated_at which caused MySQL's
-        // ON UPDATE CURRENT_TIMESTAMP to fire and corrupt the old row's timestamp.
         // =====================================================================
         $markPreviousAsNotLatest = $pdo->prepare('
             UPDATE clients 
@@ -544,11 +710,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['client_files'])) {
                 $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
             }
 
-            // =====================================================================
-            // FIX: Both last_review_datetime and last_meeting_datetime are derived
-            // from the SAME single row (identical ORDER BY), so they always stay
-            // in sync and come from the same review record.
-            // =====================================================================
             $stmtLastReview = $pdo->prepare("
                 SELECT
                     review_sent_date,
@@ -1063,15 +1224,8 @@ if ($sortColumn === 'priority') {
 
 // ============================================================
 // MAIN QUERY
-// - updated_at: shows the actual last-updated timestamp of each row
-//   (not shared between reviews)
-// - FIX: For 'sent' rows, last_review_date subquery uses created_at
-//   for the time component, not updated_at, to avoid corruption from
-//   the is_latest flag UPDATE touching updated_at via ON UPDATE CURRENT_TIMESTAMP
-// - FIX: last_meeting_date subquery now uses IDENTICAL ORDER BY as
-//   last_review_date so both columns always come from the SAME row.
-//   Previously last_meeting_date ordered by (meeting_date IS NOT NULL)
-//   which could select a DIFFERENT record than last_review_date.
+// NEW: Also fetch computed_sip_lakhs and computed_modifications
+//      directly from child tables, used as fallback if DB column is empty
 // ============================================================
 $stmt = $pdo->prepare("
     SELECT
@@ -1086,6 +1240,7 @@ $stmt = $pdo->prepare("
         c.modifications_action,
         c.meeting_comments,
         c.previous_version_id,
+
         -- Fetch the report_state of the previous version
         (
             SELECT p.report_state
@@ -1094,8 +1249,28 @@ $stmt = $pdo->prepare("
             LIMIT 1
         ) AS prev_version_state,
 
+        -- ── COMPUTED SIP FROM GOALS (fallback when sip_amount_lakhs is empty) ──
+        (
+            SELECT ROUND(SUM(g.sip_swp) / 100000, 2)
+            FROM client_goals g
+            WHERE g.client_id = c.id
+        ) AS computed_sip_lakhs,
+
+        -- ── COMPUTED MODIFICATIONS FROM SCHEMES (fallback when modifications_action is empty) ──
+        (
+            SELECT GROUP_CONCAT(
+                CONCAT(s.scheme_name, '-', s.action_step)
+                ORDER BY s.id ASC
+                SEPARATOR ' | '
+            )
+            FROM client_schemes s
+            WHERE s.client_id = c.id
+              AND s.action_step != 'Continue'
+              AND s.action_step != ''
+              AND s.scheme_name != ''
+        ) AS computed_modifications,
+
         -- ── LAST REVIEW DATE ────────────────────────────────────────────────
-        -- Uses: sent > review_sent_date present > id DESC
         COALESCE(
             c.last_review_date,
             (
@@ -1125,11 +1300,6 @@ $stmt = $pdo->prepare("
         ) AS last_review_date,
 
         -- ── LAST MEETING DATE ────────────────────────────────────────────────
-        -- FIX: Uses IDENTICAL ORDER BY as last_review_date (sent > review_sent_date > id DESC)
-        -- so that both columns are ALWAYS sourced from the SAME review record.
-        -- Previously this used (meeting_date IS NOT NULL) in ORDER BY which could
-        -- select a different record, causing last_review_date and last_meeting_date
-        -- to show data from two different reviews.
         COALESCE(
             c.last_meeting_date,
             (
@@ -1206,6 +1376,23 @@ $paramsData[] = $offset;
 
 $stmt->execute($paramsData);
 $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Post-process: merge computed fallbacks into display values
+foreach ($clients as &$c) {
+    // SIP: use stored value if set, else use computed from goals
+    if (empty($c['sip_amount_lakhs']) || (float)$c['sip_amount_lakhs'] == 0) {
+        if (!empty($c['computed_sip_lakhs']) && (float)$c['computed_sip_lakhs'] > 0) {
+            $c['sip_amount_lakhs'] = $c['computed_sip_lakhs'];
+        }
+    }
+    // Modifications: use stored value if set, else use computed from schemes
+    if (empty($c['modifications_action'])) {
+        if (!empty($c['computed_modifications'])) {
+            $c['modifications_action'] = $c['computed_modifications'];
+        }
+    }
+}
+unset($c);
 
 // Fetch all users for reassignment dropdown
 $allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
@@ -1518,7 +1705,7 @@ function fmtDateTime(?string $d): string {
                             </th>
 
                             <!-- CURRENT REVIEW columns -->
-                            <th class="col-current">SIP (Lakhs)</th>
+                            <th class="col-current">SIP</th>
                             <th class="col-current">Review Sent</th>
                             <th class="col-current">Mtg Date</th>
                             <th class="col-current">Modifications / Action</th>
@@ -1548,8 +1735,12 @@ function fmtDateTime(?string $d): string {
                             // Determine if this row is sent (locked)
                             $isSent = (($c['report_state'] ?? '') === 'sent');
                             $rowClass = $isSent ? 'row-sent' : '';
+
+                            // Effective display values (stored takes priority, computed is fallback)
+                            $displaySip = $c['sip_amount_lakhs'] ?? '';
+                            $displayMod = $c['modifications_action'] ?? '';
                             ?>
-                            <tr class="<?= $rowClass ?>">
+                            <tr class="<?= $rowClass ?>" data-client-id="<?= (int)$c['id'] ?>">
                                 <!-- Checkbox / empty -->
                                 <?php if ($deleteMode || $reassignMode): ?>
                                     <td>
@@ -1626,17 +1817,12 @@ function fmtDateTime(?string $d): string {
                                     <?php endif; ?>
                                 </td>
 
-                                <!-- Last Updated
-                                     FIX: For 'sent' rows, always use created_at since updated_at
-                                     can be corrupted by the is_latest flag UPDATE on new upload.
-                                     For non-sent rows, use updated_at if it's newer than created_at. -->
+                                <!-- Last Updated -->
                                 <td>
                                     <?php
                                     if ($isSent) {
-                                        // Sent rows: always show created_at (immutable, reflects when row was created/sent)
                                         $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
                                     } else {
-                                        // Non-sent rows: show updated_at if newer, else created_at
                                         $tsUpdated = !empty($c['updated_at']) ? strtotime($c['updated_at']) : 0;
                                         $tsCreated = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
                                         $displayTs = ($tsUpdated > $tsCreated) ? $tsUpdated : $tsCreated;
@@ -1670,17 +1856,17 @@ function fmtDateTime(?string $d): string {
                                      CURRENT REVIEW — inline-editable (locked for sent)
                                      ════════════════════════════════════════ -->
 
-                                <!-- SIP (Lakhs) -->
+                                <!-- SIP (Lakhs) — auto-filled from goals total -->
                                 <?php if ($isSent): ?>
                                     <td class="col-current" style="font-size:13px; color:#555;">
-                                        <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : '—' ?>
+                                        <?= !empty($displaySip) && (float)$displaySip > 0 ? number_format((float)$displaySip, 2) : '—' ?>
                                     </td>
                                 <?php else: ?>
                                     <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
-                                        <span class="display-val <?= empty($c['sip_amount_lakhs']) ? 'placeholder-text' : '' ?>">
-                                            <?= !empty($c['sip_amount_lakhs']) ? number_format((float)$c['sip_amount_lakhs'], 2) : 'click to edit' ?>
+                                        <span class="display-val <?= (empty($displaySip) || (float)$displaySip == 0) ? 'placeholder-text' : '' ?>">
+                                            <?= (!empty($displaySip) && (float)$displaySip > 0) ? number_format((float)$displaySip, 2) . ' Lakh' : 'click to edit' ?>
                                         </span>
-                                        <input type="number" step="0.01" value="<?= htmlspecialchars($c['sip_amount_lakhs'] ?? '') ?>">
+                                        <input type="number" step="0.01" value="<?= htmlspecialchars($displaySip ?? '') ?>">
                                     </td>
                                 <?php endif; ?>
 
@@ -1712,18 +1898,19 @@ function fmtDateTime(?string $d): string {
                                     </td>
                                 <?php endif; ?>
 
-                                <!-- Modifications / Action -->
+                                <!-- Modifications / Action — auto-filled from schemes -->
                                 <?php if ($isSent): ?>
-                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
-                                        <?php $ma = $c['modifications_action'] ?? ''; ?>
-                                        <?= $ma ? htmlspecialchars(mb_strimwidth($ma, 0, 80, '…')) : '—' ?>
+                                    <td class="col-current" style="max-width:200px; font-size:12px; color:#555;">
+                                        <?php $ma = $displayMod; ?>
+                                        <?= $ma ? htmlspecialchars(mb_strimwidth($ma, 0, 100, '…')) : '—' ?>
                                     </td>
                                 <?php else: ?>
-                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:180px;">
-                                        <span class="display-val <?= empty($c['modifications_action']) ? 'placeholder-text' : '' ?>">
-                                            <?= !empty($c['modifications_action']) ? htmlspecialchars($c['modifications_action']) : 'click to edit' ?>
+                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="modifications_action" data-type="textarea" style="max-width:200px;">
+                                        <span class="display-val <?= empty($displayMod) ? 'placeholder-text' : '' ?>"
+                                              title="<?= htmlspecialchars($displayMod) ?>">
+                                            <?= !empty($displayMod) ? htmlspecialchars(mb_strimwidth($displayMod, 0, 80, '…')) : 'click to edit' ?>
                                         </span>
-                                        <textarea><?= htmlspecialchars($c['modifications_action'] ?? '') ?></textarea>
+                                        <textarea><?= htmlspecialchars($displayMod) ?></textarea>
                                     </td>
                                 <?php endif; ?>
 
@@ -1993,6 +2180,54 @@ function fmtDateTime(?string $d): string {
             cell.classList.remove('editing');
         });
     }
+
+    // ── RECOMPUTE AUTO FIELDS (called after scheme/goal changes) ─
+    // Expose globally so view_report.php can call this via postMessage or direct JS
+    window.recomputeAutoFields = function(clientId) {
+        fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action:    'recompute_auto_fields',
+                client_id: clientId
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update SIP cell in the table row if present
+                const row = document.querySelector(`tr[data-client-id="${clientId}"]`);
+                if (!row) return;
+
+                if (data.sip_amount_lakhs) {
+                    const sipCell = row.querySelector('.editable-cell[data-field="sip_amount_lakhs"]');
+                    if (sipCell) {
+                        const dv = sipCell.querySelector('.display-val');
+                        const inp = sipCell.querySelector('input');
+                        if (dv) { dv.textContent = data.sip_amount_lakhs; dv.classList.remove('placeholder-text'); }
+                        if (inp) inp.value = data.sip_amount_lakhs;
+                    }
+                }
+                if (data.modifications_action) {
+                    const modCell = row.querySelector('.editable-cell[data-field="modifications_action"]');
+                    if (modCell) {
+                        const dv = modCell.querySelector('.display-val');
+                        const ta = modCell.querySelector('textarea');
+                        const truncated = data.modifications_action.length > 80
+                            ? data.modifications_action.substring(0, 80) + '…'
+                            : data.modifications_action;
+                        if (dv) {
+                            dv.textContent = truncated;
+                            dv.title = data.modifications_action;
+                            dv.classList.remove('placeholder-text');
+                        }
+                        if (ta) ta.value = data.modifications_action;
+                    }
+                }
+            }
+        })
+        .catch(err => console.warn('recomputeAutoFields failed:', err));
+    };
 
     // ── BULK ACTIONS ────────────────────────────────────────────
     function toggleSelectAll(checkbox) {
