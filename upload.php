@@ -398,13 +398,16 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                     <div class="number" id="emailsSentCount"><?= $currentEmailsSent; ?></div>
                 </a>
 
-                <div class="stats-card card-teal">
+                <a href="view_saved_reports.php?owner_filter=all
+&cycle_filter=<?= urlencode($cycleFilter) ?>
+&meeting_filter=fixed"
+                    class="stats-card card-teal">
+
                     <span class="card-icon"><i class="fa-solid fa-handshake"></i></span>
                     <div class="label">Meetings Fixed</div>
-                    <div class="number" id="meetingsFixedCount">
-                        <?= $currentMeetingsFixed; ?>
-                    </div>
-                </div>
+                    <div class="number"><?= $currentMeetingsFixed; ?></div>
+
+                </a>
             </div><!-- /kpi-grid -->
 
             <?php if (!empty($availableMonths)):
@@ -453,7 +456,7 @@ AND YEAR(meeting_date) = ?
       AND is_latest = TRUE
 ");
                 $prevMonthNum = date('n', strtotime($mShort));
-$stmtPrevMK->execute([$prevMonthNum, $y]);
+                $stmtPrevMK->execute([$prevMonthNum, $y]);
                 $prevMeetingsFixed = (int)$stmtPrevMK->fetchColumn();            ?>
 
                 <div class="page-header prev-header">
@@ -567,13 +570,16 @@ $stmtPrevMK->execute([$prevMonthNum, $y]);
                         <div class="number" id="prevEmailsSentCount"><?= $prevEmailsSent; ?></div>
                     </a>
 
-                    <div class="stats-card card-teal">
+                    <a href="view_saved_reports.php?owner_filter=all
+&cycle_filter=<?= urlencode($prevCycle) ?>
+&meeting_filter=fixed"
+                        class="stats-card card-teal">
+
                         <span class="card-icon"><i class="fa-solid fa-handshake"></i></span>
                         <div class="label">Meetings Fixed</div>
-                        <div class="number" id="prevMeetingsFixedCount">
-                            <?= $prevMeetingsFixed; ?>
-                        </div>
-                    </div>
+                        <div class="number"><?= $prevMeetingsFixed; ?></div>
+
+                    </a>
                 </div><!-- /kpi-grid prev -->
 
 
@@ -588,8 +594,8 @@ $stmtPrevMK->execute([$prevMonthNum, $y]);
 
 <script>
     // ── Meetings Fixed: inline editable, saves via AJAX ──────────
-    
-   
+
+
 
     // ── Dashboard AJAX filters (unchanged from original) ─────────
     const defaultPrevCycle = "<?= $prevCycle ?? '' ?>";
