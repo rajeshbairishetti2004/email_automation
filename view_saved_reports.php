@@ -2079,9 +2079,9 @@
                                             if ($deleteMode || $reassignMode) $baseColCount++;
                                             ?>
                                             <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
-                                            <th colspan="5" class="th-section-current">Current Review</th>
-                                            <th colspan="4" class="th-section-prev">Last Review</th>
-                                            <th colspan="1" class="th-section-prev-review">Prev Review</th>
+                                            <th colspan="6" class="th-section-current">Current Review</th>
+                                            <th colspan="5" class="th-section-prev">Last Review</th>
+                                        
                                             <th colspan="3" style="background:#f9f9f9; border:none;"></th>
                                         </tr>
 
@@ -2132,7 +2132,10 @@
                                             <th class="col-current">Review Sent</th>
                                             <th class="col-current">Mtg Date</th>
                                             <th class="col-current">Modifications / Action</th>
-                                            <th class="col-current">Mtg Comments</th>
+                                                                                        <!-- Meeting status / remarks / action -->
+                                            <th style="text-align:center; width:120px;">Meeting Status</th>
+                                            <th style="text-align:center; width:140px;">Meeting Remarks</th>
+                                            <!-- <th class="col-current">Mtg Comments</th> -->
 
                                             <!-- LAST REVIEW columns (read-only) -->
                                             <th class="col-prev">Last Review</th>
@@ -2143,9 +2146,7 @@
                                             <!-- Previous Review HTML view -->
                                             <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
 
-                                            <!-- Meeting status / remarks / action -->
-                                            <th style="text-align:center; width:120px;">Meeting Status</th>
-                                            <th style="text-align:center; width:140px;">Meeting Remarks</th>
+
                                             <th>Action</th>
                                         </tr>
                                     </thead>
@@ -2338,21 +2339,41 @@
                                                     </td>
                                                 <?php endif; ?>
 
+                                                <!-- Meeting Status dropdown -->
+                                                <td style="text-align:center;">
+                                                    <select
+                                                        onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
+                                                        class="meet-select"
+                                                        id="meet_select_<?php echo $c['id']; ?>"
+                                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
+                                                        <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
+                                                        <option value="yes" <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
+                                                        <option value="no" <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
+                                                    </select>
+                                                </td>
 
-                                                <!-- Meeting Comments — editable textarea -->
-                                                <?php if ($isSent): ?>
-                                                    <td class="col-current" style="max-width:180px; font-size:12px; color:#555;">
-                                                        <?php $mc = $c['meeting_comments'] ?? ''; ?>
-                                                        <?= $mc ? htmlspecialchars(mb_strimwidth($mc, 0, 80, '…')) : '—' ?>
-                                                    </td>
-                                                <?php else: ?>
-                                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_comments" data-type="textarea" style="max-width:180px;">
-                                                        <span class="display-val <?= empty($c['meeting_comments']) ? 'placeholder-text' : '' ?>">
-                                                            <?= !empty($c['meeting_comments']) ? htmlspecialchars(mb_strimwidth($c['meeting_comments'], 0, 70, '…')) : 'click to edit' ?>
+                                                <!-- Meeting Remarks button -->
+                                                <td style="text-align:center;">
+                                                    <?php if (!$isSent): ?>
+                                                        <button type="button"
+                                                            id="meet_btn_<?php echo $c['id']; ?>"
+                                                            class="meet-btn"
+                                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+                                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+                                                        </button>
+                                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
+                                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
+                                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
                                                         </span>
-                                                        <textarea><?= htmlspecialchars($c['meeting_comments'] ?? '') ?></textarea>
-                                                    </td>
-                                                <?php endif; ?>
+                                                    <?php else: ?>
+                                                        <span style="color:#ccc; font-size:12px;">—</span>
+                                                    <?php endif; ?>
+                                                    <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+                                                </td>
+
+
+         
 
                                                 <!-- ════════════════════════════════════════
                                         LAST REVIEW — read-only, from previous record
@@ -2415,38 +2436,7 @@
                                                     <?php endif; ?>
                                                 </td>
 
-                                                <!-- Meeting Status dropdown -->
-                                                <td style="text-align:center;">
-                                                    <select
-                                                        onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
-                                                        class="meet-select"
-                                                        id="meet_select_<?php echo $c['id']; ?>"
-                                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
-                                                        <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
-                                                        <option value="yes" <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
-                                                        <option value="no" <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
-                                                    </select>
-                                                </td>
-
-                                                <!-- Meeting Remarks button -->
-                                                <td style="text-align:center;">
-                                                    <?php if (!$isSent): ?>
-                                                        <button type="button"
-                                                            id="meet_btn_<?php echo $c['id']; ?>"
-                                                            class="meet-btn"
-                                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                                        </button>
-                                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
-                                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
-                                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span style="color:#ccc; font-size:12px;">—</span>
-                                                    <?php endif; ?>
-                                                    <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                                                </td>
+                                                
 
                                                 <!-- Action links -->
                                                 <td>
