@@ -1942,7 +1942,7 @@ COALESCE(
                     <?php endif; ?>
 
                     <!-- RIGHT: Reset button -->
-                    <a href="view_saved_reports.php?reset=1" class="btn btn-reset" >Reset Filters</a>
+                    <a href="view_saved_reports.php?reset=1" class="btn btn-reset">Reset Filters</a>
                 </div>
                 <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
                     <?php
@@ -2098,20 +2098,29 @@ COALESCE(
                             <div class="table-scroll-wrapper">
                                 <table>
                                     <thead>
-                                        <!-- ROW 1: section group labels -->
+                                        
                                         <tr class="group-header">
                                             <?php
-                                            $baseColCount = 9;
-                                            if ($deleteMode || $reassignMode) $baseColCount++;
+                                            // Calculate base columns count dynamically
+                                            $baseColCount = 6; // ID, Client Name, AUM, Last Updated, Status = 5
+                                            if ($isAdmin) $baseColCount += 3; // Add 3 admin columns (Drafted By, RM, Review Assigned to)
+                                            if ($deleteMode || $reassignMode) $baseColCount++; // Add checkbox column
+
+                                            // Current Review columns: SIP, Review Sent, Mtg Date, Modifications/Action, Meeting Status, Meeting Comments = 6
+                                            $currentReviewCols = 6;
+
+                                            // Last Review columns: Prev SIP, Last Review, Last Meeting, Prev Modifications, Prev Mtg Comments = 5
+                                            $lastReviewCols = 6;
+
+                                            // Action and View Prev Review columns = 2
+                                            $actionCols = 2;
                                             ?>
                                             <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
-                                            <th colspan="6" class="th-section-current">Current Review</th>
-                                            <th colspan="6" class="th-section-prev">Last Review</th>
-
-                                            <th colspan="3" style="background:#f9f9f9; border:none;"></th>
+                                            <th colspan="<?= $currentReviewCols ?>" class="th-section-current">Current Review</th>
+                                            <th colspan="<?= $lastReviewCols ?>" class="th-section-prev">Last Review</th>
+                                            <th colspan="<?= $actionCols ?>" style="background:#f9f9f9; border:none;"></th>
                                         </tr>
-
-                                        <!-- ROW 2: actual column headers -->
+                                        
                                         <tr class="col-header">
                                             <!-- checkbox / empty -->
                                             <?php if ($deleteMode || $reassignMode): ?>
@@ -2139,11 +2148,14 @@ COALESCE(
                                                     AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
                                                 </a>
                                             </th>
+
+                                            <!-- Admin-only columns -->
                                             <?php if ($isAdmin): ?>
-                                            <th>Drafted By</th>
-                                            <th>RM</th>
-                                            <th>Review Assigned to</th>
+                                                <th>Drafted By</th>
+                                                <th>RM</th>
+                                                <th>Review Assigned to</th>
                                             <?php endif; ?>
+
                                             <th>
                                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?><?= $meetingFilter ? '&meeting_filter=' . urlencode($meetingFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
                                                     Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
@@ -2160,10 +2172,8 @@ COALESCE(
                                             <th class="col-current">Review Sent</th>
                                             <th class="col-current">Mtg Date</th>
                                             <th class="col-current">Modifications / Action</th>
-                                            <!-- Meeting status / remarks / action -->
                                             <th style="text-align:center; width:120px;">Meeting Status</th>
                                             <th style="text-align:center; width:140px;">Meeting Comments</th>
-                                            <!-- <th class="col-current">Mtg Comments</th> -->
 
                                             <!-- LAST REVIEW columns (read-only) -->
                                             <th class="col-prev">Prev SIP</th>
@@ -2175,7 +2185,7 @@ COALESCE(
                                             <!-- Previous Review HTML view -->
                                             <th class="col-prev-review" style="text-align:center; min-width:110px;">View Prev Review</th>
 
-
+                                            <!-- Action -->
                                             <th>Action</th>
                                         </tr>
                                     </thead>
@@ -2229,45 +2239,45 @@ COALESCE(
                                                 </td>
 
                                                 <!-- Drafted By -->
-                                                 <?php if ($isAdmin): ?>
-                                                <td>
-                                                    <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
-                                                    <?php if ($currState === 'pending'): ?>
-                                                        <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
-                                                    <?php else: ?>
-                                                        <?php if (!empty($c['created_by_username'])): ?>
-                                                            <span class="badge" style="background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;">
-                                                                <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                                <?php if ($isAdmin): ?>
+                                                    <td>
+                                                        <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
+                                                        <?php if ($currState === 'pending'): ?>
+                                                            <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
+                                                        <?php else: ?>
+                                                            <?php if (!empty($c['created_by_username'])): ?>
+                                                                <span class="badge" style="background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;">
+                                                                    <?php echo htmlspecialchars($c['created_by_username']); ?>
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span style="color:#999; font-size:0.85em;">System</span>
+                                                            <?php endif; ?>
+                                                        <?php endif; ?>
+                                                    </td>
+
+                                                    <!-- RM -->
+                                                    <td>
+                                                        <span style="color:#333; font-weight:600;">
+                                                            <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
+                                                        </span>
+                                                    </td>
+
+                                                    <!-- Reviewer -->
+                                                    <td>
+                                                        <?php
+                                                        $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
+                                                        $reviewerStyle = 'background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;';
+                                                        if ($isReviewer) $reviewerStyle .= ' font-weight:800; border-color:#1565c0;';
+                                                        ?>
+                                                        <?php if (!empty($c['reviewer_username'])): ?>
+                                                            <span class="badge" style="<?php echo $reviewerStyle; ?>">
+                                                                <?php echo htmlspecialchars($c['reviewer_username']); ?>
+                                                                <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
                                                             </span>
                                                         <?php else: ?>
-                                                            <span style="color:#999; font-size:0.85em;">System</span>
+                                                            <span style="color:#999; font-size:0.85em;">Unassigned</span>
                                                         <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </td>
-
-                                                <!-- RM -->
-                                                <td>
-                                                    <span style="color:#333; font-weight:600;">
-                                                        <?php echo !empty($c['rm_username']) ? htmlspecialchars($c['rm_username']) : '—'; ?>
-                                                    </span>
-                                                </td>
-
-                                                <!-- Reviewer -->
-                                                <td>
-                                                    <?php
-                                                    $isReviewer = ((int)($c['review_assigned_to'] ?? 0) === $myId);
-                                                    $reviewerStyle = 'background:#e3f2fd; color:#1565c0; border:1px solid #90caf9; padding:5px 10px; border-radius:12px; font-size:11px; font-weight:700;';
-                                                    if ($isReviewer) $reviewerStyle .= ' font-weight:800; border-color:#1565c0;';
-                                                    ?>
-                                                    <?php if (!empty($c['reviewer_username'])): ?>
-                                                        <span class="badge" style="<?php echo $reviewerStyle; ?>">
-                                                            <?php echo htmlspecialchars($c['reviewer_username']); ?>
-                                                            <?php if ($isReviewer): ?><span style="margin-left:6px; color:#0d47a1; font-weight:800;">You</span><?php endif; ?>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span style="color:#999; font-size:0.85em;">Unassigned</span>
-                                                    <?php endif; ?>
-                                                </td>
+                                                    </td>
                                                 <?php endif; ?>
 
 
@@ -2870,8 +2880,7 @@ COALESCE(
 
                 // Parse completed IDs - these are the scheme IDs from the previous review
                 const completedIds = completedSchemeIds ?
-                    completedSchemeIds.split(',').map(s => s.trim()).filter(Boolean) :
-                    [];
+                    completedSchemeIds.split(',').map(s => s.trim()).filter(Boolean) : [];
 
                 const items = modifications.split(' | ');
                 let html = '<div class="scheme-list">';
