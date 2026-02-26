@@ -2712,35 +2712,38 @@
         });
     }
 
-    function renderSchemeModal(schemes) {
-        let html = '<div class="scheme-list">';
+function renderSchemeModal(schemes, completedIds) {
+    let html = '<div class="scheme-list">';
 
-        schemes.forEach(scheme => {
-            const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
+    schemes.forEach(scheme => {
+        const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
+        // Check if this scheme's ID is in the completedIds array
+        const isChecked = completedIds.includes(parseInt(scheme.id));
 
-            html += '<div class="scheme-item">';
-            html += `<input type="checkbox"
-                        class="scheme-checkbox"
-                        data-scheme-id="${scheme.id}"
-                        value="${scheme.scheme_name}-${scheme.action_step}">`;
+        html += '<div class="scheme-item">';
+        html += `<input type="checkbox"
+                    class="scheme-checkbox"
+                    data-scheme-id="${scheme.id}"
+                    value="${scheme.scheme_name}-${scheme.action_step}"
+                    ${isChecked ? 'checked' : ''}>`;  // Add checked attribute if ID is in completedIds
 
-            html += '<div class="scheme-details">';
-            html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
-            html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
+        html += '<div class="scheme-details">';
+        html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+        html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
 
-            if (scheme.recommended_scheme || scheme.recommended_amount) {
-                html += `<span class="scheme-recommended">
-                            → ${scheme.recommended_scheme || ''}
-                            ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}
-                        </span>`;
-            }
+        if (scheme.recommended_scheme || scheme.recommended_amount) {
+            html += `<span class="scheme-recommended">
+                        → ${scheme.recommended_scheme || ''}
+                        ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}
+                    </span>`;
+        }
 
-            html += '</div></div>';
-        });
+        html += '</div></div>';
+    });
 
-        html += '</div>';
-        document.getElementById('schemeModalContent').innerHTML = html;
-    }
+    html += '</div>';
+    document.getElementById('schemeModalContent').innerHTML = html;
+}
 
     function saveSchemeSelections() {
         const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
