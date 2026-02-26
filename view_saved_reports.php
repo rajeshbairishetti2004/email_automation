@@ -1891,9 +1891,22 @@ COALESCE(
             <div class="container">
 
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <a href="view_saved_reports.php?reset=1" class="btn btn-reset">Reset Filters</a>
+                    <!-- LEFT: Action buttons (reassign) -->
+                    <div class="action-icons-container">
+                        <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
+                            <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>"
+                                class="action-btn reassign-btn" title="Reassign Clients">
+                                <i class="fa-solid fa-user-group"></i>
+                                <span>Reassign</span>
+                            </a>
+                        <?php elseif ($deleteMode || $reassignMode): ?>
+                            <a href="view_saved_reports.php" class="cancel-action-btn">
+                                <i class="fa-solid fa-times"></i> Cancel
+                            </a>
+                        <?php endif; ?>
+                    </div>
 
-                    <!-- LEFT: Reassigned Summary -->
+                    <!-- CENTER: Reassigned Summary -->
                     <?php if ($showReassignedSummary && !empty($reassignedSummary)): ?>
                         <div class="dashboard-summary">
                             <div class="dashboard-summary-inner">
@@ -1928,23 +1941,9 @@ COALESCE(
                         </div>
                     <?php endif; ?>
 
-                    <!-- RIGHT: Action buttons -->
-                    <div class="action-icons-container">
-                        <?php if ($isAdmin && !$deleteMode && !$reassignMode): ?>
-                            <a href="?mode=reassign<?php echo $q ? '&q=' . urlencode($q) : ''; ?><?php echo $filter ? '&filter=' . urlencode($filter) : ''; ?><?php echo $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : ''; ?><?php echo $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : ''; ?><?php echo $sortBy ? '&sort=' . urlencode($sortBy) : ''; ?><?php echo $sortOrder !== 'DESC' ? '&order=' . strtolower($sortOrder) : ''; ?>"
-                                class="action-btn reassign-btn" title="Reassign Clients">
-                                <i class="fa-solid fa-user-group"></i>
-                                <span>Reassign</span>
-                            </a>
-                        <?php elseif ($deleteMode || $reassignMode): ?>
-                            <a href="view_saved_reports.php" class="cancel-action-btn">
-                                <i class="fa-solid fa-times"></i> Cancel
-                            </a>
-                        <?php endif; ?>
-                    </div>
-
+                    <!-- RIGHT: Reset button -->
+                    <a href="view_saved_reports.php?reset=1" class="btn btn-reset" >Reset Filters</a>
                 </div>
-
                 <div style="margin-bottom: 8px; font-weight:600; color:#1976d2;">
                     <?php
                     echo "Showing $totalDistinctNames client" . ($totalDistinctNames !== 1 ? "s" : "") . " for current filters.";
