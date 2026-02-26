@@ -1539,6 +1539,35 @@ COALESCE(
                 )
             ) AS prev_meeting_comments,
 
+            -- ── PREV SIP AMOUNT (from previous review record) ────────────
+COALESCE(
+    (
+        SELECT p.sip_amount_lakhs
+        FROM clients p
+        WHERE p.name = c.name
+        AND p.id != c.id
+        AND p.report_state != 'pending'
+        AND p.id < c.id
+        AND p.sip_amount_lakhs IS NOT NULL
+        AND p.sip_amount_lakhs > 0
+        ORDER BY
+            (p.report_state = 'sent') DESC,
+            p.id DESC
+        LIMIT 1
+    ),
+    (
+        SELECT ROUND(SUM(g.sip_swp) / 100000, 2)
+        FROM client_goals g
+        INNER JOIN clients p2 ON g.client_id = p2.id
+        WHERE p2.name = c.name
+        AND p2.id != c.id
+        AND p2.report_state != 'pending'
+        AND p2.id < c.id
+        ORDER BY p2.id DESC
+        LIMIT 1
+    )
+) AS prev_sip_amount_lakhs,
+
             creator.username  AS created_by_username,
             rm.username       AS rm_username,
             reviewer.username AS reviewer_username
@@ -2077,7 +2106,7 @@ COALESCE(
                                             ?>
                                             <th colspan="<?= $baseColCount ?>" style="background:#f9f9f9; border:none;"></th>
                                             <th colspan="6" class="th-section-current">Current Review</th>
-                                            <th colspan="5" class="th-section-prev">Last Review</th>
+                                            <th colspan="6" class="th-section-prev">Last Review</th>
 
                                             <th colspan="3" style="background:#f9f9f9; border:none;"></th>
                                         </tr>
@@ -2125,7 +2154,7 @@ COALESCE(
                                             </th>
 
                                             <!-- CURRENT REVIEW columns -->
-                                            <th class="col-current">SIP (Lakhs)</th>
+                                            <th class="col-current">SIP</th>
                                             <th class="col-current">Review Sent</th>
                                             <th class="col-current">Mtg Date</th>
                                             <th class="col-current">Modifications / Action</th>
@@ -2135,6 +2164,7 @@ COALESCE(
                                             <!-- <th class="col-current">Mtg Comments</th> -->
 
                                             <!-- LAST REVIEW columns (read-only) -->
+                                            <th class="col-prev">Prev SIP</th>
                                             <th class="col-prev">Last Review</th>
                                             <th class="col-prev">Last Meeting</th>
                                             <th class="col-prev">Prev Modifications</th>
@@ -2352,10 +2382,18 @@ COALESCE(
                                                 <!-- ════════════════════════════════════════
                                         LAST REVIEW — read-only, from previous record
                                         ════════════════════════════════════════ -->
-
+                                                <td class="col-prev" style="text-align:right; font-size:12px;">
+                                                    <?php
+                                                    $prevSip = $c['prev_sip_amount_lakhs'] ?? null;
+                                                    echo (!empty($prevSip) && (float)$prevSip > 0)
+                                                        ? number_format((float)$prevSip, 2) . ' L'
+                                                        : '<span style="color:#ccc;">—</span>';
+                                                    ?>
+                                                </td>
                                                 <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
                                                     <?= fmtDateTime($c['last_review_date'] ?? null) ?>
                                                 </td>
+
 
                                                 <td class="col-prev" style="white-space:nowrap; font-size:12px; line-height:1.5;">
                                                     <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
