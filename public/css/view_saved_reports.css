@@ -943,3 +943,60 @@ td.editable-cell {
 td.editable-cell.editing {
     background: #f9fbff;
 }
+
+
+/* =========================
+   THIN CUSTOM SCROLLBAR
+   ========================= */
+
+/* For Chrome, Edge, Safari */
+.main-scroll-container::-webkit-scrollbar {
+    width: 6px;   /* 👈 Reduce width here (default ~16px) */
+}
+
+.main-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* For Firefox */
+.main-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: gray transparent;
+}
+
+/* =========================
+   THIN HORIZONTAL SCROLLBAR
+   ========================= */
+
+/* Chrome, Edge, Safari */
+.table-scroll-wrapper::-webkit-scrollbar {
+    height: 6px;   /* 👈 controls horizontal scrollbar thickness */
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* Firefox */
+.table-scroll-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: lightgray transparent;
+}
