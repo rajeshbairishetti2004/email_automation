@@ -2139,9 +2139,11 @@ COALESCE(
                                                     AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
                                                 </a>
                                             </th>
+                                            <?php if ($isAdmin): ?>
                                             <th>Drafted By</th>
                                             <th>RM</th>
                                             <th>Review Assigned to</th>
+                                            <?php endif; ?>
                                             <th>
                                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=updated_at&order=<?= ($sortBy === 'updated_at' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?><?= $meetingFilter ? '&meeting_filter=' . urlencode($meetingFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
                                                     Last Updated <?= $sortBy === 'updated_at' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
@@ -2227,6 +2229,7 @@ COALESCE(
                                                 </td>
 
                                                 <!-- Drafted By -->
+                                                 <?php if ($isAdmin): ?>
                                                 <td>
                                                     <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
                                                     <?php if ($currState === 'pending'): ?>
@@ -2265,6 +2268,8 @@ COALESCE(
                                                         <span style="color:#999; font-size:0.85em;">Unassigned</span>
                                                     <?php endif; ?>
                                                 </td>
+                                                <?php endif; ?>
+
 
                                                 <!-- Last Updated -->
                                                 <td>
