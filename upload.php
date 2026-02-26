@@ -363,7 +363,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 <a href="view_saved_reports.php?owner_filter=<?= $filterParam ?>&filter=pending" class="stats-card card-red-outline">
                     <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
-                    <div class="label">Review Not Started</div>
+                    <div class="label">Not Started</div>
                     <div class="number" id="pendingCount"><?= (int)$viewStats['count_pending']; ?></div>
                 </a>
 
@@ -535,7 +535,7 @@ AND YEAR(meeting_date) = ?
 
                     <a href="view_saved_reports.php?<?= $prevQuery ?>&filter=pending" class="stats-card card-red-outline">
                         <span class="card-icon"><i class="fa-solid fa-hourglass-half"></i></span>
-                        <div class="label">Review Not Started</div>
+                        <div class="label">Not Started</div>
                         <div class="number" id="prevPendingCount"><?= $stats['count_pending']; ?></div>
                     </a>
 
