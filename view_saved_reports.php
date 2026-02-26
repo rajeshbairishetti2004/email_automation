@@ -233,7 +233,7 @@
                         review_sent_date,
                         meeting_date,
                         modifications_action,
-                        meeting_comments,
+                        meeting_remarks,
                         created_at,
                         updated_at,
                         CASE
@@ -283,7 +283,7 @@
                             $prev['last_review_datetime']  ?? null,
                             $prev['last_meeting_datetime'] ?? null,
                             $prev['modifications_action']  ?? null,
-                            $prev['meeting_comments']      ?? null,
+                           $prev['meeting_remarks']       ?? null,
                             $row['id'],
                         ]);
                     }
@@ -416,14 +416,7 @@
                 exit;
             }
 
-            // Block saves for sent reviews
-            $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
-            $checkState->execute([$clientId]);
-            $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
-            if ($stateRow && $stateRow['report_state'] === 'sent') {
-                echo json_encode(['success' => false, 'error' => 'This review has been sent and cannot be edited.']);
-                exit;
-            }
+
 
             // For date fields, allow empty → NULL
             $bindValue = ($value === '') ? null : $value;
@@ -525,15 +518,7 @@
                 exit;
             }
 
-            // Block edits for sent reviews
-            $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
-            $checkState->execute([$clientId]);
-            $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
 
-            if ($stateRow && $stateRow['report_state'] === 'sent') {
-                echo json_encode(['success' => false, 'error' => 'Sent rows cannot be edited.']);
-                exit;
-            }
 
             $completedIdsStr = !empty($selectedIds)
                 ? implode(',', $selectedIds)
@@ -576,12 +561,12 @@
 
             // Fetch previous reviews with meeting comments
             $stmt = $pdo->prepare("
-                SELECT id, meeting_comments, meeting_date, created_at, report_state
+                SELECT id, meeting_remarks AS meeting_comments, meeting_date, created_at, report_state
                 FROM clients
                 WHERE name = ?
                 AND id != ?
-                AND meeting_comments IS NOT NULL
-                AND meeting_comments != ''
+AND meeting_remarks IS NOT NULL
+                AND meeting_remarks != ''
                 AND report_state != 'pending'
                 ORDER BY created_at DESC
                 LIMIT 10
@@ -612,14 +597,6 @@
                 exit;
             }
 
-            // Check not sent
-            $checkState = $pdo->prepare("SELECT report_state FROM clients WHERE id = ? LIMIT 1");
-            $checkState->execute([$clientId]);
-            $stateRow = $checkState->fetch(PDO::FETCH_ASSOC);
-            if ($stateRow && $stateRow['report_state'] === 'sent') {
-                echo json_encode(['success' => false, 'error' => 'Sent rows cannot be recomputed.']);
-                exit;
-            }
 
             // Recompute SIP
             $sipStmt = $pdo->prepare("SELECT SUM(sip_swp) FROM client_goals WHERE client_id = ?");
@@ -892,7 +869,8 @@
                         review_sent_date,
                         meeting_date,
                         modifications_action,
-                        meeting_comments,
+meeting_comments,
+                        meeting_remarks,
                         updated_at,
                         created_at,
                         CASE
@@ -933,7 +911,7 @@
                 $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
                 $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
                 $prevModificationsAction = $lastReview['modifications_action']  ?? null;
-                $prevMeetingComments     = $lastReview['meeting_comments']      ?? null;
+               $prevMeetingComments     = $lastReview['meeting_remarks']       ?? null;
 
                 $insertClient->execute([
                     ':name'               => $clientName,
@@ -1509,31 +1487,51 @@
                 )
             ) AS last_meeting_date,
 
-            COALESCE(
-                c.prev_modifications_action,
-                (
-                    SELECT p.modifications_action
-                    FROM clients p
-                    WHERE p.name = c.name
-                    AND p.id != c.id
-                    AND p.report_state != 'pending'
-                    AND p.id < c.id
-                    ORDER BY
-                        (p.report_state = 'sent') DESC,
-                        p.id DESC
-                    LIMIT 1
-                )
-            ) AS prev_modifications_action,
+-- ── PREV MODIFICATIONS ACTION (string snapshot) ─────────────────
+COALESCE(
+    c.prev_modifications_action,
+    (
+        SELECT p.modifications_action
+        FROM clients p
+        WHERE p.name = c.name
+        AND p.id != c.id
+        AND p.report_state != 'pending'
+        AND p.id < c.id
+        AND p.modifications_action IS NOT NULL
+        AND p.modifications_action != ''
+        ORDER BY
+            (p.report_state = 'sent') DESC,
+            p.id DESC
+        LIMIT 1
+    )
+) AS prev_modifications_action,
 
-            COALESCE(
+-- ── PREV COMPLETED SCHEME IDS (for the modal checkboxes) ────────
+(
+    SELECT p.completed_scheme_ids
+    FROM clients p
+    WHERE p.name = c.name
+    AND p.id != c.id
+    AND p.report_state != 'pending'
+    AND p.id < c.id
+    AND p.completed_scheme_ids IS NOT NULL
+    ORDER BY
+        (p.report_state = 'sent') DESC,
+        p.id DESC
+    LIMIT 1
+) AS prev_completed_scheme_ids,
+
+COALESCE(
                 c.prev_meeting_comments,
                 (
-                    SELECT p.meeting_comments
+                    SELECT p.meeting_remarks
                     FROM clients p
                     WHERE p.name = c.name
                     AND p.id != c.id
                     AND p.report_state != 'pending'
                     AND p.id < c.id
+                    AND p.meeting_remarks IS NOT NULL
+                    AND p.meeting_remarks != ''
                     ORDER BY
                         (p.report_state = 'sent') DESC,
                         p.id DESC
@@ -2134,7 +2132,7 @@
                                             <th class="col-current">Modifications / Action</th>
                                                                                         <!-- Meeting status / remarks / action -->
                                             <th style="text-align:center; width:120px;">Meeting Status</th>
-                                            <th style="text-align:center; width:140px;">Meeting Remarks</th>
+                                            <th style="text-align:center; width:140px;">Meeting Comments</th>
                                             <!-- <th class="col-current">Mtg Comments</th> -->
 
                                             <!-- LAST REVIEW columns (read-only) -->
@@ -2158,7 +2156,7 @@
 
                                             // Determine if this row is sent (locked)
                                             $isSent = (($c['report_state'] ?? '') === 'sent');
-                                            $rowClass = $isSent ? 'row-sent' : '';
+                                            $rowClass = '';
 
                                             // Effective display values (stored takes priority, computed is fallback)
                                             $displaySip = $c['sip_amount_lakhs'] ?? '';
@@ -2188,9 +2186,7 @@
                                                         <?php if ($hasAttachments): ?>
                                                             <span title="Has Attachments">📎</span>
                                                         <?php endif; ?>
-                                                        <?php if ($isSent): ?>
-                                                            <span class="sent-lock-icon" title="Sent — read only"><i class="fa-solid fa-lock"></i></span>
-                                                        <?php endif; ?>
+
                                                     </div>
                                                 </td>
 
@@ -2270,74 +2266,50 @@
                                                     'draft'    => '<span class="badge badge-yellow">Draft</span>',
                                                     'ready'    => '<span class="badge badge-blue">Ready</span>',
                                                     'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
-                                                    'sent'     => '<span class="badge badge-green">Sent &#x1F512;</span>',
+                                                    'sent'     => '<span class="badge badge-green">Sent</span>',
                                                 ];
                                                 $statusHtml = $statusMap[$state] ?? '<span class="badge badge-grey">Unknown</span>';
                                                 ?>
                                                 <td><?php echo $statusHtml; ?></td>
 
+                                                <!-- SIP (Lakhs) — auto-filled from goals total -->
+<td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
+    <span class="display-val <?= (empty($displaySip) || (float)$displaySip == 0) ? 'placeholder-text' : '' ?>">
+        <?= (!empty($displaySip) && (float)$displaySip > 0) ? number_format((float)$displaySip, 2) . ' Lakh' : 'click to edit' ?>
+    </span>
+    <input type="number" step="0.01" value="<?= htmlspecialchars($displaySip ?? '') ?>">
+</td>
+
+
                                                 <!-- ════════════════════════════════════════
                                         CURRENT REVIEW — inline-editable (locked for sent)
                                         ════════════════════════════════════════ -->
 
-                                                <!-- SIP (Lakhs) — auto-filled from goals total -->
-                                                <?php if ($isSent): ?>
-                                                    <td class="col-current" style="font-size:13px; color:#555;">
-                                                        <?= !empty($displaySip) && (float)$displaySip > 0 ? number_format((float)$displaySip, 2) : '—' ?>
-                                                    </td>
-                                                <?php else: ?>
-                                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="sip_amount_lakhs" data-type="number">
-                                                        <span class="display-val <?= (empty($displaySip) || (float)$displaySip == 0) ? 'placeholder-text' : '' ?>">
-                                                            <?= (!empty($displaySip) && (float)$displaySip > 0) ? number_format((float)$displaySip, 2) . ' Lakh' : 'click to edit' ?>
-                                                        </span>
-                                                        <input type="number" step="0.01" value="<?= htmlspecialchars($displaySip ?? '') ?>">
-                                                    </td>
-                                                <?php endif; ?>
+<!-- Review Sent Date -->
+<td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
+    <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
+        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
+    </span>
+    <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
+</td>
 
-                                                <!-- Review Sent Date -->
-                                                <?php if ($isSent): ?>
-                                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
-                                                        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                                    </td>
-                                                <?php else: ?>
-                                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
-                                                        <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
-                                                            <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                                        </span>
-                                                        <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
-                                                    </td>
-                                                <?php endif; ?>
-
-                                                <!-- Meeting Date -->
-                                                <?php if ($isSent): ?>
-                                                    <td class="col-current" style="font-size:13px; color:#555; white-space:nowrap;">
-                                                        <?= fmtDate($c['meeting_date'], 'd-M') ?>
-                                                    </td>
-                                                <?php else: ?>
-                                                    <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
-                                                        <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
-                                                            <?= fmtDate($c['meeting_date'], 'd-M') ?>
-                                                        </span>
-                                                        <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
-                                                    </td>
-                                                <?php endif; ?>
+<!-- Meeting Date -->
+<td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
+    <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
+        <?= fmtDate($c['meeting_date'], 'd-M') ?>
+    </span>
+    <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
+</td>
 
                                                 <!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
-                                                <?php if ($isSent): ?>
-                                                    <td class="col-current" style="min-width: 300px; max-width: 400px; font-size:12px; color:#555; white-space: normal; word-wrap: break-word;">
-                                                        <?= !empty($displayMod) ? htmlspecialchars(extractActionsOnly($displayMod)) : '—' ?>
-                                                    </td>
-                                                <?php else: ?>
-                                                    <td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;"
-                                                        onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
-                                                        <?php if (!empty($displayMod)): ?>
-                                                            <?= htmlspecialchars(extractActionsOnly($displayMod)) ?>
-                                                            <span style="color:#0288D1; font-size:10px; margin-left:5px;"></span>
-                                                        <?php else: ?>
-                                                            <!-- <span class="placeholder-text">Click to select scheme changes</span> -->
-                                                        <?php endif; ?>
-                                                    </td>
-                                                <?php endif; ?>
+<!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
+<td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;"
+    onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
+    <?php if (!empty($displayMod)): ?>
+        <?= htmlspecialchars(extractActionsOnly($displayMod)) ?>
+        <span style="color:#0288D1; font-size:10px; margin-left:5px;"></span>
+    <?php endif; ?>
+</td>
 
                                                 <!-- Meeting Status dropdown -->
                                                 <td style="text-align:center;">
@@ -2345,33 +2317,37 @@
                                                         onchange="handleListMeetingChange(this, <?php echo $c['id']; ?>)"
                                                         class="meet-select"
                                                         id="meet_select_<?php echo $c['id']; ?>"
-                                                        <?= $isSent ? 'disabled title="Sent — read only"' : '' ?>>
+                                                        >
                                                         <option value="pending" <?php echo ($c['meeting_status'] === 'pending') ? 'selected' : ''; ?>>⏳ Pending</option>
                                                         <option value="yes" <?php echo ($c['meeting_status'] === 'yes')     ? 'selected' : ''; ?>>✅ Yes</option>
                                                         <option value="no" <?php echo ($c['meeting_status'] === 'no')      ? 'selected' : ''; ?>>❌ No</option>
                                                     </select>
                                                 </td>
 
-                                                <!-- Meeting Remarks button -->
-                                                <td style="text-align:center;">
-                                                    <?php if (!$isSent): ?>
-                                                        <button type="button"
-                                                            id="meet_btn_<?php echo $c['id']; ?>"
-                                                            class="meet-btn"
-                                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                                            style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                                            Remarks <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                                        </button>
-                                                    <?php elseif (!empty($c['meeting_remarks'])): ?>
-                                                        <span style="font-size:12px; color:#555;" title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
-                                                            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span style="color:#ccc; font-size:12px;">—</span>
-                                                    <?php endif; ?>
-                                                    <input type="hidden" id="remarks_store_<?php echo $c['id']; ?>" value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
-                                                </td>
+<td style="text-align:center; height:auto;">
 
+    <button type="button"
+        id="meet_btn_<?php echo $c['id']; ?>"
+        class="meet-btn"
+        onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+        style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
+        Comments <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
+    </button>
+
+    <?php if (!empty($c['meeting_remarks'])): ?>
+        <div style="margin-top:4px; font-size:12px; color:#555;"
+             title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
+            <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
+        </div>
+    <?php else: ?>
+        <div style="margin-top:4px; color:#ccc; font-size:12px;">—</div>
+    <?php endif; ?>
+
+    <input type="hidden"
+        id="remarks_store_<?php echo $c['id']; ?>"
+        value="<?php echo htmlspecialchars($c['meeting_remarks'] ?? ''); ?>">
+
+</td>
 
          
 
@@ -2387,33 +2363,36 @@
                                                     <?= fmtDateTime($c['last_meeting_date'] ?? null) ?>
                                                 </td>
 
-                                                <!-- Prev Modifications — clickable to view history -->
-                                                <td class="col-prev" style="max-width:160px; font-size:12px;">
-                                                    <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
-                                                    <?php if ($prevMod): ?>
-                                                        <span class="clickable-cell" onclick="viewModificationsHistory('<?= htmlspecialchars(addslashes($prevMod)) ?>')"
-                                                            style="cursor:pointer; display:block; padding:2px;" title="Click to view full details">
-                                                            <?= htmlspecialchars(mb_strimwidth($prevMod, 0, 40, '…')) ?>
-                                                            <span style="color:#0288D1; font-size:10px;">🔍</span>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span style="color:#ccc;">—</span>
-                                                    <?php endif; ?>
-                                                </td>
+<!-- Prev Modifications — opens read-only scheme-style modal -->
+<td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
+   onclick="openPrevModificationsModal('<?= htmlspecialchars(addslashes($c['prev_modifications_action'] ?? '')) ?>', '<?= htmlspecialchars($c['prev_completed_scheme_ids'] ?? '') ?>')">
+    <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
+    <?php if ($prevMod): ?>
+        <?= htmlspecialchars(extractActionsOnly($prevMod)) ?>
+        <span style="color:#0288D1; font-size:10px; margin-left:5px;">🔍</span>
+    <?php else: ?>
+        <span style="color:#ccc;">—</span>
+    <?php endif; ?>
+</td>
 
-                                                <!-- Prev Mtg Comments — clickable to open history modal -->
-                                                <td class="col-prev" style="max-width:160px; font-size:12px;">
-                                                    <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
-                                                    <?php if ($prevCmt): ?>
-                                                        <span class="clickable-cell" onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')"
-                                                            style="cursor:pointer; display:block; padding:2px;" title="Click to view meeting history">
-                                                            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
-                                                            <span style="color:#0288D1; font-size:10px;">📋</span>
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span style="color:#ccc;">—</span>
-                                                    <?php endif; ?>
-                                                </td>
+<!-- Prev Mtg Comments — same styling as current Meeting Comments cell -->
+<!-- Prev Mtg Comments — compact preview matching current Meeting Comments style -->
+<td class="col-prev" style="text-align:center; vertical-align:top; padding:8px;">
+    <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
+    <?php if ($prevCmt): ?>
+        <button type="button"
+            class="meet-btn"
+            onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')">
+            View History
+        </button>
+        <div style="margin-top:4px; font-size:12px; color:#555; text-align:left;"
+             title="<?= htmlspecialchars($prevCmt) ?>">
+            <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
+        </div>
+    <?php else: ?>
+        <div style="margin-top:4px; color:#ccc; font-size:12px;">—</div>
+    <?php endif; ?>
+</td>
 
                                                 <!-- View Previous Review -->
                                                 <td class="col-prev-review">
@@ -2503,15 +2482,17 @@
                     <div class="modal-header">
                         <div class="modal-icon">📝</div>
                         <div>
-                            <h3>Meeting Remarks</h3>
+                            <h3>Meeting Comments</h3>
                             <p>Enter details about the discussion</p>
                         </div>
                     </div>
                     <input type="hidden" id="current_modal_client_id">
-                    <textarea id="listModalRemarks" rows="5" placeholder="e.g., Client agreed to increase SIP, follow-up next month..."></textarea>
+<textarea id="listModalRemarks" 
+    placeholder="e.g., Client agreed to increase SIP, follow-up next month..."
+    style="width:100%; height:auto; min-height:80px; resize:none; box-sizing:border-box; overflow:hidden; border:1px solid #ddd; border-radius:6px; padding:10px; font-size:14px; line-height:1.6; font-family:inherit;"></textarea>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-reset" onclick="closeListMeetingModal()">Cancel</button>
-                        <button type="button" class="btn btn-search" onclick="saveListMeetingRemarks()">Save Remarks</button>
+                        <button type="button" class="btn btn-search" onclick="saveListMeetingRemarks()">Save Comments</button>
                     </div>
                 </div>
             </div>
@@ -2825,22 +2806,67 @@ function closeSchemeModal() {
             function closeMeetingHistoryModal() {
                 document.getElementById('meetingHistoryModal').style.display = 'none';
             }
+function openPrevModificationsModal(modifications, completedSchemeIds) {
+    const modal = document.getElementById('modificationsHistoryModal');
+    const content = document.getElementById('modificationsHistoryContent');
 
-            // ── MODIFICATIONS HISTORY MODAL ───────────────────────────
-            function viewModificationsHistory(modifications) {
-                const modal = document.getElementById('modificationsHistoryModal');
-                const content = document.getElementById('modificationsHistoryContent');
-                const items = modifications.split(' | ');
-                let html = '<div style="margin-bottom:15px;"><strong>Previous Modifications:</strong></div>';
-                html += '<ul style="list-style-type:none; padding:0;">';
-                items.forEach(item => {
-                    html += `<li style="padding:12px; margin-bottom:8px; background:#f5f5f5; border-radius:6px; border-left:3px solid #0288D1;">${item}</li>`;
-                });
-                html += '</ul>';
-                content.innerHTML = html;
-                modal.style.display = 'flex';
+    if (!modifications || modifications.trim() === '') {
+        content.innerHTML = '<div class="no-schemes-message">No previous modifications found.</div>';
+        modal.style.display = 'flex';
+        return;
+    }
+
+    const actionColors = {
+        'drop': '#f44336',
+        'switch': '#9c27b0',
+        'sip cancellation': '#ff5722',
+        'under observation': '#607d8b',
+        'partially redeem': '#795548',
+    };
+
+    // Parse completed IDs - these are the scheme IDs from the previous review
+    const completedIds = completedSchemeIds
+        ? completedSchemeIds.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+
+    const items = modifications.split(' | ');
+    let html = '<div class="scheme-list">';
+    
+    items.forEach((item, index) => {
+        const dashIdx = item.lastIndexOf('-');
+        const schemeName = dashIdx !== -1 ? item.substring(0, dashIdx).trim() : item.trim();
+        const actionStep = dashIdx !== -1 ? item.substring(dashIdx + 1).trim() : '';
+        const actionClass = actionStep.toLowerCase().replace(/\s+/g, '-');
+        const actionColor = actionColors[actionStep.toLowerCase()] || '#ff9800';
+
+        // Check if this scheme was completed - match by position since we don't have IDs
+        // The completed_scheme_ids from previous review should match the order
+        const isChecked = completedIds.length > index;
+
+        html += `<div class="scheme-item" style="${isChecked ? 'background:#e3f2fd;' : ''}">`;
+        html += `<input type="checkbox" class="scheme-checkbox" disabled ${isChecked ? 'checked' : ''} style="cursor:not-allowed; accent-color:#0288D1;">`;
+        html += '<div class="scheme-details">';
+        html += `<span class="scheme-name">${schemeName}</span>`;
+        html += `<span class="scheme-action ${actionClass}" style="background:${actionColor};">${actionStep}</span>`;
+        
+        // Add recommended info if it exists in the string
+        if (item.includes('→')) {
+            const recParts = item.split('→');
+            if (recParts.length > 1) {
+                html += `<span class="scheme-recommended">→ ${recParts[1].trim()}</span>`;
             }
+        }
+        
+        html += '</div>';
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    html += '<div style="margin-top:10px; font-size:12px; color:#999; text-align:right;">🔒 Read-only — previous review data</div>';
 
+    content.innerHTML = html;
+    modal.style.display = 'flex';
+}
             function closeModificationsHistoryModal() {
                 document.getElementById('modificationsHistoryModal').style.display = 'none';
             }
@@ -2973,14 +2999,22 @@ function closeSchemeModal() {
                 }
             }
 
-            function openListMeetingModal(clientId) {
-                const remarks = document.getElementById('remarks_store_' + clientId).value;
-                document.getElementById('current_modal_client_id').value = clientId;
-                document.getElementById('listModalRemarks').value = remarks;
-                document.getElementById('listMeetingModal').style.display = 'flex';
-                document.getElementById('listModalRemarks').focus();
-            }
-
+function openListMeetingModal(clientId) {
+    const remarks = document.getElementById('remarks_store_' + clientId).value;
+    document.getElementById('current_modal_client_id').value = clientId;
+    
+    const textarea = document.getElementById('listModalRemarks');
+    textarea.value = remarks;
+    
+    // Show modal FIRST so scrollHeight is measurable
+    document.getElementById('listMeetingModal').style.display = 'flex';
+    
+    // Reset then expand to fit all content
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+    
+    textarea.focus();
+}
             function closeListMeetingModal() {
                 document.getElementById('listMeetingModal').style.display = 'none';
             }
@@ -3024,39 +3058,50 @@ function closeSchemeModal() {
                     });
             }
 
-            // ── CLIENT SEARCH AUTOCOMPLETE ───────────────────────────────
-            document.addEventListener('DOMContentLoaded', function() {
-                const input = document.getElementById('client-search');
-                const dropdown = document.getElementById('client-search-dropdown');
-                if (!input) return;
+// ── CLIENT SEARCH AUTOCOMPLETE ───────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.getElementById('client-search');
+    const dropdown = document.getElementById('client-search-dropdown');
+    if (!input) return;
 
-                input.addEventListener('input', function() {
-                    const val = input.value.trim();
-                    if (val.length < 1) {
-                        dropdown.style.display = 'none';
-                        dropdown.innerHTML = '';
-                        return;
-                    }
-                    fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.length > 0) {
-                                dropdown.innerHTML = data.map(name =>
-                                    `<div style="padding:8px 12px;cursor:pointer;"
-                                    onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
-                                ).join('');
-                                dropdown.style.display = 'block';
-                            } else {
-                                dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
-                                dropdown.style.display = 'block';
-                            }
-                        });
-                });
-
-                document.addEventListener('click', function(e) {
-                    if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
-                });
+    input.addEventListener('input', function() {
+        const val = input.value.trim();
+        if (val.length < 1) {
+            dropdown.style.display = 'none';
+            dropdown.innerHTML = '';
+            return;
+        }
+        fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
+            .then(res => res.json())
+            .then(data => {
+                if (data.length > 0) {
+                    dropdown.innerHTML = data.map(name =>
+                        `<div style="padding:8px 12px;cursor:pointer;"
+                        onmousedown="selectClientName('${name.replace(/'/g,"\\'")}')">${name}</div>`
+                    ).join('');
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.innerHTML = '<div style="padding:8px 12px;color:#888;">No clients found</div>';
+                    dropdown.style.display = 'block';
+                }
             });
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
+    });
+}); // ← search autocomplete block ends here
+
+// ── TEXTAREA AUTO-RESIZE ─────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('listModalRemarks');
+    if (textarea) {
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+    }
+});
 
             function selectClientName(name) {
                 document.getElementById('client-search').value = name;
