@@ -248,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // --- AUM CLEANING & CRORE CONVERSION ---
                 $cleanAumVal = preg_replace('/[^-0-9.]/', '', (string)$rawAum);
                 $numericAum  = (float)$cleanAumVal;
-                $aumInCrores = $numericAum; // Conversion Logic
+               $aumInCrores = $numericAum > 0 ? round($numericAum / 10000000, 4) : 0; // ← FIXED
 
                 $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
 
