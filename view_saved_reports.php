@@ -202,6 +202,79 @@
     // client name. This fixes records created before the snapshot
     // logic was added. Runs only on GET (page load), not on POST.
     // ============================================================
+
+    // ============================================================
+// AJAX: Save scheme selections from modal
+// ============================================================
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['action'])
+    && $_POST['action'] === 'save_scheme_selections'
+) {
+    header('Content-Type: application/json');
+    try {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
+        
+        if (!$clientId) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+            exit;
+        }
+
+        // Convert to comma-separated string of integers
+        $completedIds = array_filter(array_map('intval', $selectedIds));
+        $completedIdsStr = implode(',', $completedIds);
+
+        // Update the clients table with completed_scheme_ids
+        $updateStmt = $pdo->prepare("
+            UPDATE clients 
+            SET completed_scheme_ids = ?,
+                updated_at = updated_at
+            WHERE id = ?
+        ");
+        $updateStmt->execute([$completedIdsStr ?: null, $clientId]);
+
+        // Recompute modifications_action from client_schemes
+        $modStmt = $pdo->prepare("
+            SELECT scheme_name, action_step
+            FROM client_schemes
+            WHERE client_id = ?
+            AND action_step != 'Continue'
+            AND action_step != ''
+            AND scheme_name != ''
+            ORDER BY id ASC
+        ");
+        $modStmt->execute([$clientId]);
+        $schemeRows = $modStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $parts = [];
+        foreach ($schemeRows as $sr) {
+            $parts[] = trim($sr['scheme_name']) . '-' . trim($sr['action_step']);
+        }
+        $modificationsAction = implode(' | ', $parts);
+
+        // Update modifications_action
+        $updateModStmt = $pdo->prepare("
+            UPDATE clients
+            SET modifications_action = ?,
+                updated_at = updated_at
+            WHERE id = ?
+        ");
+        $updateModStmt->execute([$modificationsAction ?: null, $clientId]);
+
+        echo json_encode([
+            'success' => true,
+            'modifications_action' => $modificationsAction,
+            'completed_ids' => $completedIds
+        ]);
+    } catch (Throwable $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
     if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
         try {
             // Find all rows missing snapshot data that have a prior record
@@ -499,51 +572,77 @@
     // ============================================================
     // AJAX: Save scheme changes selections from modal
     // ============================================================
-    if (
-        $_SERVER['REQUEST_METHOD'] === 'POST'
-        && isset($_POST['action'])
-        && $_POST['action'] === 'save_scheme_selections'
-    ) {
-
-        header('Content-Type: application/json');
-
-        try {
-            $clientId = (int)($_POST['client_id'] ?? 0);
-            $selectedIds = $_POST['selected_ids'] ?? [];
-            $selectedIds = array_filter(array_map('intval', (array)$selectedIds));
-
-            if (!$clientId) {
-                echo json_encode(['success' => false, 'error' => 'Invalid client id']);
-                exit;
-            }
-
-
-
-            $completedIdsStr = !empty($selectedIds)
-                ? implode(',', $selectedIds)
-                : null;
-
-            $updateStmt = $pdo->prepare("
-                UPDATE clients
-                SET completed_scheme_ids = ?,
-                    updated_at = updated_at
-                WHERE id = ?
-            ");
-            $updateStmt->execute([$completedIdsStr, $clientId]);
-
-            echo json_encode([
-                'success' => true,
-                'completed_ids' => $selectedIds
-            ]);
-            exit;
-        } catch (Throwable $e) {
-            echo json_encode([
-                'success' => false,
-                'error' => $e->getMessage()
-            ]);
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['action'])
+    && $_POST['action'] === 'fetch_prev_scheme_changes'
+) {
+    header('Content-Type: application/json');
+    try {
+        $clientId = (int)($_POST['client_id'] ?? 0);
+        if (!$clientId) {
+            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
             exit;
         }
+
+        // Get client name and find previous record
+        $nameStmt = $pdo->prepare("SELECT name FROM clients WHERE id = ? LIMIT 1");
+        $nameStmt->execute([$clientId]);
+        $clientName = $nameStmt->fetchColumn();
+
+        if (!$clientName) {
+            echo json_encode(['success' => false, 'error' => 'Client not found']);
+            exit;
+        }
+
+        // Find the previous review record
+        $prevStmt = $pdo->prepare("
+            SELECT id, completed_scheme_ids
+            FROM clients
+            WHERE name = ?
+            AND id < ?
+            AND report_state != 'pending'
+            ORDER BY (report_state = 'sent') DESC, id DESC
+            LIMIT 1
+        ");
+        $prevStmt->execute([$clientName, $clientId]);
+        $prevRecord = $prevStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$prevRecord) {
+            echo json_encode(['success' => true, 'schemes' => [], 'completed_ids' => []]);
+            exit;
+        }
+
+        // Fetch actual schemes from the previous record
+        $schemesStmt = $pdo->prepare("
+            SELECT id, scheme_name, action_step, recommended_scheme, recommended_amount
+            FROM client_schemes
+            WHERE client_id = ?
+            AND action_step != 'Continue'
+            AND action_step != ''
+            AND scheme_name != ''
+            ORDER BY id ASC
+        ");
+        $schemesStmt->execute([$prevRecord['id']]);
+        $schemes = $schemesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Parse completed IDs
+        $completedIds = array_filter(array_map(
+            'intval',
+            explode(',', $prevRecord['completed_scheme_ids'] ?: '')
+        ));
+
+        echo json_encode([
+            'success' => true,
+            'schemes' => $schemes,
+            'completed_ids' => array_values($completedIds)
+        ]);
+        exit;
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        exit;
     }
+}
     // ============================================================
     // AJAX: Fetch historical meeting comments for Prev Mtg Comments modal
     // ============================================================
@@ -2436,8 +2535,8 @@ COALESCE(
                                                 </td>
 
                                                 <!-- Prev Modifications — opens read-only scheme-style modal -->
-                                                <td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
-                                                    onclick="openPrevModificationsModal('<?= htmlspecialchars(addslashes($c['prev_modifications_action'] ?? '')) ?>', '<?= htmlspecialchars($c['prev_completed_scheme_ids'] ?? '') ?>')">
+<td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
+    onclick="openPrevModificationsModal(<?= (int)$c['id'] ?>)">
                                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                                     <?php if ($prevMod): ?>
                                                         <?= htmlspecialchars(extractActionsOnly($prevMod)) ?>
@@ -2772,61 +2871,76 @@ COALESCE(
                     });
             }
 
-            function renderSchemeModal(schemes, completedIds) {
-                let html = '<div class="scheme-list">';
-                schemes.forEach(scheme => {
-                    const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
-                    const isChecked = completedIds.includes(parseInt(scheme.id));
-                    html += '<div class="scheme-item">';
-                    html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${scheme.scheme_name}-${scheme.action_step}" ${isChecked ? 'checked' : ''}>`;
-                    html += '<div class="scheme-details">';
-                    html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
-                    html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
-                    if (scheme.recommended_scheme || scheme.recommended_amount) {
-                        html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
-                    }
-                    html += '</div></div>';
-                });
-                html += '</div>';
-                document.getElementById('schemeModalContent').innerHTML = html;
-            }
-
-            function saveSchemeSelections() {
-                const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
-                const formData = new URLSearchParams();
-                formData.append('action', 'save_scheme_selections');
-                formData.append('client_id', currentClientId);
-                checkboxes.forEach(cb => {
-                    formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
-                });
-                fetch('view_saved_reports.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: formData
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
-                            if (row) {
-                                const modCell = row.querySelector('td.col-current.clickable-cell');
-                                if (modCell) {
-                                    modCell.innerHTML = data.modifications_action ?
-                                        data.modifications_action + ' <span style="color:#0288D1;font-size:10px;">✎</span>' :
-                                        '';
-                                }
-                            }
-                            closeSchemeModal();
-                            showToast('Scheme selections saved!');
+function renderSchemeModal(schemes, completedIds) {
+    let html = '<div class="scheme-list">';
+    schemes.forEach(scheme => {
+        const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
+        // Use scheme.id directly for checking completion status
+        const isChecked = completedIds.includes(parseInt(scheme.id));
+        
+        html += '<div class="scheme-item">';
+        html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${scheme.scheme_name}-${scheme.action_step}" ${isChecked ? 'checked' : ''}>`;
+        html += '<div class="scheme-details">';
+        html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+        html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
+        if (scheme.recommended_scheme || scheme.recommended_amount) {
+            html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
+        }
+        html += '</div></div>';
+    });
+    html += '</div>';
+    document.getElementById('schemeModalContent').innerHTML = html;
+}
+function saveSchemeSelections() {
+    const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
+    const formData = new URLSearchParams();
+    formData.append('action', 'save_scheme_selections');
+    formData.append('client_id', currentClientId);
+    
+    checkboxes.forEach(cb => {
+        formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
+    });
+    
+    fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
+                if (row) {
+                    const modCell = row.querySelector('td.col-current.clickable-cell');
+                    if (modCell) {
+                        if (data.modifications_action) {
+                            // Extract only action parts (e.g. "Switch | Drop") for display
+                            const actionsOnly = data.modifications_action
+                                .split(' | ')
+                                .map(item => {
+                                    const parts = item.split('-');
+                                    return parts[parts.length - 1].trim();
+                                })
+                                .join(' | ');
+                            modCell.innerHTML = actionsOnly;
                         } else {
-                            alert('Save failed: ' + (data.error || 'Unknown error'));
+                            modCell.innerHTML = '';
                         }
-                    })
-                    .catch(() => alert('Network error while saving selections'));
+                        // Update onclick so re-opening reflects latest state
+                        modCell.setAttribute('onclick', `openSchemeModal(${currentClientId})`);
+                    }
+                }
+                closeSchemeModal();
+                showToast('Scheme selections saved!');
+            } else {
+                alert('Save failed: ' + (data.error || 'Unknown error'));
             }
-
+        })
+        .catch(err => {
+            console.error('Network error:', err);
+            alert('Network error while saving selections');
+        });
+}
             function closeSchemeModal() {
                 document.getElementById('schemeModal').style.display = 'none';
                 currentClientId = null;
@@ -2881,66 +2995,71 @@ COALESCE(
                 document.getElementById('meetingHistoryModal').style.display = 'none';
             }
 
-            function openPrevModificationsModal(modifications, completedSchemeIds) {
-                const modal = document.getElementById('modificationsHistoryModal');
-                const content = document.getElementById('modificationsHistoryContent');
+function openPrevModificationsModal(clientId) {
+    const modal = document.getElementById('modificationsHistoryModal');
+    const content = document.getElementById('modificationsHistoryContent');
 
-                if (!modifications || modifications.trim() === '') {
-                    content.innerHTML = '<div class="no-schemes-message">No previous modifications found.</div>';
-                    modal.style.display = 'flex';
-                    return;
-                }
+    content.innerHTML = '<div style="text-align:center; padding:20px;">Loading previous modifications...</div>';
+    modal.style.display = 'flex';
 
-                const actionColors = {
-                    'drop': '#f44336',
-                    'switch': '#9c27b0',
-                    'sip cancellation': '#ff5722',
-                    'under observation': '#607d8b',
-                    'partially redeem': '#795548',
-                };
+    const actionColors = {
+        'drop': '#f44336',
+        'switch': '#9c27b0',
+        'sip cancellation': '#ff5722',
+        'under observation': '#607d8b',
+        'partially redeem': '#795548',
+    };
 
-                // Parse completed IDs - these are the scheme IDs from the previous review
-                const completedIds = completedSchemeIds ?
-                    completedSchemeIds.split(',').map(s => s.trim()).filter(Boolean) : [];
-
-                const items = modifications.split(' | ');
-                let html = '<div class="scheme-list">';
-
-                items.forEach((item, index) => {
-                    const dashIdx = item.lastIndexOf('-');
-                    const schemeName = dashIdx !== -1 ? item.substring(0, dashIdx).trim() : item.trim();
-                    const actionStep = dashIdx !== -1 ? item.substring(dashIdx + 1).trim() : '';
-                    const actionClass = actionStep.toLowerCase().replace(/\s+/g, '-');
-                    const actionColor = actionColors[actionStep.toLowerCase()] || '#ff9800';
-
-                    // Check if this scheme was completed - match by position since we don't have IDs
-                    // The completed_scheme_ids from previous review should match the order
-                    const isChecked = completedIds.length > index;
-
-                    html += `<div class="scheme-item" style="${isChecked ? 'background:#e3f2fd;' : ''}">`;
-                    html += `<input type="checkbox" class="scheme-checkbox" disabled ${isChecked ? 'checked' : ''} style="cursor:not-allowed; accent-color:#0288D1;">`;
-                    html += '<div class="scheme-details">';
-                    html += `<span class="scheme-name">${schemeName}</span>`;
-                    html += `<span class="scheme-action ${actionClass}" style="background:${actionColor};">${actionStep}</span>`;
-
-                    // Add recommended info if it exists in the string
-                    if (item.includes('→')) {
-                        const recParts = item.split('→');
-                        if (recParts.length > 1) {
-                            html += `<span class="scheme-recommended">→ ${recParts[1].trim()}</span>`;
-                        }
-                    }
-
-                    html += '</div>';
-                    html += '</div>';
-                });
-
-                html += '</div>';
-                html += '<div style="margin-top:10px; font-size:12px; color:#999; text-align:right;">🔒 Read-only — previous review data</div>';
-
-                content.innerHTML = html;
-                modal.style.display = 'flex';
+    fetch('view_saved_reports.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'fetch_prev_scheme_changes',
+                client_id: clientId
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                content.innerHTML = '<div class="no-schemes-message">Error loading previous modifications.</div>';
+                return;
             }
+            if (!data.schemes || data.schemes.length === 0) {
+                content.innerHTML = '<div class="no-schemes-message">No previous modifications found.</div>';
+                return;
+            }
+
+            // completedIds = array of integers (scheme IDs that were checked in prev review)
+            const completedIds = Array.isArray(data.completed_ids)
+                ? data.completed_ids.map(id => parseInt(id, 10))
+                : [];
+
+            let html = '<div class="scheme-list">';
+            data.schemes.forEach(scheme => {
+                const actionStep = scheme.action_step || '';
+                const actionClass = actionStep.toLowerCase().replace(/\s+/g, '-');
+                const actionColor = actionColors[actionStep.toLowerCase()] || '#ff9800';
+                // Exact ID match — 100% accurate
+                const isChecked = completedIds.includes(parseInt(scheme.id));
+
+                html += `<div class="scheme-item" style="${isChecked ? 'background:#e3f2fd;' : ''}">`;
+                html += `<input type="checkbox" class="scheme-checkbox" disabled ${isChecked ? 'checked' : ''} style="cursor:not-allowed; accent-color:#0288D1;">`;
+                html += '<div class="scheme-details">';
+                html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+                html += `<span class="scheme-action ${actionClass}" style="background:${actionColor};">${actionStep}</span>`;
+                if (scheme.recommended_scheme || scheme.recommended_amount) {
+                    html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+            html += '<div style="margin-top:10px; font-size:12px; color:#999; text-align:right;">🔒 Read-only — previous review data</div>';
+            content.innerHTML = html;
+        })
+        .catch(() => {
+            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading previous modifications.</div>';
+        });
+}
 
             function closeModificationsHistoryModal() {
                 document.getElementById('modificationsHistoryModal').style.display = 'none';
