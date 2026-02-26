@@ -381,7 +381,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 <a href="view_saved_reports.php?owner_filter=<?= $filterParam ?>&filter=reviewed" class="stats-card card-teal">
                     <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                    <div class="label">Concerned Given</div>
+                    <div class="label">Consent Given</div>
                     <div class="number" id="reviewedCount"><?= (int)$viewStats['count_reviewed']; ?></div>
                 </a>
 
@@ -553,7 +553,7 @@ AND YEAR(meeting_date) = ?
 
                     <a href="view_saved_reports.php?<?= $prevQuery ?>&filter=reviewed" class="stats-card card-teal">
                         <span class="card-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                        <div class="label">Concerned Given</div>
+                        <div class="label">Consent Given</div>
                         <div class="number" id="prevReviewedCount"><?= $stats['count_reviewed']; ?></div>
                     </a>
 
