@@ -2265,7 +2265,7 @@ COALESCE(
                                             </th>
                                             <th>
                                                 <a href="?<?= $deleteMode ? 'mode=delete&' : ($reassignMode ? 'mode=reassign&' : '') ?>sort=aum&order=<?= ($sortBy === 'aum' && $sortOrder === 'DESC') ? 'asc' : 'desc' ?><?= $q ? '&q=' . urlencode($q) : '' ?><?= $filter ? '&filter=' . urlencode($filter) : '' ?><?= $ownerFilter ? '&owner_filter=' . urlencode($ownerFilter) : '' ?><?= $cycleFilter ? '&cycle_filter=' . urlencode($cycleFilter) : '' ?><?= $meetingFilter ? '&meeting_filter=' . urlencode($meetingFilter) : '' ?>" style="color:#333;text-decoration:none;display:flex;align-items:center;gap:4px;">
-                                                    AUM (Cr) <?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
+                                                    AUM<?= $sortBy === 'aum' ? ($sortOrder === 'ASC' ? '↑' : '↓') : '' ?>
                                                 </a>
                                             </th>
 
@@ -2352,11 +2352,21 @@ COALESCE(
                                                 </td>
 
                                                 <!-- AUM -->
-                                                <td>
-                                                    <span style="font-weight:600; color:#1976d2;">
-                                                        ₹<?= number_format((float)($c['aum'] ?? 0), 2); ?> Cr
-                                                    </span>
-                                                </td>
+<!-- AUM -->
+<td>
+    <span style="font-weight:600; color:#1976d2;">
+        <?php 
+        $aumValue = (float)($c['aum'] ?? 0);
+        if ($aumValue < 1) {
+            // Convert to lakhs (1 crore = 100 lakhs)
+            $lakhsValue = $aumValue * 100;
+            echo '₹' . number_format($lakhsValue, 2) . ' L';
+        } else {
+            echo '₹' . number_format($aumValue, 2) . ' Cr';
+        }
+        ?>
+    </span>
+</td>
 
                                                 <!-- Drafted By -->
                                                 <?php if ($isAdmin): ?>
