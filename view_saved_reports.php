@@ -2729,120 +2729,63 @@
             `;
                     });
             }
-
 function renderSchemeModal(schemes, completedIds) {
     let html = '<div class="scheme-list">';
-
     schemes.forEach(scheme => {
         const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
-        // Check if this scheme's ID is in the completedIds array
         const isChecked = completedIds.includes(parseInt(scheme.id));
-
         html += '<div class="scheme-item">';
-        html += `<input type="checkbox"
-                    class="scheme-checkbox"
-                    data-scheme-id="${scheme.id}"
-                    value="${scheme.scheme_name}-${scheme.action_step}"
-                    ${isChecked ? 'checked' : ''}>`;  // Add checked attribute if ID is in completedIds
-
+        html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${scheme.scheme_name}-${scheme.action_step}" ${isChecked ? 'checked' : ''}>`;
         html += '<div class="scheme-details">';
         html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
         html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
-
         if (scheme.recommended_scheme || scheme.recommended_amount) {
-            html += `<span class="scheme-recommended">
-                        → ${scheme.recommended_scheme || ''}
-                        ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}
-                    </span>`;
+            html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
         }
-
         html += '</div></div>';
     });
-
     html += '</div>';
     document.getElementById('schemeModalContent').innerHTML = html;
 }
 
-    function saveSchemeSelections() {
-        const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
-
-        const formData = new URLSearchParams();
-        formData.append('action', 'save_scheme_selections');
-        formData.append('client_id', currentClientId);
-
-        checkboxes.forEach(cb => {
-            formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
-        });
-
-        fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
-                if (row) {
-                    const modCell = row.querySelector('td.col-current.clickable-cell');
-                    if (modCell) {
-                        modCell.innerHTML = data.modifications_action
-                            ? data.modifications_action + ' <span style="color:#0288D1;font-size:10px;">✎</span>'
-                            : '';
-                    }
-
-                    html += '</div></div>';
-                });
-
-                html += '</div>';
-                document.getElementById('schemeModalContent').innerHTML = html;
+function saveSchemeSelections() {
+    const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
+    const formData = new URLSearchParams();
+    formData.append('action', 'save_scheme_selections');
+    formData.append('client_id', currentClientId);
+    checkboxes.forEach(cb => {
+        formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
+    });
+    fetch('view_saved_reports.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
+            if (row) {
+                const modCell = row.querySelector('td.col-current.clickable-cell');
+                if (modCell) {
+                    modCell.innerHTML = data.modifications_action
+                        ? data.modifications_action + ' <span style="color:#0288D1;font-size:10px;">✎</span>'
+                        : '';
+                }
             }
+            closeSchemeModal();
+            showToast('Scheme selections saved!');
+        } else {
+            alert('Save failed: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(() => alert('Network error while saving selections'));
+}
 
-            function saveSchemeSelections() {
-                const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
-
-                const formData = new URLSearchParams();
-                formData.append('action', 'save_scheme_selections');
-                formData.append('client_id', currentClientId);
-
-                checkboxes.forEach(cb => {
-                    formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
-                });
-
-                fetch('view_saved_reports.php', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: formData
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.success) {
-                            const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
-                            if (row) {
-                                const modCell = row.querySelector('td.col-current.clickable-cell');
-                                if (modCell) {
-                                    modCell.innerHTML = data.modifications_action ?
-                                        data.modifications_action + ' <span style="color:#0288D1;font-size:10px;">✎</span>' :
-                                        '';
-                                }
-                            }
-                            closeSchemeModal();
-                            showToast('Scheme selections saved!');
-                        } else {
-                            alert('Save failed: ' + (data.error || 'Unknown error'));
-                        }
-                    })
-                    .catch(() => alert('Network error while saving selections'));
-            }
-
-            function closeSchemeModal() {
-                document.getElementById('schemeModal').style.display = 'none';
-                currentClientId = null;
-            }
+function closeSchemeModal() {
+    document.getElementById('schemeModal').style.display = 'none';
+    currentClientId = null;
+}
 
             // ── MEETING HISTORY MODAL ─────────────────────────────────
             function openMeetingHistoryModal(clientId, clientName) {
