@@ -557,3 +557,27 @@ body {
 .modal-content::-webkit-scrollbar-thumb:hover {
     background: #64748b;
 }
+
+/* Thin scrollbar for main scroll area */
+.main-scroll-container::-webkit-scrollbar {
+    width: 4px;   /* thinner */
+}
+
+.main-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.6);
+    border-radius: 10px;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(71, 85, 105, 0.8);
+}
+
+/* Firefox */
+.main-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100,116,139,0.6) transparent;
+}

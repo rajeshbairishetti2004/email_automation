@@ -29,37 +29,40 @@ if ($username !== 'admin') {
 $currentPage = basename($_SERVER['PHP_SELF']);
 
 // Add this for role check
-function isRelationshipManager($designation) {
+function isRelationshipManager($designation)
+{
     return (stripos($designation, 'relationship manager') !== false) &&
-           (stripos($designation, 'associate') === false);
+        (stripos($designation, 'associate') === false);
 }
 
-function getCurrentMonthYear() {
+function getCurrentMonthYear()
+{
     return date('M Y'); // e.g., "Jan 2026"
 }
 
 // Modified logAllocation function to return allocation_id
-function logAllocation($pdo, $userId, $monthYear, $targetTag, $summary, $fileName = null) {
+function logAllocation($pdo, $userId, $monthYear, $targetTag, $summary, $fileName = null)
+{
     try {
-$stmt = $pdo->prepare("
+        $stmt = $pdo->prepare("
     INSERT INTO allocation_log 
     (user_id, month_year, target_tag, file_name, clients_count, 
      assigned_count, unassigned_count, inserted_count, updated_count) 
     VALUES (:user_id, :month_year, :target_tag, :file_name, :clients_count,
             :assigned_count, :unassigned_count, :inserted_count, :updated_count)
 ");
-        
-$stmt->execute([
-    ':user_id' => $userId,
-    ':month_year' => $monthYear,    
-    ':target_tag' => $targetTag,
-    ':file_name' => $fileName,
-    ':clients_count' => $summary['processed'],
-    ':assigned_count' => $summary['assigned'],
-    ':unassigned_count' => $summary['unassigned'],  // Add this
-    ':inserted_count' => $summary['inserted'],
-    ':updated_count' => $summary['updated']
-]);
+
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':month_year' => $monthYear,
+            ':target_tag' => $targetTag,
+            ':file_name' => $fileName,
+            ':clients_count' => $summary['processed'],
+            ':assigned_count' => $summary['assigned'],
+            ':unassigned_count' => $summary['unassigned'],  // Add this
+            ':inserted_count' => $summary['inserted'],
+            ':updated_count' => $summary['updated']
+        ]);
         // Return the allocation ID
         return $pdo->lastInsertId();
     } catch (Exception $e) {
@@ -138,14 +141,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
         try {
             // NEW: Create allocation log entry BEFORE processing
-$allocationId = logAllocation(
-    $pdo,
-    $currentUserId,
-    $monthYear,
-    $targetTag,
-    ['processed' => 0, 'assigned' => 0, 'unassigned' => 0, 'inserted' => 0, 'updated' => 0],
-    $fileName
-);
+            $allocationId = logAllocation(
+                $pdo,
+                $currentUserId,
+                $monthYear,
+                $targetTag,
+                ['processed' => 0, 'assigned' => 0, 'unassigned' => 0, 'inserted' => 0, 'updated' => 0],
+                $fileName
+            );
 
             if (!$allocationId) {
                 throw new Exception("Failed to create allocation log entry");
@@ -156,7 +159,7 @@ $allocationId = logAllocation(
             $rows = $sheet->toArray(null, true, true, true);
 
             // NEW: Prepare statements with allocation_id (UPDATED VERSION)
-            
+
             // Check if client exists in any month (for reference)
             $checkPrevStmt = $pdo->prepare("
                 SELECT id, email, assigned_to, review_cycle, aum, priority 
@@ -164,7 +167,7 @@ $allocationId = logAllocation(
                 WHERE name = :name 
                 ORDER BY created_at DESC LIMIT 1
             ");
-            
+
             // NEW: Check for exact duplicates (same name, month, allocation)
             $checkDuplicateStmt = $pdo->prepare("
                 SELECT id FROM clients 
@@ -173,7 +176,7 @@ $allocationId = logAllocation(
                 AND allocation_id = :allocation_id 
                 LIMIT 1
             ");
-            
+
             // ALWAYS INSERT - never update
             $insertStmt = $pdo->prepare("
                 INSERT INTO clients 
@@ -184,7 +187,7 @@ $allocationId = logAllocation(
                         :cycle, 'pending', NOW(), :creator, :month_year, 
                         :original_id, :allocation_id, 1)
             ");
-            
+
             // Update is_latest for previous records of this client
             $updatePreviousLatestStmt = $pdo->prepare("
                 UPDATE clients 
@@ -232,12 +235,12 @@ $allocationId = logAllocation(
                 $revKey       = strtolower($rawReviewer);
 
                 if (!empty($rmKey) && isset($allUsers[$rmKey])) {
-                    $assignedToId = $allUsers[$rmKey];  
+                    $assignedToId = $allUsers[$rmKey];
                     $summary['assigned']++;
                 } else {
                     $summary['unassigned']++;
                 }
-                
+
                 if (!empty($revKey) && isset($allUsers[$revKey])) {
                     $reviewerId = $allUsers[$revKey];
                 }
@@ -250,7 +253,7 @@ $allocationId = logAllocation(
                 $reviewCycleValue = !empty($rawTag) ? strtoupper($rawTag) : null;
 
                 // --- NEW LOGIC: Always create new record ---
-                
+
                 // Check for exact duplicates first
                 $checkDuplicateStmt->execute([
                     ':name' => $rawName,
@@ -258,28 +261,28 @@ $allocationId = logAllocation(
                     ':allocation_id' => $allocationId
                 ]);
                 $duplicateExists = $checkDuplicateStmt->fetchColumn();
-                
+
                 if ($duplicateExists) {
                     // Skip if exact duplicate already exists (same allocation)
                     $summary['duplicates']++;
                     continue;
                 }
-                
+
                 // Check if client exists in any previous record (for reference)
                 $checkPrevStmt->execute([':name' => $rawName]);
                 $previousClient = $checkPrevStmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 // Get previous client's info for continuity
                 $clientEmail = null;
                 $originalClientId = null;
                 if ($previousClient) {
                     $clientEmail = $previousClient['email'] ?? null;
                     $originalClientId = $previousClient['id'] ?? null;
-                    
+
                     // Mark all previous records as not latest
                     $updatePreviousLatestStmt->execute([':name' => $rawName]);
                 }
-                
+
                 // --- PRIORITY CARRY-FORWARD LOGIC ---
                 // If client exists before, use previous priority, otherwise use new priority
                 $finalPriority = $rawPriority;
@@ -307,14 +310,13 @@ $allocationId = logAllocation(
                         ':allocation_id' => $allocationId
                     ]);
                     $summary['inserted']++;
-                    
                 } catch (Exception $e) {
                     $summary['errors'][] = "Failed to insert client '{$rawName}': " . $e->getMessage();
                     $summary['skipped']++;
                 }
             }
 
-$updateAllocStmt = $pdo->prepare("
+            $updateAllocStmt = $pdo->prepare("
     UPDATE allocation_log 
     SET clients_count = :clients_count,
         assigned_count = :assigned_count,
@@ -324,14 +326,14 @@ $updateAllocStmt = $pdo->prepare("
     WHERE id = :id
 ");
 
-$updateAllocStmt->execute([
-    ':clients_count' => $summary['processed'],
-    ':assigned_count' => $summary['assigned'],
-    ':unassigned_count' => $summary['unassigned'],  // Add this
-    ':inserted_count' => $summary['inserted'],
-    ':updated_count' => $summary['updated'],
-    ':id' => $allocationId
-]);
+            $updateAllocStmt->execute([
+                ':clients_count' => $summary['processed'],
+                ':assigned_count' => $summary['assigned'],
+                ':unassigned_count' => $summary['unassigned'],  // Add this
+                ':inserted_count' => $summary['inserted'],
+                ':updated_count' => $summary['updated'],
+                ':id' => $allocationId
+            ]);
         } catch (Exception $e) {
             // NEW: Delete allocation log if import failed
             if ($allocationId > 0) {
@@ -348,6 +350,7 @@ $updateAllocStmt->execute([
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Bulk Allocation</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -355,140 +358,141 @@ $updateAllocStmt->execute([
     <link rel="stylesheet" href="public/css/navbar.css">
     <link rel="stylesheet" href="public/css/bulk_import.css">
 </head>
+
 <body>
 
-  <?php include 'navbar.php'; ?>
-
-    <div class="container">
-        <div class="page-header">
-            <h2>Bulk Client Allocation</h2>
-            <?php if (isRelationshipManager($userDesignation)): ?>
-            <?php endif; ?>
-        </div>
-        
-        <p style="color:#666; margin-bottom: 25px;">Upload the "<?php echo date('M Y'); ?>" Customer List format to assign tasks.</p>
-        
-        <div class="info-note">
-            <i class="fas fa-info-circle"></i> <strong>Important:</strong> This import will always create new records. 
-            Existing clients will get new entries while preserving old data. Duplicate records (same client in same allocation) will be skipped.
-        </div>
-
-        <form method="post" enctype="multipart/form-data">
-            
-            <div class="form-group">
-                <label>1. Enter Quarter/Tag to Import (Required)</label>
-                <input type="text" name="target_tag" placeholder="e.g. RJ, RM, or RF" required>
-                <small style="color:#888;">Only clients with this exact tag in Column E will be imported.</small>
-            </div>
-
-            <div class="form-group">
-                <label>2. Select Excel File (.xlsx)</label>
-                <input type="file" name="allocation_file" accept=".xlsx, .xls" required>
-            </div>
-
-            <button type="submit">Import & Allocate</button>
-        </form>
-
-        <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])): ?>
-            <div class="summary">
-                <h4>Import Result for Tag: "<?php echo htmlspecialchars($targetTag); ?>"</h4>
-<div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?> 
-    (Skipped: <?php echo (int)$summary['skipped']; ?>)</div>
-                <div style="margin-top:5px;"><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> | 
-                    <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?></div>
-                <div style="margin-top:5px;"><strong>New Clients Created:</strong> <?php echo (int)$summary['inserted']; ?></div>
-                
-                <?php if (!empty($summary['errors'])): ?>
-                    <div class="error" style="margin-top:15px;">
-                        <strong>Errors:</strong>
-                        <ul>
-                            <?php foreach ($summary['errors'] as $err): ?>
-                                <li><?php echo htmlspecialchars($err); ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    </div>
+    <?php include 'navbar.php'; ?>
+    <div class="page-scroll">
+        <div class="container">
+            <div class="page-header">
+                <h2>Bulk Client Allocation</h2>
+                <?php if (isRelationshipManager($userDesignation)): ?>
                 <?php endif; ?>
-                
-                <?php if ($allocationId > 0 && empty($summary['errors'])): ?>
-                <div class="allocation-info show" id="allocationInfo">
-                    <strong><i class="fas fa-info-circle"></i> Allocation Created</strong>
-                    <p>This import has been logged with Allocation ID: <strong>#<?php echo $allocationId; ?></strong></p>
-                    <p>All client data has been preserved. New records have been created for this month.</p>
-                    <a href="allocation_log.php" class="allocation-link">
-                        <i class="fas fa-external-link-alt"></i> View Allocation Log
-                    </a>
-                    <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>" target="_blank" class="allocation-link" style="margin-left: 10px;">
-                        <i class="fas fa-eye"></i> View Clients in this Allocation
-                    </a>
+            </div>
+
+            <p style="color:#666; margin-bottom: 25px;">Upload the "<?php echo date('M Y'); ?>" Customer List format to assign tasks.</p>
+
+            <div class="info-note">
+                <i class="fas fa-info-circle"></i> <strong>Important:</strong> This import will always create new records.
+                Existing clients will get new entries while preserving old data. Duplicate records (same client in same allocation) will be skipped.
+            </div>
+
+            <form method="post" enctype="multipart/form-data">
+
+                <div class="form-group">
+                    <label>1. Enter Quarter/Tag to Import (Required)</label>
+                    <input type="text" name="target_tag" placeholder="e.g. RJ, RM, or RF" required>
+                    <small style="color:#888;">Only clients with this exact tag in Column E will be imported.</small>
                 </div>
-                <?php endif; ?>
-            </div>
-        <?php endif; ?>
-        
-        <div id="successMessage" class="success-message"></div>
-        <div id="errorMessage" class="error-message"></div>
-    </div>
 
-   
+                <div class="form-group">
+                    <label>2. Select Excel File (.xlsx)</label>
+                    <input type="file" name="allocation_file" accept=".xlsx, .xls" required>
+                </div>
 
-    <script>
+                <button type="submit">Import & Allocate</button>
+            </form>
 
-        let allClients = [];
-        let selectedClients = new Set();
-        let searchTimeout = null;
-        let totalClientsCount = 0;
-        let allClientIdsFetched = false;
+            <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])): ?>
+                <div class="summary">
+                    <h4>Import Result for Tag: "<?php echo htmlspecialchars($targetTag); ?>"</h4>
+                    <div><strong>Processed:</strong> <?php echo (int)$summary['processed']; ?>
+                        (Skipped: <?php echo (int)$summary['skipped']; ?>)</div>
+                    <div style="margin-top:5px;"><strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> |
+                        <strong>Unassigned:</strong> <?php echo (int)$summary['unassigned']; ?>
+                    </div>
+                    <div style="margin-top:5px;"><strong>New Clients Created:</strong> <?php echo (int)$summary['inserted']; ?></div>
+
+                    <?php if (!empty($summary['errors'])): ?>
+                        <div class="error" style="margin-top:15px;">
+                            <strong>Errors:</strong>
+                            <ul>
+                                <?php foreach ($summary['errors'] as $err): ?>
+                                    <li><?php echo htmlspecialchars($err); ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($allocationId > 0 && empty($summary['errors'])): ?>
+                        <div class="allocation-info show" id="allocationInfo">
+                            <strong><i class="fas fa-info-circle"></i> Allocation Created</strong>
+                            <p>This import has been logged with Allocation ID: <strong>#<?php echo $allocationId; ?></strong></p>
+                            <p>All client data has been preserved. New records have been created for this month.</p>
+                            <a href="allocation_log.php" class="allocation-link">
+                                <i class="fas fa-external-link-alt"></i> View Allocation Log
+                            </a>
+                            <a href="view_allocation_clients.php?id=<?php echo $allocationId; ?>" target="_blank" class="allocation-link" style="margin-left: 10px;">
+                                <i class="fas fa-eye"></i> View Clients in this Allocation
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <div id="successMessage" class="success-message"></div>
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+</div>
 
 
-        
-        function loadClients(searchTerm = '') {
-            fetch('bulk_import.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    ajax_action: 'get_clients_list',
-                    search: searchTerm
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    allClients = data.clients;
-                    totalClientsCount = data.total_count || allClients.length;
-                    document.getElementById('totalClientsCount').textContent = totalClientsCount;
-                    // Show "Select All (all N clients)" if more than 50
-                    document.getElementById('selectAllAll').style.display = (totalClientsCount > 50) ? 'inline' : 'none';
-                    allClientIdsFetched = false;
-                    renderClientList(data.clients);
-                } else {
-                    showError(data.error || 'Failed to load clients');
-                }
-            })
-            .catch(error => {
-                showError('Network error: ' + error.message);
-            });
-        }
+        <script>
+            let allClients = [];
+            let selectedClients = new Set();
+            let searchTimeout = null;
+            let totalClientsCount = 0;
+            let allClientIdsFetched = false;
 
-        function renderClientList(clients) {
-            const container = document.getElementById('clientsList');
-            const selectAllRow = document.getElementById('selectAllRow');
-            if (clients.length === 0) {
-                container.innerHTML = '<div class="no-clients">No clients found</div>';
-                selectAllRow.style.display = 'none';
-                return;
+
+
+            function loadClients(searchTerm = '') {
+                fetch('bulk_import.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            ajax_action: 'get_clients_list',
+                            search: searchTerm
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            allClients = data.clients;
+                            totalClientsCount = data.total_count || allClients.length;
+                            document.getElementById('totalClientsCount').textContent = totalClientsCount;
+                            // Show "Select All (all N clients)" if more than 50
+                            document.getElementById('selectAllAll').style.display = (totalClientsCount > 50) ? 'inline' : 'none';
+                            allClientIdsFetched = false;
+                            renderClientList(data.clients);
+                        } else {
+                            showError(data.error || 'Failed to load clients');
+                        }
+                    })
+                    .catch(error => {
+                        showError('Network error: ' + error.message);
+                    });
             }
-            selectAllRow.style.display = 'flex';
-            // If all visible clients are selected, check the select all checkbox
-            const allIds = clients.map(c => c.id);
-            const allSelected = allIds.every(id => selectedClients.has(parseInt(id)));
-            document.getElementById('selectAllCheckbox').checked = allSelected;
 
-            let html = '';
-            clients.forEach(client => {
-                const isSelected = selectedClients.has(parseInt(client.id));
-html += `
+            function renderClientList(clients) {
+                const container = document.getElementById('clientsList');
+                const selectAllRow = document.getElementById('selectAllRow');
+                if (clients.length === 0) {
+                    container.innerHTML = '<div class="no-clients">No clients found</div>';
+                    selectAllRow.style.display = 'none';
+                    return;
+                }
+                selectAllRow.style.display = 'flex';
+                // If all visible clients are selected, check the select all checkbox
+                const allIds = clients.map(c => c.id);
+                const allSelected = allIds.every(id => selectedClients.has(parseInt(id)));
+                document.getElementById('selectAllCheckbox').checked = allSelected;
+
+                let html = '';
+                clients.forEach(client => {
+                    const isSelected = selectedClients.has(parseInt(client.id));
+                    html += `
     <div class="client-checkbox-item">
         <input type="checkbox" 
                class="client-checkbox" 
@@ -512,68 +516,75 @@ html += `
         </div>
     </div>
 `;
+                });
+
+                container.innerHTML = html;
+            }
+
+
+
+
+
+
+
+
+            function showSuccess(message) {
+                const successDiv = document.getElementById('successMessage');
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+                successDiv.scrollIntoView({
+                    behavior: 'smooth'
+                });
+
+                setTimeout(() => {
+                    successDiv.style.display = 'none';
+                }, 5000);
+            }
+
+            function showError(message) {
+                const errorDiv = document.getElementById('errorMessage');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                errorDiv.scrollIntoView({
+                    behavior: 'smooth'
+                });
+
+                setTimeout(() => {
+                    errorDiv.style.display = 'none';
+                }, 5000);
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // Search functionality with debounce
+            document.getElementById('clientSearch').addEventListener('input', function(e) {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    loadClients(e.target.value);
+                }, 300);
             });
-            
-            container.innerHTML = html;
-        }
 
 
 
-        
-       
-        
-       
-        
-        function showSuccess(message) {
-            const successDiv = document.getElementById('successMessage');
-            successDiv.textContent = message;
-            successDiv.style.display = 'block';
-            successDiv.scrollIntoView({ behavior: 'smooth' });
-            
-            setTimeout(() => {
-                successDiv.style.display = 'none';
-            }, 5000);
-        }
-        
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-            errorDiv.scrollIntoView({ behavior: 'smooth' });
-            
-            setTimeout(() => {
-                errorDiv.style.display = 'none';
-            }, 5000);
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        // Search functionality with debounce
-        document.getElementById('clientSearch').addEventListener('input', function(e) {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                loadClients(e.target.value);
-            }, 300);
-        });
-        
+            function formatDate(dateString) {
+                if (!dateString) return 'Never';
+                const date = new Date(dateString);
 
-        
-        function formatDate(dateString) {
-            if (!dateString) return 'Never';
-            const date = new Date(dateString);
-            
-            const day = date.getDate().toString().padStart(2, '0');
-            const month = date.toLocaleString('en-GB', { month: 'short' });
-            const year = date.getFullYear();
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            
-            return `${day} ${month} ${year}, ${hours}:${minutes}`;
-        }
-    </script>
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = date.toLocaleString('en-GB', {
+                    month: 'short'
+                });
+                const year = date.getFullYear();
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+
+                return `${day} ${month} ${year}, ${hours}:${minutes}`;
+            }
+        </script>
 </body>
+
 </html>

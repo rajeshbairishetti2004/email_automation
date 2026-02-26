@@ -379,6 +379,34 @@ $customers = $pdo->query("
     @media (max-width: 900px) {
         .toolbar { flex-direction: column; align-items: stretch; }
     }
+    /* =========================
+   THIN VERTICAL SCROLLBAR
+   ========================= */
+
+/* Chrome, Edge, Safari */
+.table-wrapper::-webkit-scrollbar {
+    width: 6px;   /* 👈 reduce width here */
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* Firefox */
+.table-wrapper {
+    scrollbar-width: thin;
+    scrollbar-color: lightgray;
+}
+    
     </style>
     </head>
 

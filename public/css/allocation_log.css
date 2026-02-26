@@ -118,11 +118,12 @@ h2 {
 .table-container {
     background: white;
     border-radius: 8px;
-    overflow: hidden;
     box-shadow: 0 3px 10px rgba(0,0,0,0.05);
     margin-top: 20px;
-}
 
+    max-height: 75vh;     /* 👈 limits height */
+    overflow-y: auto;     /* 👈 enables vertical scroll */
+}
 table {
     width: 100%;
     border-collapse: collapse;
@@ -387,4 +388,31 @@ tbody tr:hover {
     display: flex;
     gap: 5px;
     align-items: center;
+}
+/* =========================
+   THIN VERTICAL SCROLLBAR
+   ========================= */
+
+/* Chrome, Edge, Safari */
+.table-container::-webkit-scrollbar {
+    width: 4px;   /* 👈 make it thinner (try 3px if you want ultra slim) */
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* Firefox */
+.table-container {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
 }
