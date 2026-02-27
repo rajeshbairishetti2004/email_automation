@@ -1013,3 +1013,241 @@ td.editable-cell.editing {
     scrollbar-width: thin;
     scrollbar-color: lightgray transparent;
 }
+
+ /* Modal Styles */
+            .scheme-modal-overlay,
+            .history-modal-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            }
+
+            .scheme-modal-card,
+            .history-modal-card {
+                background: white;
+                border-radius: 12px;
+                width: 90%;
+                max-width: 700px;
+                max-height: 80vh;
+                overflow-y: auto;
+                padding: 24px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            }
+
+            .modal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #0288D1;
+            }
+
+            .modal-header h3 {
+                margin: 0;
+                color: #0288D1;
+                font-weight: 600;
+            }
+
+            .close-modal {
+                background: none;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                color: #666;
+            }
+
+            .close-modal:hover {
+                color: #0288D1;
+            }
+
+            .scheme-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                margin-bottom: 20px;
+            }
+
+            .scheme-item {
+                display: flex;
+                align-items: center;
+                padding: 12px 15px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                border-left: 4px solid #0288D1;
+                transition: all 0.2s;
+            }
+
+            .scheme-item:hover {
+                background: #e3f2fd;
+                transform: translateX(5px);
+            }
+
+            .scheme-checkbox {
+                width: 20px;
+                height: 20px;
+                margin-right: 15px;
+                cursor: pointer;
+                accent-color: #0288D1;
+            }
+
+            .scheme-details {
+                flex: 1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                align-items: center;
+            }
+
+            .scheme-name {
+                font-weight: 600;
+                color: #0288D1;
+                min-width: 200px;
+                font-size: 14px;
+            }
+
+            .scheme-action {
+                background: #ff9800;
+                color: white;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .scheme-action.drop {
+                background: #f44336;
+            }
+
+            .scheme-action.switch {
+                background: #9c27b0;
+            }
+
+            .scheme-action.sip-cancellation {
+                background: #ff5722;
+            }
+
+            .scheme-action.under-observation {
+                background: #607d8b;
+            }
+
+            .scheme-action.partially-redeem {
+                background: #795548;
+            }
+
+            .scheme-recommended {
+                color: #666;
+                font-size: 13px;
+                margin-left: auto;
+            }
+
+            .modal-actions {
+                margin-top: 20px;
+                display: flex;
+                justify-content: flex-end;
+                gap: 10px;
+                border-top: 1px solid #e0e0e0;
+                padding-top: 20px;
+            }
+
+            .btn-primary {
+                background: #0288D1;
+                color: white;
+                border: none;
+                padding: 10px 24px;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .btn-primary:hover {
+                background: #0277bd;
+            }
+
+            .btn-secondary {
+                background: #f5f5f5;
+                color: #333;
+                border: 1px solid #ddd;
+                padding: 10px 24px;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .btn-secondary:hover {
+                background: #e0e0e0;
+            }
+
+            .clickable-cell {
+                cursor: pointer;
+                position: relative;
+                transition: background-color 0.2s;
+            }
+
+            .clickable-cell:hover {
+                background-color: #e3f2fd !important;
+            }
+
+            .clickable-cell:hover::after {
+                content: '✎';
+                position: absolute;
+                right: 5px;
+                top: 5px;
+                color: #0288D1;
+                font-size: 14px;
+                font-weight: bold;
+            }
+
+            .history-item {
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                background: #f9f9f9;
+                border-left: 4px solid #0288D1;
+            }
+
+            .history-item .date {
+                font-weight: 600;
+                color: #0288D1;
+                margin-bottom: 8px;
+                font-size: 13px;
+            }
+
+            .history-item .comments {
+                color: #333;
+                line-height: 1.5;
+                font-size: 14px;
+            }
+
+            .no-schemes-message {
+                text-align: center;
+                padding: 40px;
+                color: #666;
+                font-size: 16px;
+                background: #f5f5f5;
+                border-radius: 8px;
+            }
+
+            .editable-cell.readonly {
+                background-color: #f5f5f5;
+                cursor: not-allowed;
+            }
+
+            .editable-cell.readonly:hover {
+                background-color: #f5f5f5;
+            }
+
+            .editable-cell.readonly:hover::after {
+                content: none;
+            }
