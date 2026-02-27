@@ -195,6 +195,51 @@
     $pdoSlides = getSlidesPdo();
 
     // ============================================================
+    // AUTO-INSTALL TRIGGER (Runs once for admin users)
+    // ============================================================
+    try {
+        // Check if we've already attempted installation
+        $triggerChecked = false;
+        if (isset($_SESSION['trigger_checked']) && $_SESSION['trigger_checked'] === true) {
+            $triggerChecked = true;
+        } else {
+            // Check if trigger exists
+            $stmt = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_review_sent_date_on_sent'");
+            $triggerExists = $stmt->rowCount() > 0;
+
+            if (!$triggerExists && $isAdmin) {
+                try {
+                    // Attempt to create trigger
+                    $pdo->exec("DROP TRIGGER IF EXISTS auto_set_review_sent_date_on_sent");
+
+                    $createSQL = "
+                    CREATE TRIGGER auto_set_review_sent_date_on_sent
+                    BEFORE UPDATE ON clients
+                    FOR EACH ROW
+                    BEGIN
+                        IF NEW.report_state = 'sent' AND (OLD.report_state != 'sent' OR OLD.report_state IS NULL) THEN
+                            IF NEW.review_sent_date IS NULL THEN
+                                SET NEW.review_sent_date = CURDATE();
+                            END IF;
+                        END IF;
+                    END
+                ";
+
+                    $pdo->exec($createSQL);
+                    error_log("✅ Review sent date trigger installed successfully");
+                } catch (Exception $e) {
+                    error_log("Could not install trigger: " . $e->getMessage());
+                    // Fallback will be handled in code
+                }
+            }
+
+            $_SESSION['trigger_checked'] = true;
+        }
+    } catch (Exception $e) {
+        // Silently fail - trigger is optional
+    }
+
+    // ============================================================
     // ONE-TIME BACKFILL: For any existing client rows that have
     // NULL in last_review_date / last_meeting_date /
     // prev_modifications_action / prev_meeting_comments,
@@ -204,38 +249,38 @@
     // ============================================================
 
     // ============================================================
-// AJAX: Save scheme selections from modal
-// ============================================================
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['action'])
-    && $_POST['action'] === 'save_scheme_selections'
-) {
-    header('Content-Type: application/json');
-    try {
-        $clientId = (int)($_POST['client_id'] ?? 0);
-        $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
-        
-        if (!$clientId) {
-            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
-            exit;
-        }
+    // AJAX: Save scheme selections from modal
+    // ============================================================
+    if (
+        $_SERVER['REQUEST_METHOD'] === 'POST'
+        && isset($_POST['action'])
+        && $_POST['action'] === 'save_scheme_selections'
+    ) {
+        header('Content-Type: application/json');
+        try {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $selectedIds = isset($_POST['selected_ids']) ? $_POST['selected_ids'] : [];
 
-        // Convert to comma-separated string of integers
-        $completedIds = array_filter(array_map('intval', $selectedIds));
-        $completedIdsStr = implode(',', $completedIds);
+            if (!$clientId) {
+                echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+                exit;
+            }
 
-        // Update the clients table with completed_scheme_ids
-        $updateStmt = $pdo->prepare("
+            // Convert to comma-separated string of integers
+            $completedIds = array_filter(array_map('intval', $selectedIds));
+            $completedIdsStr = implode(',', $completedIds);
+
+            // Update the clients table with completed_scheme_ids
+            $updateStmt = $pdo->prepare("
             UPDATE clients 
             SET completed_scheme_ids = ?,
                 updated_at = updated_at
             WHERE id = ?
         ");
-        $updateStmt->execute([$completedIdsStr ?: null, $clientId]);
+            $updateStmt->execute([$completedIdsStr ?: null, $clientId]);
 
-        // Recompute modifications_action from client_schemes
-        $modStmt = $pdo->prepare("
+            // Recompute modifications_action from client_schemes
+            $modStmt = $pdo->prepare("
             SELECT scheme_name, action_step
             FROM client_schemes
             WHERE client_id = ?
@@ -244,37 +289,37 @@ if (
             AND scheme_name != ''
             ORDER BY id ASC
         ");
-        $modStmt->execute([$clientId]);
-        $schemeRows = $modStmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        $parts = [];
-        foreach ($schemeRows as $sr) {
-            $parts[] = trim($sr['scheme_name']) . '-' . trim($sr['action_step']);
-        }
-        $modificationsAction = implode(' | ', $parts);
+            $modStmt->execute([$clientId]);
+            $schemeRows = $modStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Update modifications_action
-        $updateModStmt = $pdo->prepare("
+            $parts = [];
+            foreach ($schemeRows as $sr) {
+                $parts[] = trim($sr['scheme_name']) . '-' . trim($sr['action_step']);
+            }
+            $modificationsAction = implode(' | ', $parts);
+
+            // Update modifications_action
+            $updateModStmt = $pdo->prepare("
             UPDATE clients
             SET modifications_action = ?,
                 updated_at = updated_at
             WHERE id = ?
         ");
-        $updateModStmt->execute([$modificationsAction ?: null, $clientId]);
+            $updateModStmt->execute([$modificationsAction ?: null, $clientId]);
 
-        echo json_encode([
-            'success' => true,
-            'modifications_action' => $modificationsAction,
-            'completed_ids' => $completedIds
-        ]);
-    } catch (Throwable $e) {
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
+            echo json_encode([
+                'success' => true,
+                'modifications_action' => $modificationsAction,
+                'completed_ids' => $completedIds
+            ]);
+        } catch (Throwable $e) {
+            echo json_encode([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+        exit;
     }
-    exit;
-}
     if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
         try {
             // Find all rows missing snapshot data that have a prior record
@@ -572,31 +617,31 @@ if (
     // ============================================================
     // AJAX: Save scheme changes selections from modal
     // ============================================================
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['action'])
-    && $_POST['action'] === 'fetch_prev_scheme_changes'
-) {
-    header('Content-Type: application/json');
-    try {
-        $clientId = (int)($_POST['client_id'] ?? 0);
-        if (!$clientId) {
-            echo json_encode(['success' => false, 'error' => 'Invalid client id']);
-            exit;
-        }
+    if (
+        $_SERVER['REQUEST_METHOD'] === 'POST'
+        && isset($_POST['action'])
+        && $_POST['action'] === 'fetch_prev_scheme_changes'
+    ) {
+        header('Content-Type: application/json');
+        try {
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            if (!$clientId) {
+                echo json_encode(['success' => false, 'error' => 'Invalid client id']);
+                exit;
+            }
 
-        // Get client name and find previous record
-        $nameStmt = $pdo->prepare("SELECT name FROM clients WHERE id = ? LIMIT 1");
-        $nameStmt->execute([$clientId]);
-        $clientName = $nameStmt->fetchColumn();
+            // Get client name and find previous record
+            $nameStmt = $pdo->prepare("SELECT name FROM clients WHERE id = ? LIMIT 1");
+            $nameStmt->execute([$clientId]);
+            $clientName = $nameStmt->fetchColumn();
 
-        if (!$clientName) {
-            echo json_encode(['success' => false, 'error' => 'Client not found']);
-            exit;
-        }
+            if (!$clientName) {
+                echo json_encode(['success' => false, 'error' => 'Client not found']);
+                exit;
+            }
 
-        // Find the previous review record
-        $prevStmt = $pdo->prepare("
+            // Find the previous review record
+            $prevStmt = $pdo->prepare("
             SELECT id, completed_scheme_ids
             FROM clients
             WHERE name = ?
@@ -605,16 +650,16 @@ if (
             ORDER BY (report_state = 'sent') DESC, id DESC
             LIMIT 1
         ");
-        $prevStmt->execute([$clientName, $clientId]);
-        $prevRecord = $prevStmt->fetch(PDO::FETCH_ASSOC);
+            $prevStmt->execute([$clientName, $clientId]);
+            $prevRecord = $prevStmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$prevRecord) {
-            echo json_encode(['success' => true, 'schemes' => [], 'completed_ids' => []]);
-            exit;
-        }
+            if (!$prevRecord) {
+                echo json_encode(['success' => true, 'schemes' => [], 'completed_ids' => []]);
+                exit;
+            }
 
-        // Fetch actual schemes from the previous record
-        $schemesStmt = $pdo->prepare("
+            // Fetch actual schemes from the previous record
+            $schemesStmt = $pdo->prepare("
             SELECT id, scheme_name, action_step, recommended_scheme, recommended_amount
             FROM client_schemes
             WHERE client_id = ?
@@ -623,26 +668,26 @@ if (
             AND scheme_name != ''
             ORDER BY id ASC
         ");
-        $schemesStmt->execute([$prevRecord['id']]);
-        $schemes = $schemesStmt->fetchAll(PDO::FETCH_ASSOC);
+            $schemesStmt->execute([$prevRecord['id']]);
+            $schemes = $schemesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Parse completed IDs
-        $completedIds = array_filter(array_map(
-            'intval',
-            explode(',', $prevRecord['completed_scheme_ids'] ?: '')
-        ));
+            // Parse completed IDs
+            $completedIds = array_filter(array_map(
+                'intval',
+                explode(',', $prevRecord['completed_scheme_ids'] ?: '')
+            ));
 
-        echo json_encode([
-            'success' => true,
-            'schemes' => $schemes,
-            'completed_ids' => array_values($completedIds)
-        ]);
-        exit;
-    } catch (Throwable $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        exit;
+            echo json_encode([
+                'success' => true,
+                'schemes' => $schemes,
+                'completed_ids' => array_values($completedIds)
+            ]);
+            exit;
+        } catch (Throwable $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
     }
-}
     // ============================================================
     // AJAX: Fetch historical meeting comments for Prev Mtg Comments modal
     // ============================================================
@@ -1997,6 +2042,19 @@ COALESCE(
                 background: #f5f5f5;
                 border-radius: 8px;
             }
+
+            .editable-cell.readonly {
+                background-color: #f5f5f5;
+                cursor: not-allowed;
+            }
+
+            .editable-cell.readonly:hover {
+                background-color: #f5f5f5;
+            }
+
+            .editable-cell.readonly:hover::after {
+                content: none;
+            }
         </style>
     </head>
 
@@ -2218,7 +2276,7 @@ COALESCE(
                             <div class="table-scroll-wrapper">
                                 <table>
                                     <thead>
-                                        
+
                                         <tr class="group-header">
                                             <?php
                                             // Calculate base columns count dynamically
@@ -2240,7 +2298,7 @@ COALESCE(
                                             <th colspan="<?= $lastReviewCols ?>" class="th-section-prev">Last Review</th>
                                             <th colspan="<?= $actionCols ?>" style="background:#f9f9f9; border:none;"></th>
                                         </tr>
-                                        
+
                                         <tr class="col-header">
                                             <!-- checkbox / empty -->
                                             <?php if ($deleteMode || $reassignMode): ?>
@@ -2352,21 +2410,21 @@ COALESCE(
                                                 </td>
 
                                                 <!-- AUM -->
-<!-- AUM -->
-<td>
-    <span style="font-weight:600; color:#1976d2;">
-        <?php 
-        $aumValue = (float)($c['aum'] ?? 0);
-        if ($aumValue < 1) {
-            // Convert to lakhs (1 crore = 100 lakhs)
-            $lakhsValue = $aumValue * 100;
-            echo '₹' . number_format($lakhsValue, 2) . ' L';
-        } else {
-            echo '₹' . number_format($aumValue, 2) . ' Cr';
-        }
-        ?>
-    </span>
-</td>
+                                                <!-- AUM -->
+                                                <td>
+                                                    <span style="font-weight:600; color:#1976d2;">
+                                                        <?php
+                                                        $aumValue = (float)($c['aum'] ?? 0);
+                                                        if ($aumValue < 1) {
+                                                            // Convert to lakhs (1 crore = 100 lakhs)
+                                                            $lakhsValue = $aumValue * 100;
+                                                            echo '₹' . number_format($lakhsValue, 2) . ' L';
+                                                        } else {
+                                                            echo '₹' . number_format($aumValue, 2) . ' Cr';
+                                                        }
+                                                        ?>
+                                                    </span>
+                                                </td>
 
                                                 <!-- Drafted By -->
                                                 <?php if ($isAdmin): ?>
@@ -2412,7 +2470,8 @@ COALESCE(
 
 
                                                 <!-- Last Updated -->
-                                                <td>
+                                                <!-- Last Updated -->
+                                                <td style="white-space:nowrap; font-size:12px; line-height:1.5;">
                                                     <?php
                                                     if ($isSent) {
                                                         $displayTs = !empty($c['created_at']) ? strtotime($c['created_at']) : 0;
@@ -2423,12 +2482,10 @@ COALESCE(
                                                     }
                                                     ?>
                                                     <?php if ($displayTs): ?>
-                                                        <span style="color:#555; font-size:0.9em;">
-                                                            <?php echo date('d-M-Y', $displayTs); ?>
-                                                            <span style="color:#999; font-size:0.85em;">&nbsp;<?php echo date('h:i A', $displayTs); ?></span>
-                                                        </span>
+                                                        <?= date('d-M-Y', $displayTs) ?>
+                                                        <br><span style="color:#999; font-size:11px;"><?= date('h:i A', $displayTs) ?></span>
                                                     <?php else: ?>
-                                                        <span style="color:#999; font-size:0.85em;">N/A</span>
+                                                        <span style="color:#999;">N/A</span>
                                                     <?php endif; ?>
                                                 </td>
 
@@ -2455,19 +2512,22 @@ COALESCE(
                                                 </td>
 
 
-                                                <!-- ════════════════════════════════════════
-                                        CURRENT REVIEW — inline-editable (locked for sent)
-                                        ════════════════════════════════════════ -->
-
-                                                <!-- Review Sent Date -->
-                                                <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="review_sent_date" data-type="date">
-                                                    <span class="display-val <?= empty($c['review_sent_date']) ? 'placeholder-text' : '' ?>">
-                                                        <?= fmtDate($c['review_sent_date'], 'd-M') ?>
-                                                    </span>
-                                                    <input type="date" value="<?= htmlspecialchars($c['review_sent_date'] ?? '') ?>">
-                                                </td>
-
-                                                <!-- Meeting Date -->
+                                                <!-- Review Sent Date — read-only, same format as Last Review column -->
+                                                <td class="col-current" style="background-color:#f9f9f9; white-space:nowrap; font-size:12px; line-height:1.5;">
+                                                    <?php
+                                                    if (!empty($c['review_sent_date'])) {
+                                                        $ts = strtotime($c['review_sent_date']);
+                                                        echo date('d-M-Y', $ts);
+                                                        echo '<br><span style="color:#999;font-size:11px;">';
+                                                        // Use created_at time if sent, else updated_at
+                                                        $timeSrc = !empty($c['review_sent_date']) ? ($c['updated_at'] ?? $c['created_at']) : $c['created_at'];
+                                                        echo date('h:i A', strtotime($timeSrc));
+                                                        echo '</span>';
+                                                    } else {
+                                                        echo '—';
+                                                    }
+                                                    ?>
+                                                </td><!-- Meeting Date -->
                                                 <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
                                                     <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
                                                         <?= fmtDate($c['meeting_date'], 'd-M') ?>
@@ -2545,8 +2605,8 @@ COALESCE(
                                                 </td>
 
                                                 <!-- Prev Modifications — opens read-only scheme-style modal -->
-<td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
-    onclick="openPrevModificationsModal(<?= (int)$c['id'] ?>)">
+                                                <td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
+                                                    onclick="openPrevModificationsModal(<?= (int)$c['id'] ?>)">
                                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                                     <?php if ($prevMod): ?>
                                                         <?= htmlspecialchars(extractActionsOnly($prevMod)) ?>
@@ -2881,76 +2941,80 @@ COALESCE(
                     });
             }
 
-function renderSchemeModal(schemes, completedIds) {
-    let html = '<div class="scheme-list">';
-    schemes.forEach(scheme => {
-        const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
-        // Use scheme.id directly for checking completion status
-        const isChecked = completedIds.includes(parseInt(scheme.id));
-        
-        html += '<div class="scheme-item">';
-        html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${scheme.scheme_name}-${scheme.action_step}" ${isChecked ? 'checked' : ''}>`;
-        html += '<div class="scheme-details">';
-        html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
-        html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
-        if (scheme.recommended_scheme || scheme.recommended_amount) {
-            html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
-        }
-        html += '</div></div>';
-    });
-    html += '</div>';
-    document.getElementById('schemeModalContent').innerHTML = html;
-}
-function saveSchemeSelections() {
-    const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
-    const formData = new URLSearchParams();
-    formData.append('action', 'save_scheme_selections');
-    formData.append('client_id', currentClientId);
-    
-    checkboxes.forEach(cb => {
-        formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
-    });
-    
-    fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
-                if (row) {
-                    const modCell = row.querySelector('td.col-current.clickable-cell');
-                    if (modCell) {
-                        if (data.modifications_action) {
-                            // Extract only action parts (e.g. "Switch | Drop") for display
-                            const actionsOnly = data.modifications_action
-                                .split(' | ')
-                                .map(item => {
-                                    const parts = item.split('-');
-                                    return parts[parts.length - 1].trim();
-                                })
-                                .join(' | ');
-                            modCell.innerHTML = actionsOnly;
-                        } else {
-                            modCell.innerHTML = '';
-                        }
-                        // Update onclick so re-opening reflects latest state
-                        modCell.setAttribute('onclick', `openSchemeModal(${currentClientId})`);
+            function renderSchemeModal(schemes, completedIds) {
+                let html = '<div class="scheme-list">';
+                schemes.forEach(scheme => {
+                    const actionClass = scheme.action_step.toLowerCase().replace(/\s+/g, '-');
+                    // Use scheme.id directly for checking completion status
+                    const isChecked = completedIds.includes(parseInt(scheme.id));
+
+                    html += '<div class="scheme-item">';
+                    html += `<input type="checkbox" class="scheme-checkbox" data-scheme-id="${scheme.id}" value="${scheme.scheme_name}-${scheme.action_step}" ${isChecked ? 'checked' : ''}>`;
+                    html += '<div class="scheme-details">';
+                    html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+                    html += `<span class="scheme-action ${actionClass}">${scheme.action_step}</span>`;
+                    if (scheme.recommended_scheme || scheme.recommended_amount) {
+                        html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
                     }
-                }
-                closeSchemeModal();
-                showToast('Scheme selections saved!');
-            } else {
-                alert('Save failed: ' + (data.error || 'Unknown error'));
+                    html += '</div></div>';
+                });
+                html += '</div>';
+                document.getElementById('schemeModalContent').innerHTML = html;
             }
-        })
-        .catch(err => {
-            console.error('Network error:', err);
-            alert('Network error while saving selections');
-        });
-}
+
+            function saveSchemeSelections() {
+                const checkboxes = document.querySelectorAll('.scheme-checkbox:checked');
+                const formData = new URLSearchParams();
+                formData.append('action', 'save_scheme_selections');
+                formData.append('client_id', currentClientId);
+
+                checkboxes.forEach(cb => {
+                    formData.append('selected_ids[]', cb.getAttribute('data-scheme-id'));
+                });
+
+                fetch('view_saved_reports.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            const row = document.querySelector(`tr[data-client-id="${currentClientId}"]`);
+                            if (row) {
+                                const modCell = row.querySelector('td.col-current.clickable-cell');
+                                if (modCell) {
+                                    if (data.modifications_action) {
+                                        // Extract only action parts (e.g. "Switch | Drop") for display
+                                        const actionsOnly = data.modifications_action
+                                            .split(' | ')
+                                            .map(item => {
+                                                const parts = item.split('-');
+                                                return parts[parts.length - 1].trim();
+                                            })
+                                            .join(' | ');
+                                        modCell.innerHTML = actionsOnly;
+                                    } else {
+                                        modCell.innerHTML = '';
+                                    }
+                                    // Update onclick so re-opening reflects latest state
+                                    modCell.setAttribute('onclick', `openSchemeModal(${currentClientId})`);
+                                }
+                            }
+                            closeSchemeModal();
+                            showToast('Scheme selections saved!');
+                        } else {
+                            alert('Save failed: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Network error:', err);
+                        alert('Network error while saving selections');
+                    });
+            }
+
             function closeSchemeModal() {
                 document.getElementById('schemeModal').style.display = 'none';
                 currentClientId = null;
@@ -3005,71 +3069,72 @@ function saveSchemeSelections() {
                 document.getElementById('meetingHistoryModal').style.display = 'none';
             }
 
-function openPrevModificationsModal(clientId) {
-    const modal = document.getElementById('modificationsHistoryModal');
-    const content = document.getElementById('modificationsHistoryContent');
+            function openPrevModificationsModal(clientId) {
+                const modal = document.getElementById('modificationsHistoryModal');
+                const content = document.getElementById('modificationsHistoryContent');
 
-    content.innerHTML = '<div style="text-align:center; padding:20px;">Loading previous modifications...</div>';
-    modal.style.display = 'flex';
+                content.innerHTML = '<div style="text-align:center; padding:20px;">Loading previous modifications...</div>';
+                modal.style.display = 'flex';
 
-    const actionColors = {
-        'drop': '#f44336',
-        'switch': '#9c27b0',
-        'sip cancellation': '#ff5722',
-        'under observation': '#607d8b',
-        'partially redeem': '#795548',
-    };
+                const actionColors = {
+                    'drop': '#f44336',
+                    'switch': '#9c27b0',
+                    'sip cancellation': '#ff5722',
+                    'under observation': '#607d8b',
+                    'partially redeem': '#795548',
+                };
 
-    fetch('view_saved_reports.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'fetch_prev_scheme_changes',
-                client_id: clientId
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                content.innerHTML = '<div class="no-schemes-message">Error loading previous modifications.</div>';
-                return;
+                fetch('view_saved_reports.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: new URLSearchParams({
+                            action: 'fetch_prev_scheme_changes',
+                            client_id: clientId
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data.success) {
+                            content.innerHTML = '<div class="no-schemes-message">Error loading previous modifications.</div>';
+                            return;
+                        }
+                        if (!data.schemes || data.schemes.length === 0) {
+                            content.innerHTML = '<div class="no-schemes-message">No previous modifications found.</div>';
+                            return;
+                        }
+
+                        // completedIds = array of integers (scheme IDs that were checked in prev review)
+                        const completedIds = Array.isArray(data.completed_ids) ?
+                            data.completed_ids.map(id => parseInt(id, 10)) : [];
+
+                        let html = '<div class="scheme-list">';
+                        data.schemes.forEach(scheme => {
+                            const actionStep = scheme.action_step || '';
+                            const actionClass = actionStep.toLowerCase().replace(/\s+/g, '-');
+                            const actionColor = actionColors[actionStep.toLowerCase()] || '#ff9800';
+                            // Exact ID match — 100% accurate
+                            const isChecked = completedIds.includes(parseInt(scheme.id));
+
+                            html += `<div class="scheme-item" style="${isChecked ? 'background:#e3f2fd;' : ''}">`;
+                            html += `<input type="checkbox" class="scheme-checkbox" disabled ${isChecked ? 'checked' : ''} style="cursor:not-allowed; accent-color:#0288D1;">`;
+                            html += '<div class="scheme-details">';
+                            html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
+                            html += `<span class="scheme-action ${actionClass}" style="background:${actionColor};">${actionStep}</span>`;
+                            if (scheme.recommended_scheme || scheme.recommended_amount) {
+                                html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
+                            }
+                            html += '</div></div>';
+                        });
+                        html += '</div>';
+                        html += '<div style="margin-top:10px; font-size:12px; color:#999; text-align:right;">🔒 Read-only — previous review data</div>';
+                        content.innerHTML = html;
+                    })
+                    .catch(() => {
+                        content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading previous modifications.</div>';
+                    });
             }
-            if (!data.schemes || data.schemes.length === 0) {
-                content.innerHTML = '<div class="no-schemes-message">No previous modifications found.</div>';
-                return;
-            }
-
-            // completedIds = array of integers (scheme IDs that were checked in prev review)
-            const completedIds = Array.isArray(data.completed_ids)
-                ? data.completed_ids.map(id => parseInt(id, 10))
-                : [];
-
-            let html = '<div class="scheme-list">';
-            data.schemes.forEach(scheme => {
-                const actionStep = scheme.action_step || '';
-                const actionClass = actionStep.toLowerCase().replace(/\s+/g, '-');
-                const actionColor = actionColors[actionStep.toLowerCase()] || '#ff9800';
-                // Exact ID match — 100% accurate
-                const isChecked = completedIds.includes(parseInt(scheme.id));
-
-                html += `<div class="scheme-item" style="${isChecked ? 'background:#e3f2fd;' : ''}">`;
-                html += `<input type="checkbox" class="scheme-checkbox" disabled ${isChecked ? 'checked' : ''} style="cursor:not-allowed; accent-color:#0288D1;">`;
-                html += '<div class="scheme-details">';
-                html += `<span class="scheme-name">${scheme.scheme_name}</span>`;
-                html += `<span class="scheme-action ${actionClass}" style="background:${actionColor};">${actionStep}</span>`;
-                if (scheme.recommended_scheme || scheme.recommended_amount) {
-                    html += `<span class="scheme-recommended">→ ${scheme.recommended_scheme || ''} ${scheme.recommended_amount ? '(' + scheme.recommended_amount + ')' : ''}</span>`;
-                }
-                html += '</div></div>';
-            });
-            html += '</div>';
-            html += '<div style="margin-top:10px; font-size:12px; color:#999; text-align:right;">🔒 Read-only — previous review data</div>';
-            content.innerHTML = html;
-        })
-        .catch(() => {
-            content.innerHTML = '<div style="text-align:center; padding:20px; color:red;">Network error loading previous modifications.</div>';
-        });
-}
 
             function closeModificationsHistoryModal() {
                 document.getElementById('modificationsHistoryModal').style.display = 'none';
