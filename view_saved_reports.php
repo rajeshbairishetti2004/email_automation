@@ -2403,7 +2403,7 @@ COALESCE(
                                                     <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
                                                         <span><?php echo htmlspecialchars($c['name']); ?></span>
                                                         <?php if ($hasAttachments): ?>
-                                                            <span title="Has Attachments">📎</span>
+                                                            <!-- <span title="Has Attachments">📎</span> -->
                                                         <?php endif; ?>
 
                                                     </div>
@@ -2610,7 +2610,7 @@ COALESCE(
                                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                                     <?php if ($prevMod): ?>
                                                         <?= htmlspecialchars(extractActionsOnly($prevMod)) ?>
-                                                        <span style="color:#0288D1; font-size:10px; margin-left:5px;">🔍</span>
+                                                        <span style="color:#0288D1; font-size:10px; margin-left:5px;"></span>
                                                     <?php else: ?>
                                                         <span style="color:#ccc;">—</span>
                                                     <?php endif; ?>
