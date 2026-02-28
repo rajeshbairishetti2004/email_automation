@@ -26,10 +26,38 @@ const DEFAULT_INTRO     = 'Introduction';
 const DEFAULT_CLOSING   = 'Closing remarks';
 const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
+// Custom user display order (by username, case-insensitive)
+// Admin sees users in this specific order
+$customUserOrder = ['sanjiv mehta', 'sailesh kumar', 'sajid', 'tanmay', 'akshay'];
+
 function safePercent($num, $den)
 {
     if ($den <= 0) return 0;
     return (int)round(($num / $den) * 100);
+}
+
+/**
+ * Sort users array by custom order defined in $customUserOrder
+ */
+function sortUsersByCustomOrder(array $users, array $customOrder): array
+{
+    $orderMap = [];
+    foreach ($customOrder as $index => $name) {
+        $orderMap[strtolower(trim($name))] = $index;
+    }
+
+    usort($users, function($a, $b) use ($orderMap) {
+        $aKey = strtolower(trim($a['username']));
+        $bKey = strtolower(trim($b['username']));
+        $aPos = $orderMap[$aKey] ?? 9999;
+        $bPos = $orderMap[$bKey] ?? 9999;
+        if ($aPos === $bPos) {
+            return strcmp($aKey, $bKey);
+        }
+        return $aPos - $bPos;
+    });
+
+    return $users;
 }
 
 /**
@@ -148,12 +176,17 @@ function mergeClientArrays(array &$target, array $source): void
 
 $cycleFilter = isset($_GET['cycle_filter']) ? $_GET['cycle_filter'] : '';
 
-$requestedContext = $_GET['view_context'] ?? 'mine';
+$requestedContext = $_GET['view_context'] ?? null;
 
 // 🔐 HARD RULE
 if ($isAdmin) {
-    // Admin can see everything
-    $viewContext = $requestedContext;
+    // Admin: default to 'all', can also view individual users
+    // Admin does NOT have a 'mine' view
+    if ($requestedContext === null || $requestedContext === 'mine') {
+        $viewContext = 'all';
+    } else {
+        $viewContext = $requestedContext;
+    }
 } else {
     // Everyone else → ONLY their own data
     $viewContext = 'mine';
@@ -193,7 +226,10 @@ $stmtAum->execute($aumParams);
 $totalAum = $stmtAum->fetchColumn() ?: 0;
 
 $usersStmt = $pdo->query('SELECT id, username FROM users ORDER BY username ASC');
-$allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+$allUsersRaw = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Sort users by custom order
+$allUsers = sortUsersByCustomOrder($allUsersRaw, $customUserOrder);
 
 $viewStats       = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter);
 $completionRate  = safePercent($viewStats['count_sent'], max(1, $viewStats['total']));
@@ -554,25 +590,25 @@ $userDesignation = $currentUser['designation'] ?? '';
 <nav class="context-navbar">
 
     <?php if ($isAdmin): ?>
+        <?php /* Admin sees "All Reviews" first, then each user individually — NO "My Reviews" */ ?>
         <a href="?view_context=all<?= $cycleParam ?>"
            class="context-link <?= ($viewContext === 'all') ? 'active' : '' ?>">
             All Reviews
         </a>
-    <?php endif; ?>
 
-    <a href="?view_context=mine<?= $cycleParam ?>"
-       class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">
-        My Reviews
-    </a>
-
-    <?php if ($isAdmin): ?>
         <?php foreach ($allUsers as $user): ?>
-            <?php if ((int)$user['id'] === $currentUserId) continue; ?>
             <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>"
                class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>">
                 <?= htmlspecialchars($user['username']); ?>
             </a>
         <?php endforeach; ?>
+
+    <?php else: ?>
+        <?php /* Non-admin only sees their own reviews */ ?>
+        <a href="?view_context=mine<?= $cycleParam ?>"
+           class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">
+            My Reviews
+        </a>
     <?php endif; ?>
 
 </nav>
