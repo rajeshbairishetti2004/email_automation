@@ -672,13 +672,24 @@
             <!-- ────────────── Meeting Remarks Modal ────────────── -->
             <div id="listMeetingModal" class="modal-overlay" style="display:none;">
                 <div class="modal-card">
-                    <div class="modal-header">
-                        <div class="modal-icon">📝</div>
-                        <div>
-                            <h3>Meeting Comments</h3>
-                            <p>Enter details about the discussion</p>
-                        </div>
-                    </div>
+                    <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+    
+    <div style="display:flex; align-items:center; gap:10px;">
+        <div class="modal-icon">📝</div>
+        <div>
+            <h3 style="margin:0;">Meeting Comments</h3>
+            <p style="margin:0; font-size:12px; color:#666;">Enter details about the discussion</p>
+        </div>
+    </div>
+
+    <!-- ❌ Close Button -->
+    <button type="button" 
+            onclick="closeListMeetingModal()" 
+            style="background:none; border:none; font-size:20px; cursor:pointer; color:#999;">
+        &times;
+    </button>
+
+</div>
                     <input type="hidden" id="current_modal_client_id">
                     <textarea id="listModalRemarks"
                         placeholder="e.g., Client agreed to increase SIP, follow-up next month..."
