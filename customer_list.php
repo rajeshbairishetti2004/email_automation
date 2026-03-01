@@ -10,35 +10,33 @@
     $pdo = getPdo();
 
     /* ===============================
-    AJAX HANDLER FOR COMPANY EDIT
-    ================================ */
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
-        header('Content-Type: application/json');
-        
-        if ($_POST['ajax_action'] === 'update_company') {
-            $pan = $_POST['pan'] ?? '';
-            $company = trim($_POST['company'] ?? '');
-            
-            if (empty($pan)) {
-                echo json_encode(['success' => false, 'error' => 'PAN required']);
-                exit;
-            }
-            
-            try {
-                $stmt = $pdo->prepare("UPDATE customer_list SET company = ? WHERE pan = ?");
-                $stmt->execute([$company, $pan]);
-                
-                echo json_encode(['success' => true, 'message' => 'Company updated successfully']);
-            } catch (Exception $e) {
-                echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-            }
+   AJAX HANDLER FOR COMPANY EDIT
+=============================== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
+    header('Content-Type: application/json');
+
+    if ($_POST['ajax_action'] === 'update_company') {
+        $pan = $_POST['pan'] ?? '';
+        $company = trim($_POST['company'] ?? '');
+
+        if (empty($pan)) {
+            echo json_encode(['success' => false, 'error' => 'PAN required']);
             exit;
         }
-    }
 
-    /* ===============================
-    DELETE ALL CUSTOMERS (ADMIN)
-    ================================ */
+        try {
+            $stmt = $pdo->prepare("UPDATE customer_list SET company = ? WHERE pan = ?");
+            $stmt->execute([$company, $pan]);
+
+            echo json_encode(['success' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+}
+
+   
     if (
         $_SERVER['REQUEST_METHOD'] === 'POST' &&
         isset($_POST['delete_all_customers']) &&
@@ -55,85 +53,7 @@
         }
     }
 
-    /* ===============================
-    EXCEL UPLOAD HANDLER (ADMIN)
-    ================================ */
-    if (
-        $_SERVER['REQUEST_METHOD'] === 'POST' &&
-        isset($_POST['upload_excel']) &&
-        ($_SESSION['designation'] ?? '') === 'Admin'
-    ) {
-        require_once 'vendor/autoload.php';
-
-        if (!isset($_FILES['customer_excel']) || $_FILES['customer_excel']['error'] !== UPLOAD_ERR_OK) {
-            die("Excel upload failed");
-        }
-
-        /* 🔒 Strict filename check (NEW FORMAT ONLY) */
-        $originalName = $_FILES['customer_excel']['name'];
-        if (stripos($originalName, 'Client details') === false) {
-            die("Invalid file. Please upload the latest Client details Excel only.");
-        }
-
-        $spreadsheet = IOFactory::load($_FILES['customer_excel']['tmp_name']);
-        $sheet = $spreadsheet->getActiveSheet();
-        $rows  = $sheet->toArray(null, true, true, true);
-
-        /* ---- Header mapping ---- */
-        $header = array_shift($rows);
-        $map = [];
-        foreach ($header as $col => $name) {
-            $map[trim($name)] = $col;
-        }
-
-        $get = fn($row, $key) => trim($row[$map[$key]] ?? '');
-
-        $stmt = $pdo->prepare("
-            INSERT INTO customer_list
-            (name, pan, email, mobile, family_head, city, company,
-            first_investment, aum, tags, rm)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                email = VALUES(email),
-                mobile = VALUES(mobile),
-                family_head = VALUES(family_head),
-                city = VALUES(city),
-                company = VALUES(company),
-                first_investment = VALUES(first_investment),
-                aum = VALUES(aum),
-                tags = VALUES(tags),
-                rm = VALUES(rm)
-        ");
-
-        foreach ($rows as $row) {
-            $pan = $get($row, 'PAN');
-            if ($pan === '') continue;
-
-            $name    = $get($row, 'NAME');
-            $email   = $get($row, 'EMAIL');
-            $mobile  = $get($row, 'MOBILE');
-            $fh      = $get($row, 'FAMILY HEAD');
-            $city    = $get($row, 'CITY');
-            $company = $get($row, 'MODEL NAME');
-            $tags    = $get($row, 'TAGS');
-            $rm      = $get($row, 'RELATIONSHIP  MANAGER');
-
-            $dateRaw = $get($row, 'First Investment Date');
-            $date = $dateRaw ? date('Y-m-d', strtotime($dateRaw)) : null;
-
-            $aumRaw = $get($row, 'AUM');
-            $aum = is_numeric($aumRaw) ? (float)$aumRaw : 0;
-
-            $stmt->execute([
-                $name, $pan, $email, $mobile, $fh,
-                $city, $company, $date, $aum, $tags, $rm
-            ]);
-        }
-
-        header("Location: customer_list.php");
-        exit;
-    }
+   
 
     /* ===============================
     FETCH CUSTOMERS
@@ -459,21 +379,6 @@ $customers = $pdo->query("
 
             <button class="action-btn" onclick="resetFilters()">Reset</button>
         </div>
-
-        <?php if (($_SESSION['designation'] ?? '') === 'Admin'): ?>
-        <form method="POST" enctype="multipart/form-data" class="upload-form">
-            <label class="file-label">
-                <input type="file" name="customer_excel" accept=".xlsx" onchange="showFileName(this)" required>
-                <span id="fileText">Choose File</span>
-            </label>
-            <button type="submit" name="upload_excel" class="action-btn">Upload Excel</button>
-        </form>
-        <form method="POST" id="deleteAllForm" style="margin-left:12px;">
-            <button type="button" onclick="openDeleteModal()" class="action-btn" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;">
-                🗑 Delete All Customers
-            </button>
-        </form>
-        <?php endif; ?>
 
     </div>
 
