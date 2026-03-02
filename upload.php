@@ -202,8 +202,7 @@ $aumParams = [];
 if ($viewContext === 'mine') {
     $aumWhere .= " AND assigned_to = ?";
     $aumParams[] = $currentUserId;
-}
-elseif (ctype_digit($viewContext)) {
+} elseif (ctype_digit($viewContext)) {
     $aumWhere .= " AND assigned_to = ?";
     $aumParams[] = (int)$viewContext;
 }
@@ -336,7 +335,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         ?>
                         <div class="aum-box">
                             <div>AUM Handled</div>
-                            <div id="aumValue">₹<?= number_format($totalAum / 10000000, 2); ?> <span style="font-size:13px;">Cr</span></div>
+                            <div id="aumValue">₹<?= number_format($totalAum, 2); ?> <span style="font-size:13px;">Cr</span></div>
                         </div>
                     </div>
                 </div>
@@ -512,7 +511,7 @@ AND YEAR(meeting_date) = ?
                             <div class="aum-box">
                                 <div>AUM Handled</div>
                                 <div id="prevAumValue">
-                                    ₹<?= number_format($prevTotalAum / 10000000, 2); ?>
+                                    ₹<?= number_format($prevTotalAum, 2); ?>
                                     <span style="font-size:13px;">Cr</span>
                                 </div>
                             </div>
@@ -647,12 +646,16 @@ AND YEAR(meeting_date) = ?
         }
 
         function loadDashboard() {
+
+            const urlParams = new URLSearchParams(window.location.search);
+
             const params = new URLSearchParams({
                 cycle_filter: cycle.value,
                 month_filter: month.value,
                 year_filter: year.value,
-                view_context: "<?= $viewContext ?>"
+                view_context: urlParams.get('view_context') || 'mine'
             });
+
             fetch("ajax_dashboard_stats.php?" + params.toString())
                 .then(r => r.json())
                 .then(data => {
@@ -662,12 +665,9 @@ AND YEAR(meeting_date) = ?
                     document.getElementById("readyCount").innerText = data.ready;
                     document.getElementById("reviewedCount").innerText = data.reviewed;
                     document.getElementById("sentCount").innerText = data.sent;
-                    let crore = (data.aum / 10000000).toFixed(2);
-                    document.getElementById("aumValue").innerHTML = "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
-                    if (month.value) {
-                        document.getElementById("reviewHeading").innerText =
-                            month.options[month.selectedIndex].text + " " + year.value;
-                    }
+
+                   let crore = parseFloat(data.aum).toFixed(2);document.getElementById("aumValue").innerHTML =
+                        "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
                 });
         }
 
@@ -688,8 +688,7 @@ AND YEAR(meeting_date) = ?
                     document.getElementById("prevReadyCount").innerText = data.ready;
                     document.getElementById("prevReviewedCount").innerText = data.reviewed;
                     document.getElementById("prevSentCount").innerText = data.sent;
-                    let crore = (data.aum / 10000000).toFixed(2);
-                    document.getElementById("prevAumValue").innerHTML = "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
+                   let crore = parseFloat(data.aum).toFixed(2); document.getElementById("prevAumValue").innerHTML = "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
                     if (prevMonth.value) {
                         document.getElementById("prevReviewHeading").innerText =
                             prevMonth.options[prevMonth.selectedIndex].text + " " + prevYear.value;
