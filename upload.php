@@ -3,6 +3,7 @@
 // Clean rebuild: dashboard + upload/parse/save pipeline
 // UPDATED: AUM carry-forward logic - clients keep same AUM across reviews
 // FIXED: review_cycle carry-forward logic - fetched from existing client record, never defaulted to 'RJ'
+// FIXED: rename() replaced with copy()+unlink() fallback to fix "File not found" on AWS App Runner
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -102,6 +103,37 @@ function getReviewCycleForClient(PDO $pdo, string $clientName): ?string
     $stmt->execute([':name' => $clientName]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return $result ? $result['review_cycle'] : null;
+}
+
+/**
+ * Safely move a file from $src to $dst.
+ *
+ * Uses rename() first (fast, atomic). Falls back to copy()+unlink() when
+ * rename() fails — this happens on AWS App Runner and other environments
+ * where the source and destination are on different filesystem mount points.
+ *
+ * @throws RuntimeException if neither rename nor copy succeeds.
+ */
+function safeMoveFile(string $src, string $dst): void
+{
+    // Attempt fast rename first
+    if (@rename($src, $dst)) {
+        return;
+    }
+
+    // Fallback: cross-device / cross-mount move via copy + unlink
+    if (!file_exists($src)) {
+        throw new RuntimeException("safeMoveFile: source file not found: {$src}");
+    }
+
+    if (!@copy($src, $dst)) {
+        throw new RuntimeException(
+            "safeMoveFile: copy() failed — src={$src}, dst={$dst}"
+        );
+    }
+
+    // Remove source only after successful copy
+    @unlink($src);
 }
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
@@ -267,7 +299,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception('No files were uploaded.');
         }
 
-        $baseUploadDir = __DIR__ . '/uploads';
+        // Use sys_get_temp_dir() as a reliable writable staging area on all
+        // environments (local, Docker, AWS App Runner, etc.).
+        $baseUploadDir = sys_get_temp_dir() . '/fd_uploads';
         if (!is_dir($baseUploadDir)) {
             mkdir($baseUploadDir, 0777, true);
         }
@@ -539,6 +573,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
+            // Ensure the persistent attachments directory exists under __DIR__/uploads
             $clientAttachmentsDir = __DIR__ . '/uploads/attachments/client_' . $clientId;
             if (!is_dir($clientAttachmentsDir)) {
                 mkdir($clientAttachmentsDir, 0777, true);
@@ -553,7 +588,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $newPath = $clientAttachmentsDir . '/' . $counter . '_' . basename($att['name']);
                     $counter++;
                 }
-                rename($att['path'], $newPath);
+                // ── FIX: use safeMoveFile() instead of bare rename() ──────────
+                // rename() fails on AWS App Runner when src (sys_get_temp_dir)
+                // and dst (__DIR__/uploads) are on different mount points.
+                // safeMoveFile() falls back to copy()+unlink() automatically.
+                safeMoveFile($att['path'], $newPath);
             }
 
             foreach ($annexLines as $line) {
