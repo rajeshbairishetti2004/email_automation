@@ -1356,11 +1356,16 @@ meeting_comments,
         $whereParts[] = "c.meeting_date IS NULL";
     }
   // Always enforce latest review only
-// Match upload.php logic exactly (latest + current month)
 $currentMonthYear = date('M Y');
 
 $whereParts[] = "c.month_year = ?";
 $params[] = $currentMonthYear;
+
+// ✅ ADD THIS BLOCK
+if ($cycleFilter !== '') {
+    $whereParts[] = "c.review_cycle = ?";
+    $params[] = $cycleFilter;
+}
 
 array_unshift($whereParts, "c.is_latest = TRUE");
 
