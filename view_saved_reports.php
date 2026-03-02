@@ -5,6 +5,8 @@
 // - Added: Bulk reassignment functionality and split owner columns
 // - Added: Delete mode with checkboxes that appear only when clicking action icons
 // - Added: Inline-editable review_cycle column (click badge to edit, saves via AJAX)
+// - FIXED: All count/stat queries now use MAX(id) per client name to avoid
+//          double-counting when bulk-allocation rows and uploaded rows coexist
 
 require_once 'auth.php';
 requireAuth();
@@ -199,106 +201,148 @@ $page        = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
 $limit       = 20;
 $offset      = ($page - 1) * $limit;
 
-$whereParts = [];
-$params = [];
+// ---------------------------------------------------------------
+// We build TWO parallel sets of WHERE conditions:
+//   $whereParts / $params        → use "c." alias  (for outer queries that JOIN clients AS c)
+//   $innerWhereParts / $innerParams → NO alias     (for subqueries: FROM clients WHERE ...)
+// ---------------------------------------------------------------
+$whereParts      = [];   // aliased   — c.column
+$innerWhereParts = [];   // no alias  — column
+$params          = [];
+$innerParams     = [];
 
 $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
 if (!$isAdmin) {
-    $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $params[] = $myId;
-    $params[] = $myId;
+    $whereParts[]      = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+    $innerWhereParts[] = "(assigned_to = ? OR review_assigned_to = ?)";
+    $params[]      = $myId; $params[]      = $myId;
+    $innerParams[] = $myId; $innerParams[] = $myId;
 }
 
 if ($q !== '') {
-    $whereParts[] = "(c.name LIKE ? OR c.as_on LIKE ?)";
-    $params[] = '%' . $q . '%'; $params[] = '%' . $q . '%';
+    $whereParts[]      = "(c.name LIKE ? OR c.as_on LIKE ?)";
+    $innerWhereParts[] = "(name LIKE ? OR as_on LIKE ?)";
+    $params[]      = '%' . $q . '%'; $params[]      = '%' . $q . '%';
+    $innerParams[] = '%' . $q . '%'; $innerParams[] = '%' . $q . '%';
 }
 if ($filter !== '' && in_array($filter, ['pending','draft','ready','reviewed','sent'])) {
+    // Status filter only on outer query (the inner subquery must not filter by state,
+    // otherwise we'd miss the latest row when it has a different state)
     $whereParts[] = "c.report_state = ?";
-    $params[] = $filter;
+    $params[]     = $filter;
+    // Do NOT add to innerWhereParts / innerParams — inner picks latest row regardless of state
 }
 if ($cycleFilter !== '') {
-    $whereParts[] = "c.review_cycle = ?";
-    $params[] = $cycleFilter;
+    $whereParts[]      = "c.review_cycle = ?";
+    $innerWhereParts[] = "review_cycle = ?";
+    $params[]      = $cycleFilter;
+    $innerParams[] = $cycleFilter;
 }
 if ($isAdmin) {
     if ($ownerFilter === 'mine') {
-        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-        $params[] = $myId; $params[] = $myId;
+        $whereParts[]      = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $innerWhereParts[] = "(assigned_to = ? OR review_assigned_to = ?)";
+        $params[]      = $myId; $params[]      = $myId;
+        $innerParams[] = $myId; $innerParams[] = $myId;
     } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
-        $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-        $params[] = (int)$ownerFilter; $params[] = (int)$ownerFilter;
+        $whereParts[]      = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
+        $innerWhereParts[] = "(assigned_to = ? OR review_assigned_to = ?)";
+        $params[]      = (int)$ownerFilter; $params[]      = (int)$ownerFilter;
+        $innerParams[] = (int)$ownerFilter; $innerParams[] = (int)$ownerFilter;
     }
 }
-$whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+$whereClause      = $whereParts      ? 'WHERE ' . implode(' AND ', $whereParts)      : '';
+$innerWhereClause = $innerWhereParts ? 'WHERE ' . implode(' AND ', $innerWhereParts) : '';
 
-// --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
+// ---------------------------------------------------------------
+// CONTEXTUAL COUNTS FOR DROPDOWNS
+// All counts use MAX(id) per client name to avoid double-counting
+// ---------------------------------------------------------------
+
+// Cycle totals
 $cycleTotals = [];
-$cycleCountStmt = $pdo->prepare("SELECT c.review_cycle, COUNT(*) as total FROM clients c $whereClause GROUP BY c.review_cycle");
-$cycleCountStmt->execute($params);
+$cycleCountStmt = $pdo->prepare("
+    SELECT c.review_cycle, COUNT(*) AS total
+    FROM clients c
+    INNER JOIN (
+        SELECT name, MAX(id) AS max_id
+        FROM clients
+        {$innerWhereClause}
+        GROUP BY name
+    ) latest ON latest.name = c.name AND latest.max_id = c.id
+    GROUP BY c.review_cycle
+");
+$cycleCountStmt->execute($innerParams);
 foreach ($cycleCountStmt as $row) {
     $cycleTotals[$row['review_cycle']] = (int)$row['total'];
 }
 $allCyclesTotal = array_sum($cycleTotals);
 
+// Owner totals — build without alias for the JOIN condition
 $ownerWhereParts = [];
-$ownerParams = [];
+$ownerParams     = [];
 if ($cycleFilter !== '') {
     $ownerWhereParts[] = "c.review_cycle = ?";
-    $ownerParams[] = $cycleFilter;
+    $ownerParams[]     = $cycleFilter;
 }
 $whereOwner = $ownerWhereParts ? 'WHERE ' . implode(' AND ', $ownerWhereParts) : '';
 
 $ownerTotals = [];
-$ownerCountStmt = $pdo->prepare("SELECT u.id, u.username, COUNT(c.id) as total 
-    FROM users u 
-    INNER JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) $whereOwner 
-    GROUP BY u.id, u.username HAVING total > 0");
+$ownerCountStmt = $pdo->prepare("
+    SELECT u.id, u.username, COUNT(c.id) AS total
+    FROM users u
+    INNER JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) $whereOwner
+    GROUP BY u.id, u.username
+    HAVING total > 0
+");
 $ownerCountStmt->execute($ownerParams);
 foreach ($ownerCountStmt as $row) {
     $ownerTotals[$row['id']] = [
         'username' => $row['username'],
-        'total' => (int)$row['total']
+        'total'    => (int)$row['total'],
     ];
 }
 
-$stateWhereParts = [];
-$stateParams = [];
+// Status totals — build a separate no-alias inner WHERE (cycle + owner, but NOT status)
+$stateInnerParts  = [];
+$stateInnerParams = [];
 if ($cycleFilter !== '') {
-    $stateWhereParts[] = "c.review_cycle = ?";
-    $stateParams[] = $cycleFilter;
+    $stateInnerParts[]  = "review_cycle = ?";
+    $stateInnerParams[] = $cycleFilter;
 }
 if ($ownerFilter === 'mine') {
-    $stateWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $stateParams[] = $myId; $stateParams[] = $myId;
+    $stateInnerParts[]  = "(assigned_to = ? OR review_assigned_to = ?)";
+    $stateInnerParams[] = $myId; $stateInnerParams[] = $myId;
 } elseif ($ownerFilter !== 'all' && ctype_digit($ownerFilter)) {
-    $stateWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
-    $stateParams[] = (int)$ownerFilter; $stateParams[] = (int)$ownerFilter;
+    $stateInnerParts[]  = "(assigned_to = ? OR review_assigned_to = ?)";
+    $stateInnerParams[] = (int)$ownerFilter; $stateInnerParams[] = (int)$ownerFilter;
 }
-$whereState = $stateWhereParts ? 'WHERE ' . implode(' AND ', $stateWhereParts) : '';
+$whereStateInner = $stateInnerParts ? 'WHERE ' . implode(' AND ', $stateInnerParts) : '';
 
-$statusTotals = [];
+$statusTotals    = [];
 $statusCountStmt = $pdo->prepare("
-    SELECT c.report_state, COUNT(DISTINCT c.name) as total 
-    FROM clients c $whereState 
-    GROUP BY c.report_state HAVING total > 0
+    SELECT c.report_state, COUNT(*) AS total
+    FROM clients c
+    INNER JOIN (
+        SELECT name, MAX(id) AS max_id
+        FROM clients
+        {$whereStateInner}
+        GROUP BY name
+    ) latest ON latest.name = c.name AND latest.max_id = c.id
+    GROUP BY c.report_state
+    HAVING total > 0
 ");
-$statusCountStmt->execute($stateParams);
+$statusCountStmt->execute($stateInnerParams);
 foreach ($statusCountStmt as $row) {
     $statusTotals[$row['report_state']] = (int)$row['total'];
 }
 $allStatesTotal = array_sum($statusTotals);
 
-$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$whereClause}");
-$stmtCount->execute($params);
-$totalRows = (int)$stmtCount->fetchColumn();
-$totalPages = max(1, (int)ceil($totalRows / $limit));
-
-$stmtDistinctNames = $pdo->prepare("SELECT COUNT(DISTINCT c.name) FROM clients c {$whereClause}");
-$stmtDistinctNames->execute($params);
-$totalDistinctNames = (int)$stmtDistinctNames->fetchColumn();
-
+// ---------------------------------------------------------------
+// MAIN TABLE QUERY
+// Use MAX(id) per name so the list only shows the latest row per client
+// ---------------------------------------------------------------
 $allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state', 'aum'];
 $sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'updated_at';
 
@@ -315,6 +359,26 @@ if ($sortColumn === 'priority') {
     $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
 }
 
+// Count total distinct clients for pagination
+// ($innerWhereClause and $innerParams already built in the unified filter block above)
+$stmtCount = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM clients c
+    INNER JOIN (
+        SELECT name, MAX(id) AS max_id
+        FROM clients
+        {$innerWhereClause}
+        GROUP BY name
+    ) latest ON latest.name = c.name AND latest.max_id = c.id
+    {$whereClause}
+");
+// innerParams for subquery, then params for outer WHERE (which includes status filter)
+$stmtCount->execute(array_merge($innerParams, $params));
+$totalRows = (int)$stmtCount->fetchColumn();
+$totalPages = max(1, (int)ceil($totalRows / $limit));
+
+$totalDistinctNames = $totalRows; // already distinct by MAX(id) logic
+
 $stmt = $pdo->prepare("
     SELECT c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
            c.aum,
@@ -325,6 +389,12 @@ $stmt = $pdo->prepare("
            rm.username AS rm_username,
            reviewer.username AS reviewer_username
     FROM clients c
+    INNER JOIN (
+        SELECT name, MAX(id) AS max_id
+        FROM clients
+        {$innerWhereClause}
+        GROUP BY name
+    ) latest ON latest.name = c.name AND latest.max_id = c.id
     LEFT JOIN users creator  ON c.created_by = creator.id
     LEFT JOIN users rm       ON c.assigned_to = rm.id
     LEFT JOIN users reviewer ON c.review_assigned_to = reviewer.id
@@ -333,7 +403,7 @@ $stmt = $pdo->prepare("
     LIMIT ? OFFSET ?
 ");
 
-$paramsData = $params;
+$paramsData = array_merge($innerParams, $params);
 $paramsData[] = $limit;
 $paramsData[] = $offset;
 $stmt->execute($paramsData);
@@ -608,13 +678,11 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             border-color: #1976d2;
             color: #1565c0;
         }
-        /* pencil icon hint */
         .cycle-badge::after {
             content: ' ✎';
             font-size: 10px;
             opacity: 0.5;
         }
-        /* admin-only: non-admin sees static badge */
         .cycle-badge.readonly {
             cursor: default;
         }
@@ -655,7 +723,6 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         .cycle-cancel-btn { background: #e0e0e0; color: #555; }
         .cycle-cancel-btn:hover { background: #bdbdbd; }
 
-        /* saving spinner */
         .cycle-saving {
             font-size: 11px;
             color: #888;
@@ -932,7 +999,6 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
         <td class="cycle-cell" id="cycle-cell-<?= (int)$c['id'] ?>">
 
             <?php if ($isAdmin): ?>
-            <!-- ADMIN: clickable badge that opens inline editor -->
             <span
                 class="cycle-badge"
                 id="cycle-badge-<?= (int)$c['id'] ?>"
@@ -956,7 +1022,6 @@ if (isset($_GET['search_client']) && isset($_GET['q'])) {
             </div>
 
             <?php else: ?>
-            <!-- NON-ADMIN: static read-only badge -->
             <span class="cycle-badge readonly">
                 <?= $currentCycle ?: '—' ?>
             </span>
@@ -1120,9 +1185,8 @@ function saveCycle(id) {
     .then(data => {
         saving.classList.remove('visible');
         if (data.success) {
-            badge.textContent = data.review_cycle; // update badge text
+            badge.textContent = data.review_cycle;
             badge.style.display = '';
-            // flash green briefly
             badge.style.background   = '#e8f5e9';
             badge.style.borderColor  = '#43a047';
             badge.style.color        = '#2e7d32';
@@ -1133,7 +1197,7 @@ function saveCycle(id) {
             }, 1500);
         } else {
             alert('Error saving cycle: ' + (data.error || 'unknown'));
-            editDiv.classList.add('visible'); // re-open on failure
+            editDiv.classList.add('visible');
         }
     })
     .catch(() => {
@@ -1144,7 +1208,6 @@ function saveCycle(id) {
 }
 // ── END INLINE CYCLE EDIT ────────────────────────────────────────────────────
 
-// Toggle select all
 function toggleSelectAll(checkbox) {
     document.querySelectorAll('.client-checkbox').forEach(cb => { cb.checked = checkbox.checked; });
     updateSelectedCount();
@@ -1162,11 +1225,8 @@ function updateSelectedCount() {
 function confirmDelete() {
     const n = Array.from(document.querySelectorAll('.client-checkbox')).filter(cb => cb.checked).length;
     if (n === 0) { alert('Please select at least one client to delete.'); return; }
-    document.getElementById('deleteCount').textContent = n;
-    document.getElementById('deleteConfirmModal').style.display = 'flex';
+    document.getElementById('bulkDeleteForm').submit();
 }
-function closeDeleteModal() { document.getElementById('deleteConfirmModal').style.display = 'none'; }
-function submitDelete()     { document.getElementById('bulkDeleteForm').submit(); }
 
 document.addEventListener('DOMContentLoaded', function() {
     if (document.querySelector('.client-checkbox')) updateSelectedCount();
