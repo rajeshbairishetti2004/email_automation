@@ -201,10 +201,11 @@ $aumParams = [];
 
 if ($viewContext === 'mine') {
     $aumWhere .= " AND assigned_to = ?";
-    $aumParams = [$currentUserId];
-} elseif (ctype_digit($viewContext)) {
+    $aumParams[] = $currentUserId;
+}
+elseif (ctype_digit($viewContext)) {
     $aumWhere .= " AND assigned_to = ?";
-    $aumParams = [(int)$viewContext];
+    $aumParams[] = (int)$viewContext;
 }
 
 if ($cycleFilter === 'RJ') {

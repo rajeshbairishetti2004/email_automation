@@ -25,9 +25,17 @@ $where = "is_latest = TRUE";
 $params = [];
 
 /* Context */
+/* Context */
 if ($viewContext === 'mine') {
-    $where .= " AND (assigned_to = ?)";
+    $where .= " AND assigned_to = ?";
     $params[] = $currentUserId;
+}
+elseif ($viewContext === 'all') {
+    // no filter for global
+}
+elseif (ctype_digit($viewContext)) {
+    $where .= " AND assigned_to = ?";
+    $params[] = (int)$viewContext;
 }
 
 /* Cycle */

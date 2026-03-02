@@ -13,6 +13,8 @@
     const DEFAULT_CLOSING   = 'Closing remarks';
     const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
+    
+
 
     function extractSubCategoryAllocation(string $filePath): array
     {
@@ -113,7 +115,7 @@
         return 0;
     }
 
-    
+
     function extractActionsOnly($modificationsString)
     {
         if (empty($modificationsString)) return '';
@@ -121,7 +123,7 @@
         $items = explode(' | ', $modificationsString);
         $actions = array_map(function ($item) {
             $parts = explode('-', $item);
-            return trim(end($parts)); 
+            return trim(end($parts));
         }, $items);
 
         return implode(' | ', $actions);
@@ -171,19 +173,21 @@
     $pdo = getPdo();
     $pdoSlides = getSlidesPdo();
 
-   
+
+  $currentMonthYear = date('M Y');
+
     try {
-               $triggerChecked = false;
+        $triggerChecked = false;
         if (isset($_SESSION['trigger_checked']) && $_SESSION['trigger_checked'] === true) {
             $triggerChecked = true;
         } else {
-            
+
             $stmt = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_review_sent_date_on_sent'");
             $triggerExists = $stmt->rowCount() > 0;
 
             if (!$triggerExists && $isAdmin) {
                 try {
-                   
+
                     $pdo->exec("DROP TRIGGER IF EXISTS auto_set_review_sent_date_on_sent");
 
                     $createSQL = "
@@ -213,7 +217,7 @@
         // Silently fail - trigger is optional
     }
 
-  
+
     if (
         $_SERVER['REQUEST_METHOD'] === 'POST'
         && isset($_POST['action'])
@@ -307,7 +311,7 @@
             $toBackfill = $backfillStmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (!empty($toBackfill)) {
-                
+
                 $findPrevStmt = $pdo->prepare("
                     SELECT
                         review_sent_date,
@@ -374,10 +378,10 @@
         }
     }
 
-   
+
     if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
         try {
-             $sipBackfillStmt = $pdo->query("
+            $sipBackfillStmt = $pdo->query("
                 SELECT c.id
                 FROM clients c
                 WHERE c.report_state != 'sent'
@@ -457,7 +461,6 @@
                 }
             }
         } catch (Throwable $autoFillErr) {
-            
         }
     }
 
@@ -496,7 +499,7 @@
         exit;
     }
 
-   if (
+    if (
         $_SERVER['REQUEST_METHOD'] === 'POST'
         && isset($_POST['action'])
         && $_POST['action'] === 'fetch_scheme_changes'
@@ -511,7 +514,7 @@
                 exit;
             }
 
-           
+
             $stmt = $pdo->prepare("
                 SELECT id, scheme_name, action_step, recommended_scheme, recommended_amount
                 FROM client_schemes
@@ -554,7 +557,7 @@
         }
     }
 
-   if (
+    if (
         $_SERVER['REQUEST_METHOD'] === 'POST'
         && isset($_POST['action'])
         && $_POST['action'] === 'fetch_prev_scheme_changes'
@@ -625,7 +628,7 @@
             exit;
         }
     }
-   if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'fetch_meeting_history') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'fetch_meeting_history') {
         header('Content-Type: application/json');
         try {
             $clientName = $_POST['client_name'] ?? '';
@@ -928,7 +931,7 @@ AND meeting_remarks IS NOT NULL
                     $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
                 }
 
-               $stmtLastReview = $pdo->prepare("
+                $stmtLastReview = $pdo->prepare("
                     SELECT
                         review_sent_date,
                         meeting_date,
@@ -969,7 +972,7 @@ meeting_comments,
                 $stmtLastReview->execute([$clientName, $pendingRowId]);
                 $lastReview = $stmtLastReview->fetch(PDO::FETCH_ASSOC);
 
-               $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
+                $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
                 $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
                 $prevModificationsAction = $lastReview['modifications_action']  ?? null;
                 $prevMeetingComments     = $lastReview['meeting_remarks']       ?? null;
@@ -1252,8 +1255,12 @@ meeting_comments,
     if ($isAdmin || $myId) {
         $showReassignedSummary = true;
 
-        $summaryWhereParts = [];
-        $summaryParams = [];
+       $summaryWhereParts = [
+    "c.is_latest = TRUE",
+    "c.month_year = ?"
+];
+
+$summaryParams = [$currentMonthYear];
 
         $summaryWhereParts[] = "c.assigned_to <> c.review_assigned_to";
 
@@ -1273,10 +1280,6 @@ meeting_comments,
             $summaryParams[] = $myId;
         }
 
-        if ($cycleFilter !== '') {
-            $summaryWhereParts[] = "c.review_cycle = ?";
-            $summaryParams[] = $cycleFilter;
-        }
 
         if ($filter !== '' && in_array($filter, ['pending', 'draft', 'ready', 'reviewed', 'sent'])) {
             $summaryWhereParts[] = "c.report_state = ?";
@@ -1307,9 +1310,19 @@ meeting_comments,
     $limit       = 20;
     $offset      = ($page - 1) * $limit;
 
-    $whereParts = [];
-    $params = [];
+    
 
+    $whereParts = [
+        "c.is_latest = TRUE",
+        "c.month_year = ?"
+    ];
+
+    $params = [$currentMonthYear];
+
+    if (!empty($cycleFilter)) {
+    $whereParts[] = "c.review_cycle = ?";
+    $params[] = $cycleFilter;
+}
 
     if (!$isAdmin) {
         $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
@@ -1326,23 +1339,7 @@ meeting_comments,
         $whereParts[] = "c.report_state = ?";
         $params[] = $filter;
     }
-    $monthFilter = $_GET['month_filter'] ?? '';
-    $yearFilter  = $_GET['year_filter'] ?? '';
 
-    if ($cycleFilter !== '') {
-        $whereParts[] = "c.review_cycle = ?";
-        $params[] = $cycleFilter;
-    }
-
-    if ($monthFilter !== '') {
-        $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', 1) = ?";
-        $params[] = $monthFilter;
-    }
-
-    if ($yearFilter !== '') {
-        $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', -1) = ?";
-        $params[] = $yearFilter;
-    }
 
     if ($isAdmin) {
         if ($ownerFilter === 'mine') {
@@ -1373,31 +1370,34 @@ meeting_comments,
 
     $ownerWhereParts = [];
     $ownerParams = [];
-    if ($cycleFilter !== '') {
-        $ownerWhereParts[] = "c.review_cycle = ?";
-        $ownerParams[] = $cycleFilter;
-    }
+
     $whereOwner = $ownerWhereParts ? 'WHERE ' . implode(' AND ', $ownerWhereParts) : '';
 
     $ownerTotals = [];
-    $ownerCountStmt = $pdo->prepare("SELECT u.id, u.username, COUNT(c.id) as total 
-        FROM users u 
-        INNER JOIN clients c ON (c.assigned_to = u.id OR c.review_assigned_to = u.id) $whereOwner 
-        GROUP BY u.id, u.username HAVING total > 0");
-    $ownerCountStmt->execute($ownerParams);
+   $ownerCountStmt = $pdo->prepare("
+    SELECT u.id, u.username, COUNT(c.id) as total 
+    FROM users u 
+    INNER JOIN clients c 
+        ON (c.assigned_to = u.id OR c.review_assigned_to = u.id)
+        AND c.is_latest = TRUE
+        AND c.month_year = ?
+    GROUP BY u.id, u.username
+");
+
+$ownerCountStmt->execute([$currentMonthYear]);
     foreach ($ownerCountStmt as $row) {
         $ownerTotals[$row['id']] = [
             'username' => $row['username'],
             'total' => (int)$row['total']
         ];
     }
+  $stateWhereParts = [
+    "c.is_latest = TRUE",
+    "c.month_year = ?"
+];
 
-    $stateWhereParts = [];
-    $stateParams = [];
-    if ($cycleFilter !== '') {
-        $stateWhereParts[] = "c.review_cycle = ?";
-        $stateParams[] = $cycleFilter;
-    }
+$stateParams = [$currentMonthYear];
+
     if ($ownerFilter === 'mine') {
         $stateWhereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
         $stateParams[] = $myId;
@@ -1446,7 +1446,7 @@ meeting_comments,
         $orderByClause = "ORDER BY c.{$sortColumn} {$sortOrder}, c.id DESC";
     }
 
-   $stmt = $pdo->prepare("
+    $stmt = $pdo->prepare("
         SELECT
             c.id, c.name, c.as_on, c.created_at, c.updated_at, c.total_amount, c.profit,
             c.aum,
