@@ -281,7 +281,7 @@
 
                                             <!-- Admin-only columns -->
                                             <?php if ($isAdmin): ?>
-                                                <th>Drafted By</th>
+                                                <!-- <th>Drafted By</th> -->
                                                 <th>RM</th>
                                                 <th>Review Assigned to</th>
                                             <?php endif; ?>
@@ -380,7 +380,7 @@
 
                                                 <!-- Drafted By -->
                                                 <?php if ($isAdmin): ?>
-                                                    <td>
+                                                    <!-- <td>
                                                         <?php $currState = strtolower($c['report_state'] ?? 'draft'); ?>
                                                         <?php if ($currState === 'pending'): ?>
                                                             <span style="color:#999; font-size:0.85em; font-weight:600;">Not Drafted</span>
@@ -393,7 +393,7 @@
                                                                 <span style="color:#999; font-size:0.85em;">System</span>
                                                             <?php endif; ?>
                                                         <?php endif; ?>
-                                                    </td>
+                                                    </td> -->
 
                                                     <!-- RM -->
                                                     <td>
@@ -489,7 +489,7 @@
 
                                                 <!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
                                                 <!-- Modifications / Action — shows only non-Continue actions with clickable modal -->
-                                                <td class="col-current clickable-cell" style="min-width: 300px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;"
+                                                <td class="col-current clickable-cell" style="min-width: 180px; max-width: 400px; font-size:12px; cursor:pointer; white-space: normal; word-wrap: break-word;"
                                                     onclick="openSchemeModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($displayMod)) ?>')">
                                                     <?php if (!empty($displayMod)): ?>
                                                         <?= htmlspecialchars(extractActionsOnly($displayMod)) ?>
@@ -557,7 +557,7 @@
                                                 </td>
 
                                                 <!-- Prev Modifications — opens read-only scheme-style modal -->
-                                                <td class="col-prev clickable-cell" style="min-width:300px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
+                                                <td class="col-prev clickable-cell" style="min-width:180px; max-width:400px; font-size:12px; cursor:pointer; white-space:normal; word-wrap:break-word;"
                                                     onclick="openPrevModificationsModal(<?= (int)$c['id'] ?>)">
                                                     <?php $prevMod = $c['prev_modifications_action'] ?? ''; ?>
                                                     <?php if ($prevMod): ?>
