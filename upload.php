@@ -138,11 +138,9 @@ function safeMoveFile(string $src, string $dst): void
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
 {
-    // Build the base WHERE clause for filtering
     $baseWhere = "1=1";
     $params = [];
 
-    // Apply context filters
     if ($context === 'mine') {
         $baseWhere .= " AND (assigned_to = ? OR review_assigned_to = ?)";
         $params[] = $userId;
@@ -152,27 +150,33 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
         $params[] = (int)$context;
         $params[] = (int)$context;
     }
-    
-    // Add cycle filter if set
+
     if ($cycleFilter !== '') {
         $baseWhere .= " AND review_cycle = ?";
         $params[] = $cycleFilter;
     }
 
-    // Get the latest record for each client and count by status
-    // Using is_latest column for efficiency
+    // Fix: For each client name, pick only the single highest-ID row.
+    // This handles the case where a bulk-allocation "pending" row and an
+    // uploaded "reviewed" row both have is_latest=1 for the same client.
     $sql = "SELECT
-                COUNT(DISTINCT name) AS total,
-                SUM(CASE WHEN report_state = 'pending' THEN 1 ELSE 0 END) AS count_pending,
-                SUM(CASE WHEN report_state = 'draft' THEN 1 ELSE 0 END) AS count_draft,
-                SUM(CASE WHEN report_state = 'ready' THEN 1 ELSE 0 END) AS count_ready,
-                SUM(CASE WHEN report_state = 'reviewed' THEN 1 ELSE 0 END) AS count_reviewed,
-                SUM(CASE WHEN report_state = 'sent' THEN 1 ELSE 0 END) AS count_sent
-            FROM clients
-            WHERE is_latest = TRUE AND {$baseWhere}";
+                COUNT(*)                                                       AS total,
+                SUM(CASE WHEN c.report_state = 'pending'  THEN 1 ELSE 0 END) AS count_pending,
+                SUM(CASE WHEN c.report_state = 'draft'    THEN 1 ELSE 0 END) AS count_draft,
+                SUM(CASE WHEN c.report_state = 'ready'    THEN 1 ELSE 0 END) AS count_ready,
+                SUM(CASE WHEN c.report_state = 'reviewed' THEN 1 ELSE 0 END) AS count_reviewed,
+                SUM(CASE WHEN c.report_state = 'sent'     THEN 1 ELSE 0 END) AS count_sent
+            FROM clients c
+            INNER JOIN (
+                SELECT name, MAX(id) AS max_id
+                FROM clients
+                WHERE {$baseWhere}
+                GROUP BY name
+            ) latest ON latest.name = c.name AND latest.max_id = c.id";
 
+    // $params used twice: for the inner subquery AND the outer join condition
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
+    $stmt->execute(array_merge($params, $params));
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
     return [
