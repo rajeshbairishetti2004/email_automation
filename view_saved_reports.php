@@ -819,7 +819,7 @@ AND meeting_remarks IS NOT NULL
             }
 
 
-            $currentMonthYear = date('F Y');
+            $currentMonthYear = date('M Y');
 
             $checkExistingReview = $pdo->prepare('
                 SELECT id, review_attempt 
@@ -1307,8 +1307,7 @@ meeting_comments,
     $limit       = 20;
     $offset      = ($page - 1) * $limit;
 
-    $whereParts = [];
-    $params = [];
+   
 
 
     if (!$isAdmin) {
@@ -1329,10 +1328,6 @@ meeting_comments,
     $monthFilter = $_GET['month_filter'] ?? '';
     $yearFilter  = $_GET['year_filter'] ?? '';
 
-    if ($cycleFilter !== '') {
-        $whereParts[] = "c.review_cycle = ?";
-        $params[] = $cycleFilter;
-    }
 
     if ($monthFilter !== '') {
         $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', 1) = ?";
@@ -1360,11 +1355,20 @@ meeting_comments,
     } elseif ($meetingFilter === 'not_fixed') {
         $whereParts[] = "c.meeting_date IS NULL";
     }
-    $whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+  // Always enforce latest review only
+// Match upload.php logic exactly (latest + current month)
+$currentMonthYear = date('M Y');
 
+$whereParts[] = "c.month_year = ?";
+$params[] = $currentMonthYear;
+
+array_unshift($whereParts, "c.is_latest = TRUE");
+
+$whereClause = 'WHERE ' . implode(' AND ', $whereParts);
     // --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
     $cycleTotals = [];
-    $cycleCountStmt = $pdo->prepare("SELECT c.review_cycle, COUNT(*) as total FROM clients c $whereClause GROUP BY c.review_cycle");
+    $cycleCountStmt = $pdo->prepare("SELECT c.review_cycle, COUNT(*) as total FROM clients c 
+    $whereClause GROUP BY c.review_cycle");
     $cycleCountStmt->execute($params);
     foreach ($cycleCountStmt as $row) {
         $cycleTotals[$row['review_cycle']] = (int)$row['total'];
@@ -1421,8 +1425,11 @@ meeting_comments,
     }
     $allStatesTotal = array_sum($statusTotals);
 
-    $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM clients c {$whereClause}");
-    $stmtCount->execute($params);
+   $stmtCount = $pdo->prepare("
+    SELECT COUNT(DISTINCT c.name)
+    FROM clients c
+    {$whereClause}
+"); $stmtCount->execute($params);
     $totalRows = (int)$stmtCount->fetchColumn();
     $totalPages = max(1, (int)ceil($totalRows / $limit));
 
