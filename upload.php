@@ -2,6 +2,7 @@
 // upload.php
 // Clean rebuild: dashboard + upload/parse/save pipeline
 // UPDATED: AUM carry-forward logic - clients keep same AUM across reviews
+// FIXED: review_cycle carry-forward logic - fetched from existing client record, never defaulted to 'RJ'
 
 require_once 'auth.php';
 require_once 'db_config.php';
@@ -76,6 +77,31 @@ function getLatestAumForClient(PDO $pdo, string $clientName): float
     $stmt->execute([':name' => $clientName]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     return (float)($result['aum'] ?? 0);
+}
+
+/**
+ * Get the review_cycle for a client from their most recent record.
+ * This ensures that when files are re-uploaded, the cycle is inherited
+ * from the bulk allocation record — never defaulted to a hardcoded value.
+ *
+ * Priority:
+ *  1. Most recent record that has a non-empty review_cycle
+ *  2. NULL if client has never been allocated (shouldn't happen in normal flow)
+ */
+function getReviewCycleForClient(PDO $pdo, string $clientName): ?string
+{
+    $stmt = $pdo->prepare("
+        SELECT review_cycle
+        FROM clients
+        WHERE name = :name
+          AND review_cycle IS NOT NULL
+          AND review_cycle <> ''
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([':name' => $clientName]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $result ? $result['review_cycle'] : null;
 }
 
 function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cycleFilter = ''): array
@@ -407,9 +433,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allocation = $clientData['allocation'] ?? [];
             $schemes    = $clientData['schemes'] ?? [];
             $asOn       = $clientData['as_on'] ?? '';
-            
-            // Determine review cycle (you might need to add this logic)
-            $reviewCycle = $_POST['review_cycle'] ?? 'RJ'; // Default or from form
+
+            // -----------------------------------------------------------------
+            // REVIEW CYCLE CARRY-FORWARD LOGIC
+            // -----------------------------------------------------------------
+            // Always inherit review_cycle from the client's existing DB record.
+            // This is set during Bulk Allocation and must never be overwritten
+            // or defaulted to a hardcoded value when uploading report files.
+            //
+            // Only fall back to a POST value if the client has absolutely no
+            // prior record at all (brand-new client not yet bulk-allocated —
+            // which should not normally happen, but is handled safely here).
+            // -----------------------------------------------------------------
+            $reviewCycle = getReviewCycleForClient($pdo, $clientName);
+
+            if ($reviewCycle === null) {
+                // Client not found in DB at all — last-resort fallback.
+                // Use POST value if provided, otherwise leave NULL so the
+                // admin can fix it manually. Do NOT hardcode 'RJ'.
+                $reviewCycle = !empty($_POST['review_cycle']) ? $_POST['review_cycle'] : null;
+            }
+            // If $reviewCycle is still null here, the INSERT will store NULL,
+            // which is visible in the UI as '—' and easy to spot & correct.
 
             $totalSip         = 0;
             $totalGoalCurrent = 0;
@@ -442,7 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':report_state'       => 'draft',
                 ':assigned_to'        => $currentUserId,
                 ':month_year'         => $currentMonthYear,
-                ':review_cycle'       => $reviewCycle,
+                ':review_cycle'       => $reviewCycle,   // ← Always from DB, never hardcoded
                 ':is_latest'          => true,
                 ':previous_version_id' => $previousVersionId,
                 ':review_attempt'     => $reviewAttempt
