@@ -1,4 +1,6 @@
 <?php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 // report_attachments.php
 // Requires: $clientId, $canEditAttachments set in parent scope
 
@@ -90,56 +92,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 }
                 if (!preg_match('/\.pdf$/i', $new)) $new .= '.pdf';
 
-                $dir   = __DIR__ . "/uploads/attachments/client_$clientId/";
-                $files = scandir($dir);
-
-                if ($files === false) {
-                    echo json_encode(['success' => false, 'error' => 'Unable to read directory', 'dir' => $dir]);
-                    exit;
+                $dir = __DIR__ . "/uploads/attachments/client_$clientId/";
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0777, true);
                 }
 
-                $matchedFile = null;
-                foreach ($files as $f) {
-                    if (strcasecmp($f, $old) === 0) { $matchedFile = $f; break; }
+                // Try to find and rename the physical file
+                $physicalRenamed = false;
+                $matchedFile     = null;
+                $files           = is_dir($dir) ? scandir($dir) : [];
+
+                if ($files) {
+                    foreach ($files as $f) {
+                        if (strcasecmp($f, $old) === 0) { $matchedFile = $f; break; }
+                    }
                 }
 
-                if (!$matchedFile) {
-                    echo json_encode([
-                        'success'            => false,
-                        'error'              => 'File not found (case-sensitive mismatch possible)',
-                        'requested_old_name' => $old,
-                        'directory'          => $dir,
-                        'files_in_directory' => array_values(array_diff($files, ['.', '..']))
-                    ]);
-                    exit;
-                }
+                if ($matchedFile) {
+                    $oldPath = $dir . $matchedFile;
+                    $newPath = $dir . $new;
 
-                $oldPath = $dir . $matchedFile;
-                $newPath = $dir . $new;
-
-                if (!file_exists($oldPath)) {
-                    echo json_encode(['success' => false, 'error' => 'File exists in scan but not at computed path', 'computed_old_path' => $oldPath]);
-                    exit;
+                    if (file_exists($newPath)) {
+                        echo json_encode(['success' => false, 'error' => 'Target filename already exists', 'target_path' => $newPath]);
+                        exit;
+                    }
+                    if (!rename($oldPath, $newPath)) {
+                        echo json_encode(['success' => false, 'error' => 'Rename function failed', 'old_path' => $oldPath, 'new_path' => $newPath]);
+                        exit;
+                    }
+                    $physicalRenamed = true;
                 }
-                if (file_exists($newPath)) {
-                    echo json_encode(['success' => false, 'error' => 'Target filename already exists', 'target_path' => $newPath]);
-                    exit;
-                }
-                if (!rename($oldPath, $newPath)) {
-                    echo json_encode(['success' => false, 'error' => 'Rename function failed', 'old_path' => $oldPath, 'new_path' => $newPath]);
-                    exit;
-                }
+                // If physical file not found, we still update the DB record.
+                // This handles cases where the file was uploaded externally or
+                // is stored in a different location — the DB label is all that matters.
 
                 $stmt = $pdo->prepare("UPDATE report_attachments SET file_name = :new WHERE client_id = :cid AND file_name = :old");
-                $stmt->execute([':new' => $new, ':old' => $matchedFile, ':cid' => $clientId]);
+                $stmt->execute([':new' => $new, ':old' => $old, ':cid' => $clientId]);
 
                 echo json_encode([
-                    'success'  => true,
-                    'message'  => 'File renamed successfully',
-                    'old_name' => $matchedFile,
-                    'new_name' => $new,
-                    'old_path' => $oldPath,
-                    'new_path' => $newPath
+                    'success'         => true,
+                    'message'         => $physicalRenamed ? 'File renamed successfully' : 'DB record renamed (physical file not found on server)',
+                    'old_name'        => $old,
+                    'new_name'        => $new,
+                    'physical_renamed' => $physicalRenamed,
                 ]);
                 exit;
         }
@@ -172,6 +167,42 @@ $stmt = $pdo->prepare("SELECT file_name FROM report_attachments WHERE client_id 
 $stmt->execute([':client_id' => $clientId]);
 $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
 ?>
+
+<style>
+.annex-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+.annex-edit, .annex-delete {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+.annex-edit {
+    color: #0288D1;
+    background: #e3f2fd;
+}
+.annex-edit:hover {
+    background: #0288D1;
+    color: #fff;
+}
+.annex-delete {
+    color: #dc3545;
+    background: #fee2e2;
+}
+.annex-delete:hover {
+    background: #dc3545;
+    color: #fff;
+}
+</style>
 
 <!-- ============================================================
      ATTACHMENT CARD

@@ -1,52 +1,12 @@
 services:
-  # 1. PHP/Apache Web Application Service
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: php_apache_app
     ports:
-      - "8080:80" 
+      - "8080:80"
     volumes:
-      - ./Report:/var/www/html 
       - ./uploads:/var/www/html/uploads
     env_file:
       - ./.env
-    environment:
-      DB_HOST: mysql
-      DB_NAME: client_reports
-      DB_USER: MyUser 
-      DB_PASS: MySecurePass123!
-    depends_on:
-      - mysql
-
-  # 2. MySQL Database Service
-  mysql:
-    image: mysql:8.3 # UPGRADED TO 8.3
-    container_name: mysql_db
-    environment:
-      MYSQL_ROOT_PASSWORD: MySecurePass123!
-      MYSQL_DATABASE: client_reports
-      MYSQL_USER: MyUser
-      MYSQL_PASSWORD: MySecurePass123!
-    volumes:
-      - db_data:/var/lib/mysql 
-    ports:
-      - "3306:3306" 
-
-  # 3. phpMyAdmin (Optional Database GUI)
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest 
-    container_name: phpmyadmin_gui
-    ports:
-      - "8081:80" 
-    environment:
-      PMA_HOST: mysql 
-      PMA_USER: root                      
-      PMA_PASSWORD: MySecurePass123!      
-      PMA_HOST_SESSION_REQUEST_VALIDATION: 'false' 
-    depends_on:
-      - mysql
-
-volumes:
-  db_data:
