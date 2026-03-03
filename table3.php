@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_id']) && isset
         $clientId = (int)$_POST['client_id'];
         if ($clientId <= 0) throw new Exception('Invalid client ID');
 
-        $assets = $_POST['recommended_asset'] ?? [];
+        $assets     = $_POST['recommended_asset'] ?? [];
         $share_pcts = $_POST['recommended_share_pct'] ?? [];
 
         if (!is_array($assets) || !is_array($share_pcts)) throw new Exception('Invalid input');
@@ -32,7 +32,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_id']) && isset
             $asset = trim($asset);
             $share = isset($share_pcts[$idx]) ? floatval($share_pcts[$idx]) : null;
 
-            // Try to update, if not exists, insert
             $stmt = $pdo->prepare("SELECT id FROM client_allocations WHERE client_id = ? AND asset = ?");
             $stmt->execute([$clientId, $asset]);
             $rowId = $stmt->fetchColumn();
@@ -91,7 +90,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             </div>
         </div>
     </div>
-<!--     
+<!--
     <div class="piechart-container">
         <div style="font-weight:600; font-size:16px; margin-bottom:20px; text-align:center;">Recommended Asset Allocation</div>
         <form id="recommendedAllocationForm" style="margin-bottom: 8px;">
@@ -126,13 +125,14 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             </div>
         </form>
         <span id="recommendedAllocStatus" style="margin-left:10px; font-size:13px; display:none;"></span>
-    </div> -->
+    </div>
+-->
 </div>
 <style>
 /* --- Table 3: Asset Allocation Chart Styles --- */
-h3{
+h3 {
     margin-top: 40px;
-    margin-bottom:40px;
+    margin-bottom: 40px;
 }
 .asset-allocation-main-container {
     width: 100%;
@@ -206,7 +206,7 @@ h3{
     gap: 10px;
     min-width: 140px;
     margin-left: 8px;
-    margin-top:10px;
+    margin-top: 10px;
 }
 .legend-row {
     display: flex;
@@ -259,107 +259,128 @@ h3{
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // --- Current Asset Allocation Pie Chart ---
-    const allocationData = {
-        labels: <?= json_encode($assetOrder) ?>,
-        values: <?= json_encode(array_map(function($a) use ($currentMap) { return $currentMap[$a] ?? 0; }, $assetOrder)) ?>,
-        colors: ['#36A2EB', '#2eb85c', '#f9b115', '#e55353']
-    };
-    const ctx = document.getElementById('allocationChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: allocationData.labels,
-            datasets: [{
-                data: allocationData.values,
-                backgroundColor: allocationData.colors,
-                borderColor: '#fff',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: { enabled: true }
-            }
-        }
-    });
+// -------------------------------------------------------
+// FIX: Wrap ALL chart code in DOMContentLoaded so canvas
+// elements are guaranteed to exist before getContext().
+// Previously this ran inline and crashed on commented-out
+// #recommendedAllocationChart canvas (null.getContext).
+// -------------------------------------------------------
+document.addEventListener('DOMContentLoaded', function () {
 
-    // --- Recommended Asset Allocation Pie Chart ---
-    function renderRecommendedChart() {
-        const labels = [];
-        const values = [];
-        const colors = ['#36A2EB', '#2eb85c', '#f9b115', '#e55353'];
-        document.querySelectorAll('.recommended-allocation-input').forEach(function(input, idx) {
-            const asset = input.getAttribute('data-asset');
-            const val = parseFloat(input.value) || 0;
-            labels.push(asset + ' (' + val.toFixed(2) + '%)');
-            values.push(val);
-        });
-        const ctx2 = document.getElementById('recommendedAllocationChart').getContext('2d');
-        if (window.recommendedChart) window.recommendedChart.destroy();
-        window.recommendedChart = new Chart(ctx2, {
+    // --- Current Asset Allocation Pie Chart ---
+    const allocationCanvas = document.getElementById('allocationChart');
+    if (allocationCanvas) {
+        const allocationData = {
+            labels: <?= json_encode($assetOrder) ?>,
+            values: <?= json_encode(array_map(function($a) use ($currentMap) { return $currentMap[$a] ?? 0; }, $assetOrder)) ?>,
+            colors: ['#36A2EB', '#2eb85c', '#f9b115', '#e55353']
+        };
+        new Chart(allocationCanvas.getContext('2d'), {
             type: 'pie',
             data: {
-                labels: labels,
+                labels: allocationData.labels,
                 datasets: [{
-                    data: values,
-                    backgroundColor: colors,
-                    borderColor: '#fff',
-                    borderWidth: 2
+                    data:            allocationData.values,
+                    backgroundColor: allocationData.colors,
+                    borderColor:     '#fff',
+                    borderWidth:     2
                 }]
             },
             options: {
-                responsive: true,
+                responsive:          true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: { display: false },
+                    legend:  { display: false },
                     tooltip: { enabled: true }
                 }
             }
         });
     }
 
-    // Initial render
+    // --- Recommended Asset Allocation Pie Chart ---
+    // FIX: Guard against null — canvas is commented out in HTML.
+    // renderRecommendedChart() is kept so it can be re-enabled
+    // simply by un-commenting the HTML block above.
+    function renderRecommendedChart() {
+        const canvas = document.getElementById('recommendedAllocationChart');
+        if (!canvas) {
+            // Canvas is commented out — silently skip, no error
+            return;
+        }
+
+        const labels = [];
+        const values = [];
+        const colors = ['#36A2EB', '#2eb85c', '#f9b115', '#e55353'];
+
+        document.querySelectorAll('.recommended-allocation-input').forEach(function (input) {
+            const asset = input.getAttribute('data-asset');
+            const val   = parseFloat(input.value) || 0;
+            labels.push(asset + ' (' + val.toFixed(2) + '%)');
+            values.push(val);
+        });
+
+        if (window.recommendedChart) window.recommendedChart.destroy();
+
+        window.recommendedChart = new Chart(canvas.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data:            values,
+                    backgroundColor: colors,
+                    borderColor:     '#fff',
+                    borderWidth:     2
+                }]
+            },
+            options: {
+                responsive:          true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend:  { display: false },
+                    tooltip: { enabled: true }
+                }
+            }
+        });
+    }
+
+    // Initial render (safe — skips silently if canvas absent)
     renderRecommendedChart();
 
     // --- Auto-save on input change ---
-    document.querySelectorAll('.recommended-allocation-input').forEach(function(input) {
-        input.addEventListener('input', function() {
+    document.querySelectorAll('.recommended-allocation-input').forEach(function (input) {
+        input.addEventListener('input', function () {
             renderRecommendedChart();
             autoSaveRecommendedAlloc();
         });
     });
 
     function autoSaveRecommendedAlloc() {
-        const form = document.getElementById('recommendedAllocationForm');
+        const form   = document.getElementById('recommendedAllocationForm');
         const status = document.getElementById('recommendedAllocStatus');
+        if (!form || !status) return;
+
         const data = new FormData(form);
         status.style.display = 'inline';
-        status.textContent = 'Saving...';
-        fetch('table3.php', {
-            method: 'POST',
-            body: data
-        })
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) {
-                status.textContent = '✓ Saved';
-                status.style.color = '#28a745';
-            } else {
-                status.textContent = '❌ Error';
-                status.style.color = '#dc3545';
-            }
-            setTimeout(() => { status.style.display = 'none'; }, 1200);
-        })
-        .catch(() => {
-            status.textContent = '❌ Error';
-            status.style.color = '#dc3545';
-            setTimeout(() => { status.style.display = 'none'; }, 1200);
-        });
+        status.textContent   = 'Saving...';
+
+        fetch('table3.php', { method: 'POST', body: data })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    status.textContent  = '✓ Saved';
+                    status.style.color  = '#28a745';
+                } else {
+                    status.textContent  = '❌ Error';
+                    status.style.color  = '#dc3545';
+                }
+                setTimeout(() => { status.style.display = 'none'; }, 1200);
+            })
+            .catch(() => {
+                status.textContent  = '❌ Error';
+                status.style.color  = '#dc3545';
+                setTimeout(() => { status.style.display = 'none'; }, 1200);
+            });
     }
+
+}); // end DOMContentLoaded
 </script>
-
-

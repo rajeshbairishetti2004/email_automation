@@ -84,12 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $stmt->execute([$templateId]);
             $response['success'] = true;
         }
-        // Workflow actions - UPDATED TO USE SAME PATTERN AS client_communication.php
+        // Workflow actions
         elseif ($action === 'save_draft') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
-            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', draft_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Draft saved successfully.', 'updated_state' => 'draft']);
@@ -99,7 +98,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
-            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'ready', ready_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked Ready for Review.', 'updated_state' => 'ready']);
@@ -109,7 +107,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
 
-            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'reviewed', reviewed_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report Approved (Reviewed).', 'updated_state' => 'reviewed']);
@@ -121,7 +118,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             if (empty($comment)) throw new Exception("A comment is required for rejection.");
 
-            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', review_not_ok = 1, review_comment = :comment WHERE id = :id");
             $stmt->execute([':id' => $clientId, ':comment' => $comment]);
             echo json_encode(['success' => true, 'message' => 'Report rejected and moved back to Draft.', 'updated_state' => 'draft']);
@@ -131,13 +127,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             
-            // Note: rationale_text should already be saved via auto-save on blur
             $stmt = $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :id");
             $stmt->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
             exit;
         }
-        // Auto-save rationale text (from blur event) - This is what preserves the text
+        // Auto-save rationale text (from blur event)
         elseif ($action === 'save_rationale') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             $value = trim($_POST['value'] ?? '');
@@ -149,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             echo json_encode(['success' => true, 'message' => 'Rationale saved successfully.']);
             exit;
         }
-        // Auto-save on interval (for autosave feature)
+        // Auto-save on interval
         elseif ($action === 'autosave_rationale') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             $value = $_POST['value'] ?? '';
@@ -164,7 +159,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             exit;
         }
         else {
-            // Unknown action
             echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
             exit;
         }
@@ -175,7 +169,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         exit;
         
     } catch (Throwable $e) {
-        // Clean output buffer and return error
         ob_end_clean();
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         exit;
@@ -199,7 +192,7 @@ if (!isset($rationaleText) || $rationaleText === '') {
 ?>
 
 <style>
-/* Rationale module styles - updated to match site blue theme */
+/* Rationale module styles */
 .rat-box {
     margin-top: 18px;
     margin-bottom: 18px;
@@ -257,27 +250,24 @@ if (!isset($rationaleText) || $rationaleText === '') {
     transition: background-color 0.12s ease, transform 0.06s ease;
 }
 
-/* Blue-themed buttons to match page */
 .rat-btn.save {
-    background: #0288D1; /* primary */
+    background: #0288D1;
     color: #fff;
 }
 .rat-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
 
 .rat-btn.edit {
-    background: #039be5; /* lighter blue */
+    background: #039be5;
     color: #fff;
 }
 .rat-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
 
-/* Delete: base blue, hover becomes red */
 .rat-btn.del {
-    background: #0277bd; /* darker blue */
+    background: #0277bd;
     color: #fff;
 }
 .rat-btn.del:hover { background: #dc3545 !important; transform: translateY(-1px); }
 
-/* Add button (plus) specific styling */
 .rat-btn.add {
     display: flex;
     align-items: center;
@@ -291,14 +281,12 @@ if (!isset($rationaleText) || $rationaleText === '') {
     color: #0288d1;
 }
 
-/* Disabled button state */
 .rat-btn[disabled] {
     opacity: 0.65;
     cursor: not-allowed;
     transform: none !important;
 }
 
-/* Focus / keyboard accessibility */
 .rat-btn:focus,
 .rat-select:focus,
 .rat-textarea:focus {
@@ -306,7 +294,6 @@ if (!isset($rationaleText) || $rationaleText === '') {
     outline-offset: 2px;
 }
 
-/* Textarea with auto-grow */
 .rat-textarea {
     width: 100%;
     padding: 12px;
@@ -323,13 +310,11 @@ if (!isset($rationaleText) || $rationaleText === '') {
     overflow: hidden;
 }
 
-/* Textarea with auto-resize height */
 .rat-textarea.auto-resize {
     resize: none;
     overflow-y: hidden;
 }
 
-/* Flash messages area */
 .rat-flash { 
     margin-top: 8px; 
     min-height: 26px; 
@@ -352,7 +337,6 @@ if (!isset($rationaleText) || $rationaleText === '') {
     border-left: 3px solid #dc3545;
 }
 
-/* Make buttons consistent on small screens */
 @media (max-width: 640px) {
     .rat-controls { 
         flex-direction: column; 
@@ -367,7 +351,6 @@ if (!isset($rationaleText) || $rationaleText === '') {
     }
 }
 
-/* SVG plus icon */
 .rat-btn.add svg {
     width: 16px;
     height: 16px;
@@ -438,101 +421,59 @@ $templates = $templates ?? [];
 (function(){
     const selector = document.getElementById('rationale_template_selector');
     const textarea = document.getElementById('rationale_textarea');
-    const saveBtn = document.getElementById('rationale_save_btn');
-    const editBtn = document.getElementById('rationale_edit_btn');
-    const delBtn = document.getElementById('rationale_delete_btn');
-    const addBtn = document.getElementById('rationale_add_btn');
-    const flash = document.getElementById('rationale_flash_container');
+    const saveBtn  = document.getElementById('rationale_save_btn');
+    const editBtn  = document.getElementById('rationale_edit_btn');
+    const delBtn   = document.getElementById('rationale_delete_btn');
+    const addBtn   = document.getElementById('rationale_add_btn');
+    const flash    = document.getElementById('rationale_flash_container');
     const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
-    const clientId = <?= json_encode((int)$clientId); ?>;
+    const clientId = <?= json_encode((int)$clientId) ?>;
 
-    // Auto-save variables
+    // Auto-save state
     let autoSaveTimeout = null;
-    let lastSavedValue = textarea.value;
-    const AUTO_SAVE_DELAY = 1000; // 1 second delay for auto-save
+    let lastSavedValue  = textarea ? textarea.value : '';
+    const AUTO_SAVE_DELAY = 1000;
     let isSaving = false;
 
-    // --- Auto-height resize logic ---
+    // -------------------------------------------------------
+    // Auto-height resize
+    // -------------------------------------------------------
     function autoResizeHeight() {
         if (!textarea) return;
-        
-        // Store current cursor position
         const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        
-        // Reset height to auto to calculate scrollHeight
+        const end   = textarea.selectionEnd;
         textarea.style.height = 'auto';
-        
-        // Calculate content height (add 2px buffer)
-        const scrollHeight = textarea.scrollHeight;
-        textarea.style.height = (scrollHeight + 2) + 'px';
-        
-        // Restore cursor position
+        textarea.style.height = (textarea.scrollHeight + 2) + 'px';
         textarea.setSelectionRange(start, end);
     }
 
-    // Initialize auto-resize
-    autoResizeHeight();
-    
-    // Resize on input, paste, and cut
-    textarea.addEventListener('input', () => {
+    if (textarea) {
         autoResizeHeight();
-        triggerAutoSave(); // Also trigger auto-save on input
-    });
-    
-    textarea.addEventListener('paste', () => {
-        setTimeout(() => {
-            autoResizeHeight();
-            triggerAutoSave();
-        }, 0);
-    });
-    
-    textarea.addEventListener('cut', () => {
-        setTimeout(() => {
-            autoResizeHeight();
-            triggerAutoSave();
-        }, 0);
-    });
-
-    // --- Auto-save logic with debouncing ---
-    function triggerAutoSave() {
-        if (isLocked || isSaving) return;
-        
-        const currentValue = textarea.value.trim();
-        
-        // Only save if value has changed
-        if (currentValue === lastSavedValue) return;
-        
-        // Clear any existing timeout
-        if (autoSaveTimeout) {
-            clearTimeout(autoSaveTimeout);
-        }
-        
-        // Set new timeout for auto-save
-        autoSaveTimeout = setTimeout(() => {
-            performAutoSave(currentValue);
-        }, AUTO_SAVE_DELAY);
+        textarea.addEventListener('input', () => { autoResizeHeight(); triggerAutoSave(); });
+        textarea.addEventListener('paste', () => setTimeout(() => { autoResizeHeight(); triggerAutoSave(); }, 0));
+        textarea.addEventListener('cut',   () => setTimeout(() => { autoResizeHeight(); triggerAutoSave(); }, 0));
     }
 
+    // -------------------------------------------------------
+    // FIX 1: performAutoSave now RETURNS the fetch Promise
+    // -------------------------------------------------------
     function performAutoSave(value) {
-        if (isLocked || isSaving) return;
-        
-        const clientId = textarea.getAttribute('data-client-id');
+        // Always return a resolved Promise when skipping — callers use .then()
+        if (isLocked || isSaving || !textarea) return Promise.resolve();
+
+        const cid   = textarea.getAttribute('data-client-id');
         const field = textarea.getAttribute('data-field');
-        
-        if (!clientId || !field) return;
-        
+        if (!cid || !field) return Promise.resolve();
+
         isSaving = true;
-        
-        fetch('rationale.php', {
+
+        return fetch('rationale.php', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
             body: new URLSearchParams({
                 ajax_action: 'save_rationale',
-                client_id: clientId,
-                value: value
+                client_id:   cid,
+                value:       value
             })
         })
         .then(response => response.json())
@@ -553,65 +494,73 @@ $templates = $templates ?? [];
         });
     }
 
-    // Also save on blur as a fallback
-    textarea.addEventListener('blur', () => {
-        if (isLocked) return;
-        
+    // -------------------------------------------------------
+    // FIX 2: Expose forceSaveRationaleBeforeSubmit globally
+    // view_report.php calls this in submitWorkflow() before
+    // form submission — it must exist and return a Promise.
+    // -------------------------------------------------------
+    window.forceSaveRationaleBeforeSubmit = function() {
+        if (!textarea || isLocked) return Promise.resolve();
         const currentValue = textarea.value.trim();
-        if (currentValue !== lastSavedValue) {
-            performAutoSave(currentValue);
-        }
-        
-        // Clear any pending timeout
+        if (currentValue === lastSavedValue) return Promise.resolve();
+        // Cancel any pending debounce so we don't double-save
         if (autoSaveTimeout) {
             clearTimeout(autoSaveTimeout);
             autoSaveTimeout = null;
         }
-    });
+        return performAutoSave(currentValue);
+    };
 
-    // Clean up timeout when page unloads
+    // -------------------------------------------------------
+    // Debounced auto-save trigger
+    // -------------------------------------------------------
+    function triggerAutoSave() {
+        if (isLocked || isSaving || !textarea) return;
+        const currentValue = textarea.value.trim();
+        if (currentValue === lastSavedValue) return;
+        if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(() => performAutoSave(currentValue), AUTO_SAVE_DELAY);
+    }
+
+    // Save on blur as fallback
+    if (textarea) {
+        textarea.addEventListener('blur', () => {
+            if (isLocked) return;
+            const currentValue = textarea.value.trim();
+            if (currentValue !== lastSavedValue) {
+                if (autoSaveTimeout) { clearTimeout(autoSaveTimeout); autoSaveTimeout = null; }
+                performAutoSave(currentValue);
+            }
+        });
+    }
+
     window.addEventListener('beforeunload', () => {
-        if (autoSaveTimeout) {
-            clearTimeout(autoSaveTimeout);
-        }
+        if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
     });
 
-    // CRITICAL: Intercept workflow buttons from view_report.php
+    // -------------------------------------------------------
+    // FIX 3: interceptWorkflowButtons — no longer calls .then()
+    // on performAutoSave directly (form submission handles flow)
+    // -------------------------------------------------------
     function interceptWorkflowButtons() {
-        // Find workflow buttons in the main form
-        const workflowButtons = document.querySelectorAll('.workflow-actions .wf-btn');
-        
-        workflowButtons.forEach(button => {
-            button.addEventListener('click', function(e) {
-                if (isLocked) return;
-                
-                // Get the action from onclick attribute
-                const onclickAttr = this.getAttribute('onclick');
-                if (onclickAttr && onclickAttr.includes('submitWorkflow')) {
-                    // Extract the action from the onclick
-                    const match = onclickAttr.match(/submitWorkflow\('([^']+)'\)/);
-                    if (match) {
-                        const action = match[1];
-                        
-                        // Save rationale before workflow action
-                        const rationaleValue = textarea.value.trim();
-                        
-                        // Only proceed if we're not already saving
-                        if (!isSaving) {
-                            performAutoSave(rationaleValue).then(() => {
-                                // After auto-save completes, continue with workflow
-                                // The original onclick will be triggered by the form submission
-                            });
-                        }
-                    }
+        document.querySelectorAll('.workflow-actions .wf-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                if (isLocked || !textarea) return;
+                const rationaleValue = textarea.value.trim();
+                if (!isSaving && rationaleValue !== lastSavedValue) {
+                    // Fire-and-forget — form submission is handled by submitWorkflow()
+                    // which calls forceSaveRationaleBeforeSubmit() and awaits it
+                    performAutoSave(rationaleValue);
                 }
             });
         });
     }
 
-    // Call this function when the page loads
     setTimeout(interceptWorkflowButtons, 500);
 
+    // -------------------------------------------------------
+    // Template helpers
+    // -------------------------------------------------------
     function findOptionByValue(val) {
         if (!selector) return null;
         const target = String(val);
@@ -623,11 +572,10 @@ $templates = $templates ?? [];
 
     function upsertTemplateOption(id, name, content) {
         if (!selector) return null;
-        const value = String(id);
-        let opt = findOptionByValue(value);
+        let opt = findOptionByValue(String(id));
         if (!opt) {
             opt = document.createElement('option');
-            opt.value = value;
+            opt.value = String(id);
             selector.appendChild(opt);
         }
         opt.textContent = name;
@@ -641,55 +589,53 @@ $templates = $templates ?? [];
     }
 
     function showFlash(type, msg) {
+        if (!flash) return;
         flash.innerHTML = '<div class="flash-message ' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
                          (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
-        setTimeout(() => { flash.innerHTML = ''; }, 3500);
+        setTimeout(() => { if (flash) flash.innerHTML = ''; }, 3500);
     }
 
     function setButtonsDisabled(state) {
         [addBtn, saveBtn, editBtn, delBtn].forEach(btn => {
-            if (!btn) return;
-            btn.disabled = !!state;
+            if (btn) btn.disabled = !!state;
         });
     }
 
-    // Auto-load when selection changes
+    // -------------------------------------------------------
+    // Selector change — load template into textarea
+    // -------------------------------------------------------
     if (selector) {
         selector.addEventListener('change', function() {
             const id = selector.value;
             if (id && id !== '0') {
-                const opt = selector.options[selector.selectedIndex];
-                const newContent = opt.getAttribute('data-content') || '';
-                textarea.value = newContent;
+                const opt     = selector.options[selector.selectedIndex];
+                const content = opt.getAttribute('data-content') || '';
+                textarea.value = content;
                 autoResizeHeight();
                 showFlash('success', 'Template loaded into editor.');
-                
-                // Update last saved value and trigger auto-save
-                lastSavedValue = newContent;
+                lastSavedValue = content;
                 triggerAutoSave();
             }
         });
     }
 
-    // Add: create new template from current textarea content
+    // -------------------------------------------------------
+    // Add button — save current textarea as new template
+    // -------------------------------------------------------
     if (addBtn) {
         addBtn.addEventListener('click', function() {
             if (isLocked) return;
-            
             const content = (textarea.value || '').trim();
-            if (!content) {
-                showFlash('error', 'Rationale content cannot be empty.');
-                return;
-            }
+            if (!content) { showFlash('error', 'Rationale content cannot be empty.'); return; }
             const name = prompt('Enter a name for this new rationale template:');
             if (!name || !name.trim()) return;
 
             setButtonsDisabled(true);
             const body = new URLSearchParams();
-            body.append('ajax_action', 'save_template');
-            body.append('template_name', name.trim());
+            body.append('ajax_action',      'save_template');
+            body.append('template_name',    name.trim());
             body.append('template_content', content);
-            body.append('section_type', 'rationale');
+            body.append('section_type',     'rationale');
 
             fetch('rationale.php', {
                 method: 'POST',
@@ -708,66 +654,53 @@ $templates = $templates ?? [];
                     throw new Error(data && data.error ? data.error : 'Save failed');
                 }
             })
-            .catch((err) => showFlash('error', err.message))
+            .catch(err => showFlash('error', err.message))
             .finally(() => setButtonsDisabled(false));
         });
     }
 
-    // Edit: load selected template into editor
+    // -------------------------------------------------------
+    // Edit button — load selected template into textarea
+    // -------------------------------------------------------
     if (editBtn) {
         editBtn.addEventListener('click', function() {
             if (isLocked) return;
-            
             const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to edit.');
-                return;
-            }
-            const opt = selector.options[selector.selectedIndex];
-            const newContent = opt.getAttribute('data-content') || '';
-            textarea.value = newContent;
+            if (!id || id === '0') { showFlash('error', 'Please select a template to edit.'); return; }
+            const opt     = selector.options[selector.selectedIndex];
+            const content = opt.getAttribute('data-content') || '';
+            textarea.value = content;
             autoResizeHeight();
             textarea.focus();
-            
-            // Update last saved value
-            lastSavedValue = newContent;
+            lastSavedValue = content;
         });
     }
 
-    // Save: update selected template or create new if none selected
+    // -------------------------------------------------------
+    // Save button — update selected template or create new
+    // -------------------------------------------------------
     if (saveBtn) {
         saveBtn.addEventListener('click', function() {
             if (isLocked) return;
-            
-            const id = selector.value;
+            const id      = selector.value;
             const content = (textarea.value || '').trim();
-            if (!content) {
-                showFlash('error', 'Rationale content cannot be empty.');
-                return;
-            }
+            if (!content) { showFlash('error', 'Rationale content cannot be empty.'); return; }
 
             let name;
             if (id && id !== '0') {
-                // update existing: use current option text as name
                 name = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
             } else {
                 name = prompt('Enter a name for this new rationale template:');
-                if (!name || !name.trim()) {
-                    showFlash('error', 'Template name is required.');
-                    return;
-                }
+                if (!name || !name.trim()) { showFlash('error', 'Template name is required.'); return; }
             }
 
             setButtonsDisabled(true);
             const body = new URLSearchParams();
-            body.append('ajax_action', id && id !== '0' ? 'edit_template' : 'save_template');
-            body.append('template_name', name.trim());
+            body.append('ajax_action',      id && id !== '0' ? 'edit_template' : 'save_template');
+            body.append('template_name',    name.trim());
             body.append('template_content', content);
-            body.append('section_type', 'rationale');
-
-            if (id && id !== '0') {
-                body.append('template_id', id);
-            }
+            body.append('section_type',     'rationale');
+            if (id && id !== '0') body.append('template_id', id);
 
             fetch('rationale.php', {
                 method: 'POST',
@@ -792,16 +725,14 @@ $templates = $templates ?? [];
         });
     }
 
-    // Delete: delete selected template
+    // -------------------------------------------------------
+    // Delete button — delete selected template
+    // -------------------------------------------------------
     if (delBtn) {
         delBtn.addEventListener('click', function() {
             if (isLocked) return;
-            
             const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to delete.');
-                return;
-            }
+            if (!id || id === '0') { showFlash('error', 'Please select a template to delete.'); return; }
             if (!confirm('Delete selected template? This cannot be undone.')) return;
 
             setButtonsDisabled(true);
@@ -829,52 +760,39 @@ $templates = $templates ?? [];
         });
     }
 
-    // Auto-save on interval (optional feature)
-    if (!isLocked && clientId) {
-        const autosaveInterval = 15000; // 15 seconds
-        let lastContent = textarea.value;
-        let autosaveTimer = null;
+    // -------------------------------------------------------
+    // Interval auto-save (every 15 seconds if content changed)
+    // -------------------------------------------------------
+    if (!isLocked && clientId && textarea) {
+        let lastIntervalContent = textarea.value;
 
-        function doAutosave() {
+        const intervalTimer = setInterval(() => {
             const content = textarea.value;
-            if (content !== lastContent) {
-                lastContent = content;
-                
+            if (content !== lastIntervalContent && !isSaving) {
+                lastIntervalContent = content;
                 fetch('rationale.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
                     body: new URLSearchParams({
                         ajax_action: 'autosave_rationale',
-                        client_id: clientId,
-                        value: content
+                        client_id:   clientId,
+                        value:       content
                     })
                 })
                 .then(r => r.json())
-                .then(data => {
-                    if (data && data.success) {
-                        console.log('Auto-saved rationale');
-                    }
-                })
-                .catch(err => console.error('Auto-save error:', err));
+                .then(data => { if (data && data.success) console.log('Interval auto-saved rationale'); })
+                .catch(err => console.error('Interval auto-save error:', err));
             }
-        }
+        }, 15000);
 
-        // Auto-save on text changes (debounced)
-        textarea.addEventListener('input', function() {
-            if (autosaveTimer) {
-                clearTimeout(autosaveTimer);
-            }
-            autosaveTimer = setTimeout(doAutosave, autosaveInterval);
-        });
-
-        // Auto-save when leaving the page
+        // Save on page unload via sendBeacon
         window.addEventListener('beforeunload', function() {
-            if (textarea.value !== lastContent) {
-                navigator.sendBeacon('rationale.php', 
+            if (textarea && textarea.value !== lastIntervalContent) {
+                navigator.sendBeacon('rationale.php',
                     new URLSearchParams({
                         ajax_action: 'autosave_rationale',
-                        client_id: clientId,
-                        value: textarea.value
+                        client_id:   clientId,
+                        value:       textarea.value
                     })
                 );
             }
