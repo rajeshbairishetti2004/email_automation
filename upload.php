@@ -156,11 +156,8 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
         $params[] = $cycleFilter;
     }
 
-    // Fix: For each client name, pick only the single highest-ID row.
-    // This handles the case where a bulk-allocation "pending" row and an
-    // uploaded "reviewed" row both have is_latest=1 for the same client.
     $sql = "SELECT
-                COUNT(*)                                                       AS total,
+                COUNT(*) AS total,
                 SUM(CASE WHEN c.report_state = 'pending'  THEN 1 ELSE 0 END) AS count_pending,
                 SUM(CASE WHEN c.report_state = 'draft'    THEN 1 ELSE 0 END) AS count_draft,
                 SUM(CASE WHEN c.report_state = 'ready'    THEN 1 ELSE 0 END) AS count_ready,
@@ -174,9 +171,11 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
                 GROUP BY name
             ) latest ON latest.name = c.name AND latest.max_id = c.id";
 
-    // $params used twice: for the inner subquery AND the outer join condition
     $stmt = $pdo->prepare($sql);
-    $stmt->execute(array_merge($params, $params));
+
+    // ✅ FIX: Use $params only once
+    $stmt->execute($params);
+
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
     return [
