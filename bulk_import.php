@@ -80,14 +80,24 @@ function buildHeaderMap(array $headerRow): array
     $map = [];
     foreach ($headerRow as $colIndex => $cellValue) {
         if ($cellValue !== null && $cellValue !== '') {
-            $key = strtolower(trim((string)$cellValue));
+
+            $key = (string)$cellValue;
+
+            // Remove BOM
+            $key = preg_replace('/^\xEF\xBB\xBF/', '', $key);
+
+            // Remove non-breaking spaces
+            $key = str_replace("\xC2\xA0", ' ', $key);
+
+            // Normalize
+            $key = strtolower(trim($key));
             $key = preg_replace('/\s+/', ' ', $key);
+
             $map[$key] = $colIndex;
         }
     }
     return $map;
 }
-
 /**
  * Safely retrieve a value from a data row using the header map.
  * $headerKey is normalised internally (lowercase, single-space).
@@ -141,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
             $countStmt = $pdo->prepare(
                 "SELECT COUNT(*) FROM clients" .
-                (!empty($search) ? " WHERE name LIKE :search OR email LIKE :search" : "")
+                    (!empty($search) ? " WHERE name LIKE :search OR email LIKE :search" : "")
             );
             $countStmt->execute($params);
             $totalCount = $countStmt->fetchColumn();
@@ -163,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 // ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) {
 
-    $targetTag = trim($_POST['target_tag'] ?? '');
+    $targetTag = strtoupper(trim($_POST['target_tag'] ?? ''));
 
     if (empty($targetTag)) {
         $summary['errors'][] = "Please specify a Target Quarter/Tag (e.g., RJ) to import.";
@@ -178,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         // This ensures view_allocation_clients.php can filter with
         // WHERE review_cycle = 'RF' and correctly finds ALL 157 clients.
         // ─────────────────────────────────────────────────────────────────────
-        $cleanReviewCycle = strtoupper($targetTag);
+        $cleanReviewCycle = $targetTag;
 
         try {
             // Create allocation log entry BEFORE processing
@@ -197,17 +207,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
             $spreadsheet = IOFactory::load($file);
             $sheet       = $spreadsheet->getActiveSheet();
-
-            // Read all rows as numeric-indexed arrays (0-based column index)
             $allRows = $sheet->toArray(null, true, true, false);
-
             if (empty($allRows)) {
-                throw new Exception("The uploaded file appears to be empty.");
+                throw new Exception("The uploaded file is empty.");
             }
 
-            // Row 0 is the header row
+
             $headerRow = $allRows[0];
             $headerMap = buildHeaderMap($headerRow);
+
+            if (!isset($headerMap['pan'])) {
+                throw new Exception("PAN column not found in Excel.");
+            }
+
+
+
+            // Sync ALL rows to customer_list (no transaction needed, upsert is safe)
+            $insertCustomerStmt = $pdo->prepare("
+    INSERT INTO customer_list
+    (name, pan, email, mobile, family_head, city, company,
+     first_investment, aum, tags, rm)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+        name             = VALUES(name),
+        email            = VALUES(email),
+        mobile           = VALUES(mobile),
+        family_head      = VALUES(family_head),
+        city             = VALUES(city),
+        company          = VALUES(company),
+        first_investment = VALUES(first_investment),
+        aum              = VALUES(aum),
+        tags             = VALUES(tags),
+        rm               = VALUES(rm)
+");
+
+            $customerSyncCount = 0;
+            foreach ($allRows as $index => $row) {
+                if ($index === 0) continue;
+
+                $pan = getCol($row, $headerMap, 'pan')
+                    ?? getCol($row, $headerMap, 'pan no')
+                    ?? getCol($row, $headerMap, 'pan number');
+                if (!$pan) continue;
+
+                $rowTag = getCol($row, $headerMap, 'tags') ?? '';
+                $rowTag = trim($rowTag);
+                if ($rowTag === '' || strtolower($rowTag) === 'nil' || strtolower($rowTag) === 'null') continue;
+                $cleanTagString = str_replace("\xC2\xA0", ' ', (string)$rowTag);
+                $cleanTagString = preg_replace('/\s+/', ' ', $cleanTagString);
+
+                $rowTagsArray = array_map(function ($v) {
+                    $v = str_replace("\xC2\xA0", ' ', $v);
+                    $v = trim($v);
+                    return strtoupper($v);
+                }, explode(',', $cleanTagString));
+                if (!in_array($targetTag, $rowTagsArray)) {
+                    continue;
+                }
+
+                $aumRaw = getCol($row, $headerMap, 'aum');
+                $aum    = is_numeric($aumRaw) ? (float)$aumRaw : 0;
+
+                $dateRaw = getCol($row, $headerMap, 'first investment date');
+                $date    = ($dateRaw && strtotime($dateRaw)) ? date('Y-m-d', strtotime($dateRaw)) : null;
+
+                try {
+                    $insertCustomerStmt->execute([
+                        getCol($row, $headerMap, 'name'),
+                        $pan,
+                        getCol($row, $headerMap, 'email'),
+                        getCol($row, $headerMap, 'mobile'),
+                        getCol($row, $headerMap, 'family head'),
+                        getCol($row, $headerMap, 'city'),
+                        getCol($row, $headerMap, 'model name'),
+                        $date,
+                        $aum,
+                        $rowTag,  // use the already-fetched and validated tag value
+                        getCol($row, $headerMap, 'relationship manager'),
+                    ]);
+                    $customerSyncCount++;
+                } catch (Exception $e) {
+                    $summary['errors'][] = "Customer sync row $index (PAN: $pan): " . $e->getMessage();
+                }
+            }
+
+
+
+            // Row 0 is the header row
 
             // Verify required columns exist
             $requiredHeaders = [
@@ -226,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             if (!empty($missingCols)) {
                 throw new Exception(
                     "Missing required columns in uploaded file: " . implode(', ', $missingCols) .
-                    ". Please check that the file contains these headers."
+                        ". Please check that the file contains these headers."
                 );
             }
 
@@ -291,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 $rawReviewer = getCol($row, $headerMap, 'service r m');          // "SERVICE  R M" normalised
                 // Priority: new file = "CLIENT RATING", old file = "PRIORITY"
                 $rawPriority = getCol($row, $headerMap, 'priority')
-                            ?? getCol($row, $headerMap, 'client rating');
+                    ?? getCol($row, $headerMap, 'client rating');
 
                 if (empty($rawName)) continue;
 
@@ -303,7 +389,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 //   "OldM, RF"        → match ✓  (treated as RF)
                 //   "NewM, RF, Attention" → match ✓  (treated as RF)
                 //   "RJ"              → no match ✗
-                if (empty($rawTag) || stripos($rawTag, $targetTag) === false) {
+                if (empty($rawTag)) {
+                    $summary['skipped']++;
+                    continue;
+                }
+
+                // Clean tag string first
+                $cleanTagString = str_replace("\xC2\xA0", ' ', (string)$rawTag);
+                $cleanTagString = preg_replace('/\s+/', ' ', $cleanTagString);
+
+                $rowTagsArray = preg_split('/[,;|\/]+/', $cleanTagString);
+                $rowTagsArray = array_map(function ($v) {
+                    $v = str_replace("\xC2\xA0", ' ', $v);
+                    $v = trim($v);
+                    return strtoupper($v);
+                }, $rowTagsArray);
+
+                $rowTagsArray = array_filter($rowTagsArray);
+                if (!in_array($targetTag, $rowTagsArray)) {
                     $summary['skipped']++;
                     continue;
                 }
@@ -408,7 +511,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 ':updated_count'    => $summary['updated'],
                 ':id'               => $allocationId
             ]);
-
         } catch (Exception $e) {
             if ($allocationId > 0) {
                 try {
@@ -466,7 +568,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 <div class="form-group">
                     <label>1. Enter Quarter/Tag to Import (Required)</label>
                     <input type="text" name="target_tag" placeholder="e.g. RJ, RM, or RF" required
-                           value="<?php echo htmlspecialchars($_POST['target_tag'] ?? ''); ?>">
+                        value="<?php echo htmlspecialchars($_POST['target_tag'] ?? ''); ?>">
                     <small style="color:#888;">
                         Clients whose TAGS column <em>contains</em> this value will be imported.
                         e.g. <strong>RF</strong> will match <strong>RF</strong>, <strong>RF, NRI</strong>, <strong>OldM, RF</strong>, <strong>NewM, RF, Attention</strong>, etc.
@@ -487,7 +589,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     <div>
                         <strong>Processed:</strong> <?php echo (int)$summary['processed']; ?>
                         (Skipped other tags: <?php echo (int)$summary['skipped']; ?>,
-                         Duplicates: <?php echo (int)$summary['duplicates']; ?>)
+                        Duplicates: <?php echo (int)$summary['duplicates']; ?>)
                     </div>
                     <div style="margin-top:5px;">
                         <strong>Assigned:</strong> <?php echo (int)$summary['assigned']; ?> |
@@ -539,13 +641,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         function loadClients(searchTerm = '') {
             fetch('bulk_import.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: new URLSearchParams({ajax_action: 'get_clients_list', search: searchTerm})
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        ajax_action: 'get_clients_list',
+                        search: searchTerm
+                    })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        allClients        = data.clients;
+                        allClients = data.clients;
                         totalClientsCount = data.total_count || allClients.length;
                         document.getElementById('totalClientsCount').textContent = totalClientsCount;
                         document.getElementById('selectAllAll').style.display = (totalClientsCount > 50) ? 'inline' : 'none';
@@ -559,7 +666,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         }
 
         function renderClientList(clients) {
-            const container    = document.getElementById('clientsList');
+            const container = document.getElementById('clientsList');
             const selectAllRow = document.getElementById('selectAllRow');
             if (clients.length === 0) {
                 container.innerHTML = '<div class="no-clients">No clients found</div>';
@@ -567,7 +674,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 return;
             }
             selectAllRow.style.display = 'flex';
-            const allIds      = clients.map(c => c.id);
+            const allIds = clients.map(c => c.id);
             const allSelected = allIds.every(id => selectedClients.has(parseInt(id)));
             document.getElementById('selectAllCheckbox').checked = allSelected;
 
@@ -603,18 +710,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
         function showSuccess(message) {
             const el = document.getElementById('successMessage');
-            el.textContent   = message;
+            el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({behavior: 'smooth'});
-            setTimeout(() => { el.style.display = 'none'; }, 5000);
+            el.scrollIntoView({
+                behavior: 'smooth'
+            });
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
         }
 
         function showError(message) {
             const el = document.getElementById('errorMessage');
-            el.textContent   = message;
+            el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({behavior: 'smooth'});
-            setTimeout(() => { el.style.display = 'none'; }, 5000);
+            el.scrollIntoView({
+                behavior: 'smooth'
+            });
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
         }
 
         function escapeHtml(text) {
@@ -625,19 +740,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
         function formatDate(dateString) {
             if (!dateString) return 'Never';
-            const date  = new Date(dateString);
-            const day   = date.getDate().toString().padStart(2, '0');
-            const month = date.toLocaleString('en-GB', {month: 'short'});
-            const year  = date.getFullYear();
+            const date = new Date(dateString);
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = date.toLocaleString('en-GB', {
+                month: 'short'
+            });
+            const year = date.getFullYear();
             const hours = date.getHours().toString().padStart(2, '0');
-            const mins  = date.getMinutes().toString().padStart(2, '0');
+            const mins = date.getMinutes().toString().padStart(2, '0');
             return `${day} ${month} ${year}, ${hours}:${mins}`;
         }
 
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('clientSearch');
             if (searchInput) {
-                searchInput.addEventListener('input', function (e) {
+                searchInput.addEventListener('input', function(e) {
                     clearTimeout(searchTimeout);
                     searchTimeout = setTimeout(() => loadClients(e.target.value), 300);
                 });
@@ -645,4 +762,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
         });
     </script>
 </body>
+
 </html>

@@ -614,3 +614,10 @@
                     closeListMeetingModal();
                 }
             });
+
+            window.onclick = function(event) {
+    const modal = document.getElementById('listMeetingModal');
+    if (event.target === modal) {
+        closeListMeetingModal();
+    }
+}
