@@ -30,8 +30,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Login</title>
+    <link rel="icon" type="image/x-icon" href="image.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="public/css/styles.css">
     <style>
@@ -44,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin: 0;
             font-family: 'Inter', sans-serif;
         }
+
         .login-container {
             width: 100%;
             max-width: 400px;
@@ -53,16 +56,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             text-align: center;
         }
+
         .logo-img {
             width: 100px;
             margin-bottom: 20px;
         }
+
         h1 {
             font-size: 24px;
             color: #0288D1;
             margin-bottom: 30px;
             font-family: 'Poppins', sans-serif;
         }
+
         label {
             display: block;
             margin-bottom: 5px;
@@ -71,16 +77,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #333;
             font-size: 14px;
         }
+
         /* Password container style */
         .password-container {
             position: relative;
             margin-bottom: 20px;
         }
+
         .password-container input[type="text"],
         .password-container input[type="password"] {
-            padding-right: 40px; /* Make space for the icon */
+            padding-right: 40px;
+            /* Make space for the icon */
             margin-bottom: 0;
         }
+
         .toggle-password {
             position: absolute;
             right: 12px;
@@ -91,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 20px;
             height: 20px;
         }
-        
+
         input[type="text"],
         input[type="password"] {
             width: 100%;
@@ -101,11 +111,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 14px;
             box-sizing: border-box;
         }
+
         input:focus {
             border-color: #4FC3F7;
             outline: none;
             box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.1);
         }
+
         button[type="submit"] {
             width: 100%;
             padding: 12px;
@@ -118,17 +130,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 4px 12px rgba(41, 182, 246, 0.3);
-            margin-top: 20px; /* Space above login button */
+            margin-top: 20px;
+            /* Space above login button */
         }
+
         button[type="submit"]:hover {
             background: linear-gradient(135deg, #29B6F6 0%, #0288D1 100%);
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(41, 182, 246, 0.4);
         }
+
         .links {
             margin-top: 25px;
             font-size: 14px;
         }
+
         .links a {
             color: #0288D1;
             text-decoration: none;
@@ -136,9 +152,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin: 0 10px;
             transition: color 0.2s;
         }
+
         .links a:hover {
             color: #4FC3F7;
         }
+
         .flash-error {
             background-color: #ffdddd;
             color: #d8000c;
@@ -149,6 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 14px;
             text-align: left;
         }
+
         .flash-success {
             background-color: #d4edda;
             color: #155724;
@@ -161,52 +180,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     </style>
 </head>
+
 <body>
 
-<div class="login-container">
-    <img src="image.png" alt="Logo" class="logo-img">
-    <h1>Client Report Portal</h1>
+    <div class="login-container">
+        <img src="image.png" alt="Logo" class="logo-img">
+        <h1>Client Report Portal</h1>
 
-    <?php if ($error): ?>
-        <div class="flash-error"><?= htmlspecialchars($error) ?></div>
-    <?php endif; ?>
-    
-    <?php if (isset($_SESSION['message'])): ?>
-        <div class="flash-success"><?= htmlspecialchars($_SESSION['message']) ?></div>
-        <?php unset($_SESSION['message']); ?>
-    <?php endif; ?>
+        <?php if ($error): ?>
+            <div class="flash-error"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
 
-    <form method="post">
-        <label for="username_or_email">Username or Email</label>
-        <input type="text" name="username_or_email" id="username_or_email" required value="<?= htmlspecialchars($usernameOrEmail ?? '') ?>">
-        
-        <label for="password">Password</label>
-        <div class="password-container">
-            <input type="password" name="password" id="password" required>
-            <span class="toggle-password" onclick="togglePasswordVisibility('password')">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path fill-rule="evenodd" d="M1.323 11.411A10.05 10.05 0 0 1 12 4c2.518 0 4.887.697 6.911 1.911.396.232.812.232 1.208 0A10.05 10.05 0 0 1 22.677 11.411c.232.396.232.812 0 1.208A10.05 10.05 0 0 1 12 20c-2.518 0-4.887-.697-6.911-1.911a.75.75 0 0 1-1.208 0A10.05 10.05 0 0 1 1.323 12.619c-.232-.396-.232-.812 0-1.208ZM12 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" clip-rule="evenodd"/></svg>
-            </span>
-        </div>
-        
-        <button type="submit">Log In</button>
-    </form>
-    
-    
-</div>
+        <?php if (isset($_SESSION['message'])): ?>
+            <div class="flash-success"><?= htmlspecialchars($_SESSION['message']) ?></div>
+            <?php unset($_SESSION['message']); ?>
+        <?php endif; ?>
 
-<script>
-    function togglePasswordVisibility(fieldId) {
-        const field = document.getElementById(fieldId);
-        const toggle = field.nextElementSibling;
-        if (field.type === 'password') {
-            field.type = 'text';
-            // Change SVG to unhidden state if necessary (simple SVG toggling omitted for brevity, stick to basic functionality)
-        } else {
-            field.type = 'password';
-            // Change SVG back to hidden state
+        <form method="post">
+            <label for="username_or_email">Username or Email</label>
+            <input type="text" name="username_or_email" id="username_or_email" required value="<?= htmlspecialchars($usernameOrEmail ?? '') ?>">
+
+            <label for="password">Password</label>
+            <div class="password-container">
+                <input type="password" name="password" id="password" required>
+                <span class="toggle-password" onclick="togglePasswordVisibility('password')">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                        <path fill-rule="evenodd" d="M1.323 11.411A10.05 10.05 0 0 1 12 4c2.518 0 4.887.697 6.911 1.911.396.232.812.232 1.208 0A10.05 10.05 0 0 1 22.677 11.411c.232.396.232.812 0 1.208A10.05 10.05 0 0 1 12 20c-2.518 0-4.887-.697-6.911-1.911a.75.75 0 0 1-1.208 0A10.05 10.05 0 0 1 1.323 12.619c-.232-.396-.232-.812 0-1.208ZM12 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z" clip-rule="evenodd" />
+                    </svg>
+                </span>
+            </div>
+
+            <button type="submit">Log In</button>
+        </form>
+
+
+    </div>
+
+    <script>
+        function togglePasswordVisibility(fieldId) {
+            const field = document.getElementById(fieldId);
+            const toggle = field.nextElementSibling;
+            if (field.type === 'password') {
+                field.type = 'text';
+                // Change SVG to unhidden state if necessary (simple SVG toggling omitted for brevity, stick to basic functionality)
+            } else {
+                field.type = 'password';
+                // Change SVG back to hidden state
+            }
         }
-    }
-</script>
+    </script>
 
 </body>
+
 </html>
