@@ -184,7 +184,7 @@ $existingFiles = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     <ul id="attachment_list" style="list-style: none; padding: 0;">
         <?php if (empty($existingFiles)): ?>
-            <li style="color: #777; font-style: italic;">No attachments uploaded yet.</li>
+            <!-- <li style="color: #777; font-style: italic;">No attachments uploaded yet.</li> -->
         <?php else: ?>
             <?php foreach ($existingFiles as $file): ?>
                 <li style="margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between;" data-filename="<?php echo htmlspecialchars($file); ?>">

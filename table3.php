@@ -17,6 +17,8 @@ $stmtComment = $pdo->prepare("
     SELECT commented_by, comment, updated_at 
     FROM client_allocation_comments 
     WHERE client_id = ?
+    ORDER BY id DESC
+    LIMIT 1
 ");
 $stmtComment->execute([$clientId]);
 $rowComment = $stmtComment->fetch(PDO::FETCH_ASSOC);
@@ -340,7 +342,6 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 
     .allocation-comment-textarea {
         width: 100%;
-        min-height: 140px;
         border: none;
         /* REMOVE inner border */
         outline: none;
@@ -551,45 +552,42 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.querySelector('.allocation-comment-textarea');
+    const counter = document.querySelector('.allocation-char-count');
+    if (!textarea) return;
 
-        const textarea = document.querySelector('.allocation-comment-textarea');
-        const counter = document.querySelector('.allocation-char-count');
+    const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
 
-        if (!textarea) return;
-        const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
+    // ← ADD: auto-resize on load
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
 
-        counter.textContent = textarea.value.length + " / 500";
+    counter.textContent = textarea.value.length + " / 500";
 
-        textarea.addEventListener('input', function() {
+    textarea.addEventListener('input', function() {
+        counter.textContent = this.value.length + " / 500";
 
-            counter.textContent = this.value.length + " / 500";
-            if (isLocked) return;
+        // Auto expand
+        this.style.height = 'auto';
+        this.style.height = this.scrollHeight + 'px';
 
-            // Auto expand
-            this.style.height = "auto";
-            this.style.height = this.scrollHeight + "px";
+        if (isLocked) return;
 
-            clearTimeout(this.saveTimeout);
-            this.saveTimeout = setTimeout(() => {
-
-                fetch('table3.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: new URLSearchParams({
-                        ajax_allocation_comment: '1',
-                        client_id: <?= (int)$clientId ?>,
-                        allocation_comment: this.value
-                    })
-                });
-
-            }, 700);
-
-        });
-
+        clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => {
+            fetch('table3.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    ajax_allocation_comment: '1',
+                    client_id: <?= (int)$clientId ?>,
+                    allocation_comment: this.value
+                })
+            });
+        }, 700);
     });
+});
 
 
     // --- Recommended Asset Allocation Pie Chart ---
