@@ -1,3 +1,14 @@
+    <?php
+    $prevId    = (int)($c['previous_version_id'] ?? 0);
+    $prevState = $c['prev_version_state'] ?? '';
+    $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
+
+    // Fallback for bulk-allocated rows where previous_version_id is NULL
+    if (!$hasPrev && !empty($c['fallback_prev_id'])) {
+        $prevId  = (int)$c['fallback_prev_id'];
+        $hasPrev = true;
+    }
+    ?>
     <!DOCTYPE html>
     <html>
 
@@ -232,12 +243,12 @@
                                         <tr class="group-header">
                                             <?php
                                             // Calculate base columns count dynamically
-                                            $baseColCount = 6; // ID, Client Name, AUM, Last Updated, Status = 5
-                                            if ($isAdmin) $baseColCount += 3; // Add 3 admin columns (Drafted By, RM, Review Assigned to)
-                                            if ($deleteMode || $reassignMode) $baseColCount++; // Add checkbox column
+                                            $baseColCount = 5; // action-icon, ID, Client Name, AUM, Last Updated, Status
+                                            if ($isAdmin) $baseColCount += 2; // RM, Reviewer
+                                            if ($deleteMode || $reassignMode) $baseColCount++; // checkbox
 
                                             // Current Review columns: SIP, Review Sent, Mtg Date, Modifications/Action, Meeting Status, Meeting Comments = 6
-                                            $currentReviewCols = 6;
+                                            $currentReviewCols = 7;
 
                                             // Last Review columns: Prev SIP, Last Review, Last Meeting, Prev Modifications, Prev Mtg Comments = 5
                                             $lastReviewCols = 6;
@@ -509,23 +520,38 @@
                                                     </select>
                                                 </td>
 
-                                                <td style="text-align:center; height:auto;">
+                                                <td class="has-view-btn" style="height:auto;">
 
-                                                    <button type="button"
-                                                        id="meet_btn_<?php echo $c['id']; ?>"
-                                                        class="meet-btn"
-                                                        onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
-                                                        style="display: <?php echo ($c['meeting_status'] !== 'pending') ? 'inline-block' : 'none'; ?>;">
-                                                        Comments <?php echo !empty($c['meeting_remarks']) ? '(Edit)' : '(Add)'; ?>
-                                                    </button>
+                                                    <?php if ($c['meeting_status'] !== 'pending'): ?>
+                                                        <button type="button"
+                                                            id="meet_btn_<?php echo $c['id']; ?>"
+                                                            class="cell-view-btn"
+                                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                                                            </svg>
+                                                            View
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <button type="button"
+                                                            id="meet_btn_<?php echo $c['id']; ?>"
+                                                            class="cell-view-btn"
+                                                            onclick="openListMeetingModal(<?php echo $c['id']; ?>)"
+                                                            style="display:none;">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                                                            </svg>
+                                                            View
+                                                        </button>
+                                                    <?php endif; ?>
 
                                                     <?php if (!empty($c['meeting_remarks'])): ?>
-                                                        <div style="margin-top:4px; font-size:12px; color:#555;"
+                                                        <div style="font-size:12px; color:#555; text-align:left;"
                                                             title="<?= htmlspecialchars($c['meeting_remarks']) ?>">
                                                             <?= htmlspecialchars(mb_strimwidth($c['meeting_remarks'], 0, 40, '…')) ?>
                                                         </div>
                                                     <?php else: ?>
-                                                        <div style="margin-top:4px; color:#ccc; font-size:12px;">—</div>
+                                                        <div style="color:#ccc; font-size:12px; text-align:center;">—</div>
                                                     <?php endif; ?>
 
                                                     <input type="hidden"
@@ -568,31 +594,40 @@
                                                     <?php endif; ?>
                                                 </td>
 
-                                                <!-- Prev Mtg Comments — same styling as current Meeting Comments cell -->
-                                                <!-- Prev Mtg Comments — compact preview matching current Meeting Comments style -->
-                                                <td class="col-prev" style="text-align:center; vertical-align:top; padding:8px;">
+                                                <td class="col-prev has-view-btn">
                                                     <?php $prevCmt = $c['prev_meeting_comments'] ?? ''; ?>
                                                     <?php if ($prevCmt): ?>
                                                         <button type="button"
-                                                            class="meet-btn"
+                                                            class="cell-view-btn"
                                                             onclick="openMeetingHistoryModal(<?= $c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name'])) ?>')">
-                                                            View History
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                                                            </svg>
+                                                            View
                                                         </button>
-                                                        <div style="margin-top:4px; font-size:12px; color:#555; text-align:left;"
+                                                        <div style="font-size:12px; color:#555; text-align:left;"
                                                             title="<?= htmlspecialchars($prevCmt) ?>">
                                                             <?= htmlspecialchars(mb_strimwidth($prevCmt, 0, 40, '…')) ?>
                                                         </div>
                                                     <?php else: ?>
-                                                        <div style="margin-top:4px; color:#ccc; font-size:12px;">—</div>
+                                                        <div style="color:#ccc; font-size:12px; text-align:center;">—</div>
                                                     <?php endif; ?>
                                                 </td>
 
+                                                <!-- View Previous Review -->
                                                 <!-- View Previous Review -->
                                                 <td class="col-prev-review">
                                                     <?php
                                                     $prevId    = (int)($c['previous_version_id'] ?? 0);
                                                     $prevState = $c['prev_version_state'] ?? '';
                                                     $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
+
+                                                    // Fallback: for bulk-allocated/old rows where previous_version_id is NULL,
+                                                    // use the precomputed fallback_prev_id (always has id < c.id, so no future bleed)
+                                                    if (!$hasPrev && !empty($c['fallback_prev_id'])) {
+                                                        $prevId  = (int)$c['fallback_prev_id'];
+                                                        $hasPrev = true;
+                                                    }
                                                     ?>
                                                     <?php if ($hasPrev): ?>
                                                         <a href="view_report.php?id=<?= $prevId ?>"
@@ -607,7 +642,6 @@
                                                         </span>
                                                     <?php endif; ?>
                                                 </td>
-
 
 
                                                 <!-- Action links -->
@@ -673,23 +707,23 @@
             <div id="listMeetingModal" class="modal-overlay" style="display:none;">
                 <div class="modal-card">
                     <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
-    
-    <div style="display:flex; align-items:center; gap:10px;">
-        <div class="modal-icon">📝</div>
-        <div>
-            <h3 style="margin:0;">Meeting Comments</h3>
-            <p style="margin:0; font-size:12px; color:#666;">Enter details about the discussion</p>
-        </div>
-    </div>
 
-    <!-- ❌ Close Button -->
-    <button type="button" 
-            onclick="closeListMeetingModal()" 
-            style="background:none; border:none; font-size:20px; cursor:pointer; color:#999;">
-        &times;
-    </button>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div class="modal-icon">📝</div>
+                            <div>
+                                <h3 style="margin:0;">Meeting Comments</h3>
+                                <p style="margin:0; font-size:12px; color:#666;">Enter details about the discussion</p>
+                            </div>
+                        </div>
 
-</div>
+                        <!-- ❌ Close Button -->
+                        <button type="button"
+                            onclick="closeListMeetingModal()"
+                            style="background:none; border:none; font-size:20px; cursor:pointer; color:#999;">
+                            &times;
+                        </button>
+
+                    </div>
                     <input type="hidden" id="current_modal_client_id">
                     <textarea id="listModalRemarks"
                         placeholder="e.g., Client agreed to increase SIP, follow-up next month..."

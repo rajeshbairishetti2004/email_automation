@@ -462,13 +462,13 @@
                 const remarksBtn = document.getElementById('meet_btn_' + clientId);
                 const storedRemarks = document.getElementById('remarks_store_' + clientId).value;
 
-                if (status === 'yes') {
-                    openListMeetingModal(clientId);
-                    if (remarksBtn) remarksBtn.style.display = 'inline-block';
-                } else {
-                    saveData(clientId, status, storedRemarks, false);
-                    if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-block';
-                }
+if (status === 'yes') {
+    openListMeetingModal(clientId);
+    if (remarksBtn) remarksBtn.style.display = 'inline-flex';
+} else {
+    saveData(clientId, status, storedRemarks, false);
+    if (remarksBtn) remarksBtn.style.display = (status === 'pending') ? 'none' : 'inline-flex';
+}
             }
 
             function openListMeetingModal(clientId) {
@@ -520,7 +520,7 @@
                             const store = document.getElementById('remarks_store_' + clientId);
                             if (store) store.value = remarks;
                             const btn = document.getElementById('meet_btn_' + clientId);
-                            if (btn) btn.innerHTML = 'Remarks ' + (remarks ? '(Edit)' : '(Add)');
+                            if (btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#555" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
                             if (isModal) {
                                 closeListMeetingModal();
                                 showToast("Meeting remarks saved!");

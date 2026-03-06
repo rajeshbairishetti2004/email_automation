@@ -182,7 +182,8 @@
             $stmt = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_review_sent_date_on_sent'");
             $triggerExists = $stmt->rowCount() > 0;
 
-            if (!$triggerExists && $isAdmin) {
+           $earlyIsAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
+            if (!$triggerExists && $earlyIsAdmin) {
                 try {
                    
                     $pdo->exec("DROP TRIGGER IF EXISTS auto_set_review_sent_date_on_sent");
@@ -459,6 +460,19 @@
             }
         } catch (Throwable $autoFillErr) {
             
+        }
+    }
+    // ── BACKFILL: Set review_sent_date for sent records that are missing it ──
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
+        try {
+            $pdo->exec("
+                UPDATE clients
+                SET review_sent_date = DATE(created_at)
+                WHERE report_state = 'sent'
+                AND (review_sent_date IS NULL OR review_sent_date = '')
+            ");
+        } catch (Throwable $e) {
+            // Non-critical, swallow silently
         }
     }
 
@@ -831,10 +845,6 @@ AND meeting_remarks IS NOT NULL
                 LIMIT 1
             ');
 
-            // =====================================================================
-            // FIX: Use updated_at = updated_at (no-op) so that marking the previous
-            // row as non-latest does NOT change its updated_at timestamp.
-            // =====================================================================
             $markPreviousAsNotLatest = $pdo->prepare('
                 UPDATE clients 
                 SET is_latest = FALSE,
@@ -1002,8 +1012,8 @@ meeting_comments,
                     ':review_attempt'            => $reviewAttempt,
                     ':last_review_date'          => $lastReviewDate,
                     ':last_meeting_date'         => $lastMeetingDate,
-                    ':prev_modifications_action' => $prevModificationsAction,  // This will be the current review's modifications_action when this review becomes the previous one
-                    ':prev_meeting_comments'     => $prevMeetingComments,      // This will be the current review's meeting_comments when this review becomes the previous one
+                    ':prev_modifications_action' => $prevModificationsAction,
+                    ':prev_meeting_comments'     => $prevMeetingComments,
                 ]);
 
                 $clientId = (int)$pdo->lastInsertId();
@@ -1299,6 +1309,13 @@ meeting_comments,
 
     $q           = isset($_GET['q']) ? trim($_GET['q']) : '';
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // KEY CHANGE: Detect whether user is doing a specific client name search.
+    // When searching by name, show ALL records for that client (all months,
+    // all versions), ordered by id DESC (latest first).
+    // When NOT searching, show only the current month's latest records as before.
+    // ─────────────────────────────────────────────────────────────────────────
+    $isClientSearch = ($q !== '');
 
     $sortBy      = isset($_GET['sort']) ? trim($_GET['sort']) : 'updated_at';
     $sortOrder   = isset($_GET['order']) && $_GET['order'] === 'asc' ? 'ASC' : 'DESC';
@@ -1306,8 +1323,8 @@ meeting_comments,
     $limit       = 20;
     $offset      = ($page - 1) * $limit;
 
-   
-
+    $whereParts = [];
+    $params     = [];
 
     if (!$isAdmin) {
         $whereParts[] = "(c.assigned_to = ? OR c.review_assigned_to = ?)";
@@ -1326,7 +1343,6 @@ meeting_comments,
     }
     $monthFilter = $_GET['month_filter'] ?? '';
     $yearFilter  = $_GET['year_filter'] ?? '';
-
 
     if ($monthFilter !== '') {
         $whereParts[] = "SUBSTRING_INDEX(c.month_year, ' ', 1) = ?";
@@ -1354,21 +1370,37 @@ meeting_comments,
     } elseif ($meetingFilter === 'not_fixed') {
         $whereParts[] = "c.meeting_date IS NULL";
     }
-  // Always enforce latest review only
-$currentMonthYear = date('M Y');
 
-$whereParts[] = "c.month_year = ?";
-$params[] = $currentMonthYear;
+    // ─────────────────────────────────────────────────────────────────────────
+    // When doing a client search: show ALL records for the matching client(s)
+    // across all months/cycles, ordered by id DESC (newest first).
+    // When NOT searching: restrict to current month + latest flag only.
+    // ─────────────────────────────────────────────────────────────────────────
+    $currentMonthYear = date('M Y');
 
-// ✅ ADD THIS BLOCK
-if ($cycleFilter !== '') {
-    $whereParts[] = "c.review_cycle = ?";
-    $params[] = $cycleFilter;
-}
+    if (!$isClientSearch) {
+        // Normal mode: current month, latest version only
+        $whereParts[] = "c.month_year = ?";
+        $params[] = $currentMonthYear;
 
-array_unshift($whereParts, "c.is_latest = TRUE");
+        if ($cycleFilter !== '') {
+            $whereParts[] = "c.review_cycle = ?";
+            $params[] = $cycleFilter;
+        }
 
-$whereClause = 'WHERE ' . implode(' AND ', $whereParts);
+        array_unshift($whereParts, "c.is_latest = TRUE");
+    } else {
+        // Search mode: no month/cycle/is_latest restriction — show full history
+        // (cycle filter still applies if explicitly set and useful)
+        if ($cycleFilter !== '' && $cycleFilter !== $systemCurrentCycle) {
+            // Only apply cycle filter if user explicitly changed it from default
+            $whereParts[] = "c.review_cycle = ?";
+            $params[] = $cycleFilter;
+        }
+    }
+
+    $whereClause = $whereParts ? 'WHERE ' . implode(' AND ', $whereParts) : '';
+
     // --- CONTEXTUAL COUNTS FOR DROPDOWNS ---
     $cycleTotals = [];
     $cycleCountStmt = $pdo->prepare("SELECT c.review_cycle, COUNT(*) as total FROM clients c 
@@ -1381,7 +1413,7 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
 
     $ownerWhereParts = [];
     $ownerParams = [];
-    if ($cycleFilter !== '') {
+    if (!$isClientSearch && $cycleFilter !== '') {
         $ownerWhereParts[] = "c.review_cycle = ?";
         $ownerParams[] = $cycleFilter;
     }
@@ -1402,7 +1434,7 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
 
     $stateWhereParts = [];
     $stateParams = [];
-    if ($cycleFilter !== '') {
+    if (!$isClientSearch && $cycleFilter !== '') {
         $stateWhereParts[] = "c.review_cycle = ?";
         $stateParams[] = $cycleFilter;
     }
@@ -1429,11 +1461,12 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
     }
     $allStatesTotal = array_sum($statusTotals);
 
-   $stmtCount = $pdo->prepare("
-    SELECT COUNT(DISTINCT c.name)
-    FROM clients c
-    {$whereClause}
-"); $stmtCount->execute($params);
+    $stmtCount = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM clients c
+        {$whereClause}
+    ");
+    $stmtCount->execute($params);
     $totalRows = (int)$stmtCount->fetchColumn();
     $totalPages = max(1, (int)ceil($totalRows / $limit));
 
@@ -1445,7 +1478,10 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
     $allowedSorts = ['id', 'name', 'updated_at', 'priority', 'report_state', 'aum'];
     $sortColumn = in_array($sortBy, $allowedSorts) ? $sortBy : 'updated_at';
 
-    if ($sortColumn === 'priority') {
+    // In search mode always sort by id DESC (latest record first)
+    if ($isClientSearch) {
+        $orderByClause = "ORDER BY c.id DESC";
+    } elseif ($sortColumn === 'priority') {
         $orderByClause = "ORDER BY CASE c.priority 
             WHEN 'High' THEN 1 
             WHEN 'Normal' THEN 2 
@@ -1464,6 +1500,9 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
             c.report_state, c.review_not_ok, c.review_comment, c.created_by, c.assigned_to, c.review_assigned_to,
             c.priority, c.meeting_status, c.meeting_remarks,
             c.review_cycle,
+            c.month_year,
+            c.is_latest,
+            c.review_attempt,
             c.sip_amount_lakhs,
             c.review_sent_date,
             c.meeting_date,
@@ -1472,12 +1511,26 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
             c.previous_version_id,
 
             -- Fetch the report_state of the previous version
+-- Fetch the report_state of the previous version
+-- Fetch the report_state of the previous version
             (
                 SELECT p.report_state
                 FROM clients p
                 WHERE p.id = c.previous_version_id
                 LIMIT 1
             ) AS prev_version_state,
+
+            -- Fallback prev review ID for bulk-allocated rows (previous_version_id is NULL)
+            -- Must be strictly older (lower id) than current record
+            (
+                SELECT p.id
+                FROM clients p
+                WHERE p.name = c.name
+                AND p.id < c.id
+                AND p.report_state NOT IN ('pending', '')
+                ORDER BY (p.report_state = 'sent') DESC, p.id DESC
+                LIMIT 1
+            ) AS fallback_prev_id,
 
             -- ── COMPUTED SIP FROM GOALS (fallback when sip_amount_lakhs is empty) ──
             (
@@ -1554,63 +1607,59 @@ $whereClause = 'WHERE ' . implode(' AND ', $whereParts);
                 )
             ) AS last_meeting_date,
 
--- ── PREV MODIFICATIONS ACTION (string snapshot) ─────────────────
--- ── PREV MODIFICATIONS ACTION (string snapshot) ─────────────────
-COALESCE(
-    c.prev_modifications_action,
-    (
-        SELECT p.modifications_action
-        FROM clients p
-        WHERE p.name = c.name
-        AND p.id != c.id
-        AND p.report_state != 'pending'
-        AND p.id < c.id
-        AND p.modifications_action IS NOT NULL
-        AND p.modifications_action != ''
-        ORDER BY
-            (p.report_state = 'sent') DESC,
-            p.id DESC
-        LIMIT 1
-    ),
-    -- Fallback: compute from client_schemes of the previous record
-    (
-        SELECT GROUP_CONCAT(
-            CONCAT(s.scheme_name, '-', s.action_step)
-            ORDER BY s.id ASC
-            SEPARATOR ' | '
-        )
-        FROM client_schemes s
-        WHERE s.client_id = (
-            SELECT p2.id FROM clients p2
-            WHERE p2.name = c.name
-            AND p2.id != c.id
-            AND p2.report_state != 'pending'
-            AND p2.id < c.id
-            ORDER BY (p2.report_state = 'sent') DESC, p2.id DESC
-            LIMIT 1
-        )
-        AND s.action_step != 'Continue'
-        AND s.action_step != ''
-        AND s.scheme_name != ''
-    )
-) AS prev_modifications_action,
+            COALESCE(
+                c.prev_modifications_action,
+                (
+                    SELECT p.modifications_action
+                    FROM clients p
+                    WHERE p.name = c.name
+                    AND p.id != c.id
+                    AND p.report_state != 'pending'
+                    AND p.id < c.id
+                    AND p.modifications_action IS NOT NULL
+                    AND p.modifications_action != ''
+                    ORDER BY
+                        (p.report_state = 'sent') DESC,
+                        p.id DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT GROUP_CONCAT(
+                        CONCAT(s.scheme_name, '-', s.action_step)
+                        ORDER BY s.id ASC
+                        SEPARATOR ' | '
+                    )
+                    FROM client_schemes s
+                    WHERE s.client_id = (
+                        SELECT p2.id FROM clients p2
+                        WHERE p2.name = c.name
+                        AND p2.id != c.id
+                        AND p2.report_state != 'pending'
+                        AND p2.id < c.id
+                        ORDER BY (p2.report_state = 'sent') DESC, p2.id DESC
+                        LIMIT 1
+                    )
+                    AND s.action_step != 'Continue'
+                    AND s.action_step != ''
+                    AND s.scheme_name != ''
+                )
+            ) AS prev_modifications_action,
 
--- ── PREV COMPLETED SCHEME IDS (for the modal checkboxes) ────────
-(
-    SELECT p.completed_scheme_ids
-    FROM clients p
-    WHERE p.name = c.name
-    AND p.id != c.id
-    AND p.report_state != 'pending'
-    AND p.id < c.id
-    AND p.completed_scheme_ids IS NOT NULL
-    ORDER BY
-        (p.report_state = 'sent') DESC,
-        p.id DESC
-    LIMIT 1
-) AS prev_completed_scheme_ids,
+            (
+                SELECT p.completed_scheme_ids
+                FROM clients p
+                WHERE p.name = c.name
+                AND p.id != c.id
+                AND p.report_state != 'pending'
+                AND p.id < c.id
+                AND p.completed_scheme_ids IS NOT NULL
+                ORDER BY
+                    (p.report_state = 'sent') DESC,
+                    p.id DESC
+                LIMIT 1
+            ) AS prev_completed_scheme_ids,
 
-COALESCE(
+            COALESCE(
                 c.prev_meeting_comments,
                 (
                     SELECT p.meeting_remarks
@@ -1628,34 +1677,33 @@ COALESCE(
                 )
             ) AS prev_meeting_comments,
 
-            -- ── PREV SIP AMOUNT (from previous review record) ────────────
-COALESCE(
-    (
-        SELECT p.sip_amount_lakhs
-        FROM clients p
-        WHERE p.name = c.name
-        AND p.id != c.id
-        AND p.report_state != 'pending'
-        AND p.id < c.id
-        AND p.sip_amount_lakhs IS NOT NULL
-        AND p.sip_amount_lakhs > 0
-        ORDER BY
-            (p.report_state = 'sent') DESC,
-            p.id DESC
-        LIMIT 1
-    ),
-    (
-        SELECT ROUND(SUM(g.sip_swp) / 100000, 2)
-        FROM client_goals g
-        INNER JOIN clients p2 ON g.client_id = p2.id
-        WHERE p2.name = c.name
-        AND p2.id != c.id
-        AND p2.report_state != 'pending'
-        AND p2.id < c.id
-        ORDER BY p2.id DESC
-        LIMIT 1
-    )
-) AS prev_sip_amount_lakhs,
+            COALESCE(
+                (
+                    SELECT p.sip_amount_lakhs
+                    FROM clients p
+                    WHERE p.name = c.name
+                    AND p.id != c.id
+                    AND p.report_state != 'pending'
+                    AND p.id < c.id
+                    AND p.sip_amount_lakhs IS NOT NULL
+                    AND p.sip_amount_lakhs > 0
+                    ORDER BY
+                        (p.report_state = 'sent') DESC,
+                        p.id DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT ROUND(SUM(g.sip_swp) / 100000, 2)
+                    FROM client_goals g
+                    INNER JOIN clients p2 ON g.client_id = p2.id
+                    WHERE p2.name = c.name
+                    AND p2.id != c.id
+                    AND p2.report_state != 'pending'
+                    AND p2.id < c.id
+                    ORDER BY p2.id DESC
+                    LIMIT 1
+                )
+            ) AS prev_sip_amount_lakhs,
 
             creator.username  AS created_by_username,
             rm.username       AS rm_username,
@@ -1731,5 +1779,9 @@ COALESCE(
         if (!$ts) return '—';
         return date('d-M-Y', $ts) . '<br><span style="color:#999;font-size:11px;">' . date('h:i A', $ts) . '</span>';
     }
+
+    // Pass the search mode flag to the HTML template
+    $isClientSearchMode = $isClientSearch;
+
     include __DIR__ . '/public/html/view_saved_reports_html.php';
     ?>

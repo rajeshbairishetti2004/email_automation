@@ -60,7 +60,7 @@ $isFilterApplied = !empty($_GET['cycle_filter'])
     || !empty($_GET['month_filter'])
     || !empty($_GET['year_filter']);
 
-$requestedContext = $_GET['view_context'] ?? 'mine';
+$requestedContext = $_GET['view_context'] ?? 'all';
 $viewContext = $isAdmin ? $requestedContext : 'mine';
 
 if (!$isFilterApplied) {
