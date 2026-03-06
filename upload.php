@@ -228,7 +228,10 @@ $stmtAum = $pdo->prepare("SELECT SUM(aum) FROM clients WHERE {$aumWhere}");
 $stmtAum->execute($aumParams);
 $totalAum = $stmtAum->fetchColumn() ?: 0;
 
-$usersStmt = $pdo->query('SELECT id, username FROM users ORDER BY username ASC');
+$usersStmt = $pdo->query("
+    SELECT id, username FROM users
+    ORDER BY FIELD(username, 'Sanjiv Mehta', 'Sailesh Kumar', 'Sajid', 'Tanmay', 'Akshay') ASC
+");
 $allUsers  = $usersStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $viewStats      = fetchDashboardStats($pdo, $viewContext, $currentUserId, $cycleFilter, $monthFilter, $yearFilter);
@@ -342,9 +345,12 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
 
                 <nav class="context-navbar">
                     <a href="?view_context=all<?= $cycleParam ?>" class="context-link <?= ($viewContext === 'all')  ? 'active' : '' ?>">All Reviews</a>
-                    <a href="?view_context=mine<?= $cycleParam ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
+                    <?php if (!$isAdmin): ?>
+<a href="?view_context=mine<?= $cycleParam ?>" class="context-link <?= ($viewContext === 'mine') ? 'active' : '' ?>">My Reviews</a>
+<?php endif; ?>
                     <?php foreach ($allUsers as $user): ?>
                         <?php if ((int)$user['id'] === $currentUserId) continue; ?>
+<?php if (strtolower($user['username']) === 'admin') continue; ?>
                         <a href="?view_context=<?= (int)$user['id'] . $cycleParam ?>"
                             class="context-link <?= ($viewContext == $user['id']) ? 'active' : '' ?>">
                             <?= htmlspecialchars($user['username']); ?>
