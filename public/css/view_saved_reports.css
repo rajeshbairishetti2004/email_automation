@@ -1297,3 +1297,16 @@ td.has-view-btn {
     padding-top: 26px; /* room for the button */
     min-height: 48px;
 }
+#client-search-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+#client-search-dropdown::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+#client-search-dropdown::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+#client-search-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+}

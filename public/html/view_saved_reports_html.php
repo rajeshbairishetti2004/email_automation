@@ -124,20 +124,22 @@
                             autocomplete="off"
                             style="width:60%; padding:10px 14px; font-size:15px; box-sizing:border-box;">
 
-                        <div id="client-search-dropdown"
-                            style="display:none;
-                                position:absolute;
-                                top:100%;
-                                left:0;
-                                width:60%;
-                                background:#fff;
-                                z-index:1000;
-                                border:1px solid #e2e8f0;
-                                border-top:none;
-                                max-height:200px;
-                                overflow-y:auto;
-                                box-sizing:border-box;">
-                        </div>
+<div id="client-search-dropdown"
+    style="display:none;
+        position:absolute;
+        top:100%;
+        left:0;
+        width:60%;
+        background:#fff;
+        z-index:1000;
+        border:1px solid #e2e8f0;
+        border-top:none;
+        max-height:200px;
+        overflow-y:auto;
+        box-sizing:border-box;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;">
+</div>
                     </div>
 
                     <select id="cycle-filter" name="cycle_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:140px;">
