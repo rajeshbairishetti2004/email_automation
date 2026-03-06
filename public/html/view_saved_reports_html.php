@@ -458,7 +458,7 @@
                                                 <?php
                                                 $state = $c['report_state'] ?? 'draft';
                                                 $statusMap = [
-                                                    'pending'  => '<span class="badge badge-grey">Pending</span>',
+                                                    'pending'  => '<span class="badge badge-grey">Not Started</span>',
                                                     'draft'    => '<span class="badge badge-yellow">Draft</span>',
                                                     'ready'    => '<span class="badge badge-blue">Ready</span>',
                                                     'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
