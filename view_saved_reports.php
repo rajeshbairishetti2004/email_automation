@@ -1,4 +1,4 @@
-    <?php
+<?php
     require_once 'auth.php';
     requireAuth();
     require_once 'env_loader.php';
