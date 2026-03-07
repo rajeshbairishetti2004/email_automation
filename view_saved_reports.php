@@ -19,7 +19,7 @@
     function resolveIsUsa(?string $country): int
     {
         $c = strtolower(trim($country ?? ''));
-        return in_array($c, ['usa', 'us', 'united states', 'canada'], true) ? 1 : 0;
+        return in_array($c, ['usa', 'us', 'united states', 'united states of america', 'canada'], true) ? 1 : 0;
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -230,11 +230,14 @@
                             BEFORE INSERT ON clients
                             FOR EACH ROW
                             BEGIN
-                                IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'canada') THEN
-                                    SET NEW.is_usa = 1;
-                                ELSE
-                                    SET NEW.is_usa = 0;
+                                IF NEW.country IS NOT NULL AND TRIM(NEW.country) != '' THEN
+                                    IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'united states of america', 'canada') THEN
+                                        SET NEW.is_usa = 1;
+                                    ELSE
+                                        SET NEW.is_usa = 0;
+                                    END IF;
                                 END IF;
+                                -- If country IS NULL, leave is_usa untouched (PHP already set the inherited value)
                             END
                         ");
                         error_log("✅ is_usa INSERT trigger installed successfully");
@@ -249,7 +252,7 @@
                             FOR EACH ROW
                             BEGIN
                                 IF NEW.country IS NOT NULL THEN
-                                    IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'canada') THEN
+                                    IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'united states of america', 'canada') THEN
                                         SET NEW.is_usa = 1;
                                     ELSE
                                         SET NEW.is_usa = 0;
@@ -271,25 +274,60 @@
         // Silently fail - trigger is optional
     }
 
-    // ── BACKFILL: Set is_usa for all existing records based on country ────────
-// ── BACKFILL: Set is_usa for all existing records based on country ────────
-try {
-    $pdo->exec("
-        UPDATE clients
-        SET is_usa = 1
-        WHERE LOWER(TRIM(country)) IN ('usa', 'us', 'united states', 'canada')
-        AND is_usa != 1
-    ");
-    $pdo->exec("
-        UPDATE clients
-        SET is_usa = 0
-        WHERE (country IS NULL OR LOWER(TRIM(country)) NOT IN ('usa', 'us', 'united states', 'canada'))
-        AND is_usa != 0
-    ");
-} catch (Throwable $e) {
-    // Non-critical, swallow silently
-}
-// ─────────────────────────────────────────────────────────────────────────
+    // ── BACKFILL: Inherit country + is_usa from previous records where country is NULL ──
+    // Fixes clients re-uploaded without country in Excel (e.g. Canada clients whose
+    // new draft gets country=NULL and is_usa incorrectly reset to 0).
+    try {
+        $pdo->exec("
+            UPDATE clients c
+            INNER JOIN (
+                SELECT c2.id,
+                       (SELECT p.country FROM clients p
+                        WHERE p.name = c2.name
+                          AND p.id  != c2.id
+                          AND p.country IS NOT NULL
+                          AND TRIM(p.country) != ''
+                        ORDER BY (p.report_state = 'sent') DESC, p.id DESC
+                        LIMIT 1) AS inherited_country,
+                       (SELECT p.is_usa FROM clients p
+                        WHERE p.name = c2.name
+                          AND p.id  != c2.id
+                          AND p.country IS NOT NULL
+                          AND TRIM(p.country) != ''
+                        ORDER BY (p.report_state = 'sent') DESC, p.id DESC
+                        LIMIT 1) AS inherited_is_usa
+                FROM clients c2
+                WHERE (c2.country IS NULL OR TRIM(c2.country) = '')
+            ) AS src ON c.id = src.id
+            SET c.country = src.inherited_country,
+                c.is_usa  = COALESCE(src.inherited_is_usa, 0)
+            WHERE src.inherited_country IS NOT NULL
+        ");
+    } catch (Throwable $e) {
+        // Non-critical, swallow silently
+    }
+
+    // ── BACKFILL: Sync is_usa from country for explicitly-set country values ──
+    // NOTE: We do NOT reset is_usa=0 for NULL-country records — those may have
+    // correctly inherited is_usa=1 from a previous record via the step above.
+    try {
+        $pdo->exec("
+            UPDATE clients
+            SET is_usa = 1
+            WHERE LOWER(TRIM(country)) IN ('usa', 'us', 'united states', 'united states of america', 'canada')
+            AND is_usa != 1
+        ");
+        $pdo->exec("
+            UPDATE clients
+            SET is_usa = 0
+            WHERE country IS NOT NULL
+            AND TRIM(country) != ''
+            AND LOWER(TRIM(country)) NOT IN ('usa', 'us', 'united states', 'united states of america', 'canada')
+            AND is_usa != 0
+        ");
+    } catch (Throwable $e) {
+        // Non-critical, swallow silently
+    }
     // ─────────────────────────────────────────────────────────────────────────
 
   
@@ -1035,15 +1073,17 @@ try {
                     $totalGoalTarget  += (float)($g['target_amount'] ?? 0);
                 }
 
-               $stmtLastReview = $pdo->prepare("
-                    SELECT
-                        review_sent_date,
-                        meeting_date,
-                        modifications_action,
-                        meeting_comments,
-                        meeting_remarks,
-                        updated_at,
-                        created_at,
+$stmtLastReview = $pdo->prepare("
+    SELECT
+        review_sent_date,
+        meeting_date,
+        modifications_action,
+        meeting_comments,
+        meeting_remarks,
+        country,
+        is_usa,
+        updated_at,
+        created_at,
                         CASE
                             WHEN report_state = 'sent' AND review_sent_date IS NOT NULL
                                 THEN CONCAT(review_sent_date, ' ', TIME(created_at))
@@ -1064,22 +1104,26 @@ try {
                         END AS last_meeting_datetime
                     FROM clients
                     WHERE name = ?
-                    AND report_state != 'pending'
-                    AND id != IFNULL(?, 0)
                     ORDER BY
                         (report_state = 'sent') DESC,
+                        (report_state != 'pending') DESC,
                         (review_sent_date IS NOT NULL) DESC,
                         id DESC
                     LIMIT 1
                 ");
-                $pendingRowId = (int)($_POST['expected_client_id'] ?? 0);
-                $stmtLastReview->execute([$clientName, $pendingRowId]);
+                $stmtLastReview->execute([$clientName]);
                 $lastReview = $stmtLastReview->fetch(PDO::FETCH_ASSOC);
 
                 $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
                 $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
                 $prevModificationsAction = $lastReview['modifications_action']  ?? null;
                 $prevMeetingComments     = $lastReview['meeting_remarks']       ?? null;
+                // ── If parsed files didn't provide a country, carry forward from previous record ──
+if (empty($country) && !empty($lastReview['country'])) {
+    $country = $lastReview['country'];
+    $isUsa   = (int)$lastReview['is_usa'];
+}
+// ─────────────────────────────────────────────────────────────────────────────────
 
                 $insertClient->execute([
                     ':name'               => $clientName,
@@ -1115,6 +1159,16 @@ try {
                 ]);
 
                 $clientId = (int)$pdo->lastInsertId();
+
+                // ── POST-INSERT SAFETY: If country was inherited (not from Excel),
+                //    immediately UPDATE to ensure country + is_usa are correct.
+                //    The DB trigger sees country=NULL on insert and may reset is_usa=0;
+                //    this UPDATE fires AFTER the trigger, so it wins.
+                if ($clientId > 0 && !empty($country)) {
+                    $pdo->prepare("UPDATE clients SET country = ?, is_usa = ?, updated_at = updated_at WHERE id = ?")
+                        ->execute([$country, $isUsa, $clientId]);
+                }
+                // ─────────────────────────────────────────────────────────────────
 
                 if ($allocationExcelPath && file_exists($allocationExcelPath)) {
 
