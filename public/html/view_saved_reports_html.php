@@ -1,4 +1,4 @@
-    <?php
+<?php
     $prevId    = (int)($c['previous_version_id'] ?? 0);
     $prevState = $c['prev_version_state'] ?? '';
     $hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
@@ -19,6 +19,35 @@
         <link rel="stylesheet" href="public/css/navbar.css">
         <script src="public/js/view_saved_reports.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+        <style>
+            /* ── Country hover tooltip ── */
+            .client-name-wrapper { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+            .country-tooltip {
+                display: none;
+                position: absolute;
+                bottom: calc(100% + 6px);
+                left: 0;
+                background: #333;
+                color: #fff;
+                font-size: 12px;
+                font-weight: 500;
+                padding: 5px 10px;
+                border-radius: 5px;
+                white-space: nowrap;
+                z-index: 9999;
+                pointer-events: none;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            }
+            .country-tooltip::after {
+                content: '';
+                position: absolute;
+                top: 100%;
+                left: 12px;
+                border: 5px solid transparent;
+                border-top-color: #333;
+            }
+            .client-name-wrapper:hover .country-tooltip { display: block; }
+        </style>
     </head>
 
     <body class="<?php echo ($deleteMode || $reassignMode) ? 'action-mode-active' : ''; ?>">
@@ -197,6 +226,19 @@
                             Meetings Not Fixed
                         </option>
                     </select>
+
+                    <!-- ── Country Filter ── -->
+                    <select name="country_filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
+                        <option value="">&#127758; All Countries</option>
+                        <option value="__domestic__" <?= ($countryFilter === '__domestic__') ? 'selected' : '' ?>>&#127470;&#127475; India (Domestic)</option>
+                        <?php foreach ($availableCountries as $ctry): ?>
+                            <option value="<?= htmlspecialchars($ctry) ?>"
+                                <?= strtolower(trim($countryFilter)) === strtolower(trim($ctry)) ? 'selected' : '' ?>>
+                                &#9992;&#65039; <?= htmlspecialchars($ctry) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
                     <input type="hidden" name="mode" value="<?php echo $deleteMode ? 'delete' : ($reassignMode ? 'reassign' : ''); ?>">
 
 
@@ -365,12 +407,27 @@
 
                                                 <!-- Client Name -->
                                                 <td>
+                                                    <?php
+                                                    $clientCountry = trim($c['country'] ?? '');
+                                                    $isNRI = ($clientCountry !== '' && strtolower($clientCountry) !== 'india');
+                                                    ?>
                                                     <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
-                                                        <span><?php echo htmlspecialchars($c['name']); ?></span>
-                                                        <?php if ($hasAttachments): ?>
-                                                            <span title="Has Attachments">📎</span>
-                                                        <?php endif; ?>
-
+                                                        <span class="client-name-wrapper">
+                                                            <?php if ($isNRI): ?>
+                                                                <span style="font-size:14px;">&#9992;&#65039;</span>
+                                                            <?php endif; ?>
+                                                            <span><?php echo htmlspecialchars($c['name']); ?></span>
+                                                            <?php if ($hasAttachments): ?>
+                                                                <span title="Has Attachments">📎</span>
+                                                            <?php endif; ?>
+                                                            <span class="country-tooltip">
+                                                                <?php if ($isNRI): ?>
+                                                                    &#9992;&#65039; <?= htmlspecialchars($clientCountry) ?>
+                                                                <?php else: ?>
+                                                                    &#127470;&#127475; India
+                                                                <?php endif; ?>
+                                                            </span>
+                                                        </span>
                                                     </div>
                                                 </td>
 
@@ -694,6 +751,7 @@
                                     if ($ownerFilter !== '') $params['owner_filter'] = $ownerFilter;
                                     if ($cycleFilter !== '') $params['cycle_filter'] = $cycleFilter;
                                     if ($meetingFilter !== '') $params['meeting_filter'] = $meetingFilter;
+                                    if ($countryFilter !== '') $params['country_filter'] = $countryFilter;
                                     if ($sortBy !== 'updated_at') $params['sort'] = $sortBy;
                                     if ($sortOrder !== 'DESC')    $params['order'] = strtolower($sortOrder);
                                     $url = 'view_saved_reports.php?' . http_build_query($params);

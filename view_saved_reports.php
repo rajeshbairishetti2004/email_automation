@@ -136,6 +136,7 @@
     $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
     $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
     $meetingFilter = isset($_GET['meeting_filter']) ? trim($_GET['meeting_filter']) : '';
+    $countryFilter = isset($_GET['country_filter']) ? trim($_GET['country_filter']) : '';
     $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
     if (isset($_GET['reset'])) {
@@ -1371,6 +1372,17 @@ meeting_comments,
         $whereParts[] = "c.meeting_date IS NULL";
     }
 
+    // ── COUNTRY FILTER ──────────────────────────────────────────────────────
+    if ($countryFilter !== '') {
+        if ($countryFilter === '__domestic__') {
+            $whereParts[] = "(c.country IS NULL OR TRIM(c.country) = '' OR LOWER(TRIM(c.country)) = 'india')";
+        } else {
+            $whereParts[] = "LOWER(TRIM(c.country)) = ?";
+            $params[] = strtolower(trim($countryFilter));
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // ─────────────────────────────────────────────────────────────────────────
     // When doing a client search: show ALL records for the matching client(s)
     // across all months/cycles, ordered by id DESC (newest first).
@@ -1509,6 +1521,7 @@ meeting_comments,
             c.modifications_action,
             c.meeting_comments,
             c.previous_version_id,
+            c.country,
 
             -- Fetch the report_state of the previous version
 -- Fetch the report_state of the previous version
@@ -1742,6 +1755,23 @@ meeting_comments,
         }
     }
     unset($c);
+
+    // ── DISTINCT COUNTRIES FOR FILTER DROPDOWN ───────────────────────────────
+    try {
+        $countryListStmt = $pdo->query("
+            SELECT DISTINCT TRIM(country) AS country
+            FROM clients
+            WHERE country IS NOT NULL
+              AND TRIM(country) <> ''
+              AND LOWER(TRIM(country)) <> 'india'
+              AND is_latest = 1
+            ORDER BY country
+        ");
+        $availableCountries = $countryListStmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        $availableCountries = [];
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     // Fetch all users for reassignment dropdown
     $allUsersStmt = $pdo->query("SELECT id, username FROM users ORDER BY username ASC");
