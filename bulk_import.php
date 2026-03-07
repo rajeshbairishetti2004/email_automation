@@ -4,6 +4,7 @@
 // - Maps columns by HEADER NAME (not column order) — works with any file layout
 // - Filters by "Tag/Quarter" — composite tags like "RF, NRI" or "OldM, RF" are treated as the target tag
 // - review_cycle always stores the clean target tag (e.g. "RF"), not the raw composite value
+// - country stores the non-cycle part of the tag (e.g. "USA" from "RJ,USA")
 // - Case-Sensitive RM Assignment
 // - Includes allocation_id support for tracking imports
 // - Always creates new records instead of updating existing ones
@@ -98,6 +99,7 @@ function buildHeaderMap(array $headerRow): array
     }
     return $map;
 }
+
 /**
  * Safely retrieve a value from a data row using the header map.
  * $headerKey is normalised internally (lowercase, single-space).
@@ -111,6 +113,42 @@ function getCol(array $row, array $headerMap, string $headerKey, $default = null
     }
     $val = $row[$headerMap[$normKey]] ?? $default;
     return ($val !== null && $val !== '') ? trim((string)$val) : $default;
+}
+
+/**
+ * Extract the country portion from a composite tag string.
+ *
+ * Given a raw tag value like "RJ,USA" or "RM, Singapore" or "RF, NRI, Japan",
+ * and knowing the matched cycle code (e.g. "RJ"), this returns everything
+ * that is NOT the cycle code, joined and trimmed.
+ *
+ * Examples:
+ *   extractCountry("RJ,USA",          "RJ") → "USA"
+ *   extractCountry("RM, Singapore",   "RM") → "Singapore"
+ *   extractCountry("RF,NRI,Japan",    "RF") → "NRI, Japan"
+ *   extractCountry("RF",              "RF") → null  (no country part)
+ *   extractCountry("OldM, RF, USA",   "RF") → "OldM, USA"
+ */
+function extractCountry(string $rawTag, string $cycleCode): ?string
+{
+    // Clean non-breaking spaces
+    $raw = str_replace("\xC2\xA0", ' ', $rawTag);
+    $raw = preg_replace('/\s+/', ' ', $raw);
+
+    // Split on any delimiter: comma, semicolon, pipe, slash
+    $parts = preg_split('/[,;|\/]+/', $raw);
+
+    $nonCycleParts = [];
+    foreach ($parts as $part) {
+        $trimmed = trim($part);
+        if ($trimmed === '') continue;
+        // Skip the part that matches the cycle code (case-insensitive)
+        if (strcasecmp($trimmed, $cycleCode) === 0) continue;
+        $nonCycleParts[] = $trimmed;
+    }
+
+    if (empty($nonCycleParts)) return null;
+    return implode(', ', $nonCycleParts);
 }
 
 $pdo = getPdo();
@@ -212,15 +250,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 throw new Exception("The uploaded file is empty.");
             }
 
-
             $headerRow = $allRows[0];
             $headerMap = buildHeaderMap($headerRow);
 
             if (!isset($headerMap['pan'])) {
                 throw new Exception("PAN column not found in Excel.");
             }
-
-
 
             // Sync ALL rows to customer_list (no transaction needed, upsert is safe)
             $insertCustomerStmt = $pdo->prepare("
@@ -291,8 +326,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 }
             }
 
-
-
             // Row 0 is the header row
 
             // Verify required columns exist
@@ -332,16 +365,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 LIMIT 1
             ");
 
+            // ── CHANGE 1: Added `country` column to INSERT ───────────────────
             $insertStmt = $pdo->prepare("
                 INSERT INTO clients 
                     (name, email, assigned_to, review_assigned_to, total_amount, aum, priority, 
-                     review_cycle, report_state, created_at, created_by, month_year, 
+                     review_cycle, country, report_state, created_at, created_by, month_year, 
                      original_client_id, allocation_id, is_latest) 
                 VALUES 
                     (:name, :email, :assign, :reviewer, :aum, :aum_val, :prio, 
-                     :cycle, 'pending', NOW(), :creator, :month_year, 
+                     :cycle, :country, 'pending', NOW(), :creator, :month_year, 
                      :original_id, :allocation_id, 1)
             ");
+            // ────────────────────────────────────────────────────────────────
 
             $updatePreviousLatestStmt = $pdo->prepare("
                 UPDATE clients 
@@ -373,28 +408,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 $rawMobile   = getCol($row, $headerMap, 'mobile');
                 $rawTag      = getCol($row, $headerMap, 'tags');
                 $rawAum      = getCol($row, $headerMap, 'aum', 0);
-                $rawRM       = getCol($row, $headerMap, 'relationship manager'); // handles double-space via normaliser
-                $rawReviewer = getCol($row, $headerMap, 'service r m');          // "SERVICE  R M" normalised
-                // Priority: new file = "CLIENT RATING", old file = "PRIORITY"
+                $rawRM       = getCol($row, $headerMap, 'relationship manager');
+                $rawReviewer = getCol($row, $headerMap, 'service r m');
                 $rawPriority = getCol($row, $headerMap, 'priority')
                     ?? getCol($row, $headerMap, 'client rating');
 
                 if (empty($rawName)) continue;
 
                 // Filter by Tag/Quarter
-                // Matches if the TAGS cell contains the target tag anywhere in the string.
-                // Examples when target = "RF":
-                //   "RF"              → match ✓
-                //   "RF, NRI"         → match ✓  (treated as RF)
-                //   "OldM, RF"        → match ✓  (treated as RF)
-                //   "NewM, RF, Attention" → match ✓  (treated as RF)
-                //   "RJ"              → no match ✗
                 if (empty($rawTag)) {
                     $summary['skipped']++;
                     continue;
                 }
 
-                // Clean tag string first
+                // Clean tag string
                 $cleanTagString = str_replace("\xC2\xA0", ' ', (string)$rawTag);
                 $cleanTagString = preg_replace('/\s+/', ' ', $cleanTagString);
 
@@ -410,6 +437,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     $summary['skipped']++;
                     continue;
                 }
+
+                // ── CHANGE 2: Extract country from the tag string ────────────
+                // e.g. "RJ,USA" → country = "USA"
+                //      "RM, Singapore" → country = "Singapore"
+                //      "RF" → country = null
+                $countryValue = extractCountry($cleanTagString, $targetTag);
+                // ────────────────────────────────────────────────────────────
 
                 $summary['processed']++;
 
@@ -469,8 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     $finalPriority = 'Normal';
                 }
 
-                // Insert new record
-                // review_cycle = $cleanReviewCycle ("RF") — never the raw composite tag
+                // ── CHANGE 3: Pass :country to the INSERT ───────────────────
                 try {
                     $insertStmt->execute([
                         ':name'          => $rawName,
@@ -480,7 +513,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                         ':aum'           => $aumInCrores,
                         ':aum_val'       => $aumInCrores,
                         ':prio'          => $finalPriority,
-                        ':cycle'         => $cleanReviewCycle,  // ← FIX: always "RF", not "RF, NRI"
+                        ':cycle'         => $cleanReviewCycle,  // "RF", never "RF, NRI"
+                        ':country'       => $countryValue,      // "USA", "Singapore", or null
                         ':creator'       => $currentUserId,
                         ':month_year'    => $monthYear,
                         ':original_id'   => $originalClientId,
@@ -491,6 +525,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                     $summary['errors'][] = "Failed to insert client '{$rawName}': " . $e->getMessage();
                     $summary['skipped']++;
                 }
+                // ────────────────────────────────────────────────────────────
             }
 
             // Update allocation log with final counts
@@ -560,7 +595,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 <strong>Optional columns (used when present):</strong>
                 <code>EMAIL</code>, <code>MOBILE</code>, <code>PRIORITY</code> / <code>CLIENT RATING</code>, <code>SERVICE R M</code><br><br>
                 <i class="fas fa-check-circle" style="color:#28a745;"></i>
-                Composite tags like <code>RF, NRI</code> or <code>OldM, RF</code> are automatically treated as <code>RF</code> — all matching clients will be imported and shown correctly.
+                Composite tags like <code>RF, NRI</code> or <code>RJ, USA</code> are automatically split —
+                the cycle code (e.g. <code>RJ</code>) goes to <code>review_cycle</code> and the country/label
+                (e.g. <code>USA</code>) goes to <code>country</code>.
             </div>
 
             <form method="post" enctype="multipart/form-data">
@@ -571,7 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                         value="<?php echo htmlspecialchars($_POST['target_tag'] ?? ''); ?>">
                     <small style="color:#888;">
                         Clients whose TAGS column <em>contains</em> this value will be imported.
-                        e.g. <strong>RF</strong> will match <strong>RF</strong>, <strong>RF, NRI</strong>, <strong>OldM, RF</strong>, <strong>NewM, RF, Attention</strong>, etc.
+                        e.g. <strong>RF</strong> will match <strong>RF</strong>, <strong>RF, NRI</strong>, <strong>OldM, RF</strong>, <strong>RJ, USA</strong>, etc.
                     </small>
                 </div>
 
@@ -712,24 +749,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             const el = document.getElementById('successMessage');
             el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({
-                behavior: 'smooth'
-            });
-            setTimeout(() => {
-                el.style.display = 'none';
-            }, 5000);
+            el.scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => { el.style.display = 'none'; }, 5000);
         }
 
         function showError(message) {
             const el = document.getElementById('errorMessage');
             el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({
-                behavior: 'smooth'
-            });
-            setTimeout(() => {
-                el.style.display = 'none';
-            }, 5000);
+            el.scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => { el.style.display = 'none'; }, 5000);
         }
 
         function escapeHtml(text) {
@@ -742,9 +771,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             if (!dateString) return 'Never';
             const date = new Date(dateString);
             const day = date.getDate().toString().padStart(2, '0');
-            const month = date.toLocaleString('en-GB', {
-                month: 'short'
-            });
+            const month = date.toLocaleString('en-GB', { month: 'short' });
             const year = date.getFullYear();
             const hours = date.getHours().toString().padStart(2, '0');
             const mins = date.getMinutes().toString().padStart(2, '0');

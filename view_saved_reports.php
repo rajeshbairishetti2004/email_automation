@@ -136,6 +136,7 @@
     $filter      = isset($_GET['filter']) ? trim($_GET['filter']) : '';
     $ownerFilter = isset($_GET['owner_filter']) ? trim($_GET['owner_filter']) : 'all';
     $meetingFilter = isset($_GET['meeting_filter']) ? trim($_GET['meeting_filter']) : '';
+    $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
 
     if (isset($_GET['reset'])) {
         $_GET = [];
@@ -1250,8 +1251,6 @@ meeting_comments,
     // --- BEGIN: Reassigned summary logic ---
     $showReassignedSummary = false;
     $reassignedSummary = [];
-    $isAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
-
 
 
     $summaryUserId = $myId;
