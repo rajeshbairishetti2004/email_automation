@@ -331,12 +331,12 @@ if (!$hasPrev && !empty($c['fallback_prev_id'])) {
                                     <tr class="group-header">
                                         <?php
                                         // Calculate base columns count dynamically
-                                        $baseColCount = 5; // action-icon, ID, Client Name, AUM, Last Updated, Status
+                                        $baseColCount = 6; // action-icon, ID, Client Name, AUM, Last Updated, Status
                                         if ($isAdmin) $baseColCount += 2; // RM, Reviewer
                                         if ($deleteMode || $reassignMode) $baseColCount++; // checkbox
 
                                         // Current Review columns: SIP, Review Sent, Mtg Date, Modifications/Action, Meeting Status, Meeting Comments = 6
-                                        $currentReviewCols = 7;
+                                        $currentReviewCols = 6;
 
                                         // Last Review columns: Prev SIP, Last Review, Last Meeting, Prev Modifications, Prev Mtg Comments = 5
                                         $lastReviewCols = 6;
@@ -557,7 +557,7 @@ if (!$hasPrev && !empty($c['fallback_prev_id'])) {
                                             <?php
                                             $state = $c['report_state'] ?? 'draft';
                                             $statusMap = [
-                                                'pending'  => '<span class="badge badge-grey">Pending</span>',
+                                                'pending'  => '<span class="badge badge-grey">Not Started</span>',
                                                 'draft'    => '<span class="badge badge-yellow">Draft</span>',
                                                 'ready'    => '<span class="badge badge-blue">Ready</span>',
                                                 'reviewed' => '<span class="badge badge-purple">Reviewed</span>',
