@@ -583,10 +583,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
 
             <p style="color:#666; margin-bottom: 25px;">
                 Upload a Customer List Excel file for <strong><?php echo date('M Y'); ?></strong> to assign tasks.<br>
-                <small style="color:#aaa;">Columns are matched by <strong>header name</strong> — column order does not matter.</small>
+                <!-- <small style="color:#aaa;">Columns are matched by <strong>header name</strong> — column order does not matter.</small> -->
             </p>
 
-            <div class="info-note">
+            <!-- <div class="info-note">
                 <i class="fas fa-info-circle"></i> <strong>Important:</strong> This import always creates new records.
                 Existing clients get new entries while preserving old data.
                 Duplicate records (same client in same allocation) are skipped.<br><br>
@@ -598,7 +598,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 Composite tags like <code>RF, NRI</code> or <code>RJ, USA</code> are automatically split —
                 the cycle code (e.g. <code>RJ</code>) goes to <code>review_cycle</code> and the country/label
                 (e.g. <code>USA</code>) goes to <code>country</code>.
-            </div>
+            </div> -->
 
             <form method="post" enctype="multipart/form-data">
 
