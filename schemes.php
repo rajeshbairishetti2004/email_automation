@@ -112,7 +112,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transition: background 0.2s;
         }
 
-        .btn-back:hover { background: #475569; }
+        .btn-back:hover {
+            background: #475569;
+        }
 
         .content-wrap {
             max-width: 1300px;
@@ -163,7 +165,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         .region-select:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .region-badge {
@@ -240,9 +242,17 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             background: #f0f9ff;
         }
 
-        .col-recommended { border-top-color: var(--success); }
-        .col-observation  { border-top-color: var(--warning); }
-        .col-drop         { border-top-color: var(--danger); }
+        .col-recommended {
+            border-top-color: var(--success);
+        }
+
+        .col-observation {
+            border-top-color: var(--warning);
+        }
+
+        .col-drop {
+            border-top-color: var(--danger);
+        }
 
         .scheme-col h3 {
             font-family: 'Poppins', sans-serif;
@@ -310,10 +320,23 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             min-height: 100px;
         }
 
-        .scheme-list::-webkit-scrollbar { width: 6px; }
-        .scheme-list::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-        .scheme-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .scheme-list::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .scheme-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scheme-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .scheme-list::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .scheme-list::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
 
         .scheme-item {
             background: #ffffff;
@@ -326,7 +349,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
-        .scheme-item:last-child { margin-bottom: 0; }
+        .scheme-item:last-child {
+            margin-bottom: 0;
+        }
 
         .scheme-item:hover {
             border-color: #94a3b8;
@@ -334,7 +359,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transform: translateY(-1px);
         }
 
-        .scheme-item:active { cursor: grabbing; opacity: 0.8; transform: scale(0.99); }
+        .scheme-item:active {
+            cursor: grabbing;
+            opacity: 0.8;
+            transform: scale(0.99);
+        }
 
         .scheme-item.dragging {
             opacity: 0.5;
@@ -372,7 +401,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transition: opacity 0.2s;
         }
 
-        .scheme-item:hover .action-btns { opacity: 1; }
+        .scheme-item:hover .action-btns {
+            opacity: 1;
+        }
 
         .btn-icon {
             cursor: pointer;
@@ -391,8 +422,17 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             border: 1px solid #e2e8f0;
         }
 
-        .btn-edit:hover { background: #2563eb; color: white; border-color: #2563eb; }
-        .btn-del:hover  { background: #ef4444; color: white; border-color: #ef4444; }
+        .btn-edit:hover {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        .btn-del:hover {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
 
         .edit-mode {
             display: none;
@@ -409,10 +449,21 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             outline: none;
         }
 
-        .edit-mode input:focus { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        .edit-mode input:focus {
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
 
-        .btn-save   { background: #22c55e; color: white; border-color: #22c55e; }
-        .btn-cancel { background: #64748b; color: white; border-color: #64748b; }
+        .btn-save {
+            background: #22c55e;
+            color: white;
+            border-color: #22c55e;
+        }
+
+        .btn-cancel {
+            background: #64748b;
+            color: white;
+            border-color: #64748b;
+        }
 
         .empty-msg {
             text-align: center;
@@ -437,7 +488,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             box-sizing: border-box;
         }
 
-        #modalSchemeName::placeholder { font-size: 16px; color: #94a3b8; }
+        #modalSchemeName::placeholder {
+            font-size: 16px;
+            color: #94a3b8;
+        }
 
         #modalSchemeName:focus,
         #modalCategory:focus {
@@ -455,18 +509,40 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             font-size: 0.85rem;
         }
 
-        .search-result-item:hover { background-color: #f8f9fa; }
-
-        @media (max-width: 1024px) {
-            .scheme-grid { grid-template-columns: 1fr; }
-            .content-wrap { padding: 0 20px; }
-            .top-nav { padding: 20px; }
-            .action-btns { opacity: 1; }
+        .search-result-item:hover {
+            background-color: #f8f9fa;
         }
 
-        html::-webkit-scrollbar { width: 8px; }
-        html::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 20px; }
-        html::-webkit-scrollbar-thumb:hover { background: #2563eb; }
+        @media (max-width: 1024px) {
+            .scheme-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-wrap {
+                padding: 0 20px;
+            }
+
+            .top-nav {
+                padding: 20px;
+            }
+
+            .action-btns {
+                opacity: 1;
+            }
+        }
+
+        html::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        html::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 20px;
+        }
+
+        html::-webkit-scrollbar-thumb:hover {
+            background: #2563eb;
+        }
     </style>
 </head>
 
@@ -538,12 +614,12 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             <?php
             $config = [
                 'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check',  'color' => 'success', 'class' => 'col-recommended'],
-                'observation' => ['title' => 'Observation',  'icon' => 'eye',           'color' => 'warning', 'class' => 'col-observation'],
-                'drop'        => ['title' => 'Exit / Drop',  'icon' => 'circle-xmark',  'color' => 'danger',  'class' => 'col-drop']
+                'observation' => ['title' => 'Under Observation',  'icon' => 'eye',           'color' => 'warning', 'class' => 'col-observation'],
+                'drop'        => ['title' => ' Drop',  'icon' => 'circle-xmark',  'color' => 'danger',  'class' => 'col-drop']
             ];
             foreach ($config as $key => $sec): ?>
                 <div class="scheme-col <?= $sec['class'] ?>" data-category="<?= $key ?>"
-                     ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
+                    ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
                     <h3>
                         <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
                         <?= $sec['title'] ?>
@@ -622,8 +698,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
             <select id="modalCategory">
                 <option value="recommended">Recommended</option>
-                <option value="observation">Observation</option>
-                <option value="drop">Exit / Drop</option>
+                <option value="observation">Under Observation</option>
+                <option value="drop">Drop</option>
             </select>
 
             <div style="display:flex; justify-content:flex-end; gap:10px;">
@@ -666,7 +742,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             const name = document.getElementById('modalSchemeName').value.trim();
             const category = document.getElementById('modalCategory').value;
 
-            if (!name) { alert("Please enter scheme name"); return; }
+            if (!name) {
+                alert("Please enter scheme name");
+                return;
+            }
 
             let formData = new FormData();
             formData.append('add_to_board', true);
@@ -674,7 +753,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('cat', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
                 .then(res => res.text())
                 .then(response => {
                     if (response === 'success') {
@@ -736,7 +818,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             let dragData;
             try {
                 dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
-            } catch (e) { return; }
+            } catch (e) {
+                return;
+            }
 
             if (dragData.category === targetCategory) return;
             moveScheme(dragData.id, dragData.name, targetCategory);
@@ -749,7 +833,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('name', schemeName);
             formData.append('target_category', targetCategory);
 
-            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
                 .then(async res => {
                     let text = await res.text();
                     if (res.ok && text === 'success') {
@@ -774,7 +861,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             const category = column.dataset.category;
             const schemeName = input.value.trim();
 
-            if (!schemeName) { alert("Please enter scheme name"); return; }
+            if (!schemeName) {
+                alert("Please enter scheme name");
+                return;
+            }
 
             let formData = new FormData();
             formData.append('add_to_board', true);
@@ -782,7 +872,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('cat', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
                 .then(res => res.text())
                 .then(response => {
                     if (response === 'success') {
@@ -801,7 +894,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('category', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
                 .then(res => res.json())
                 .then(data => {
                     const list = document.querySelector(`.scheme-col[data-category="${category}"] .scheme-list`);
@@ -849,7 +945,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             let formData = new FormData();
             formData.append('delete_scheme', true);
             formData.append('id', id);
-            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+            fetch('api_manage_schemes.php', {
+                    method: 'POST',
+                    body: formData
+                })
                 .then(() => location.reload());
         }
 
@@ -876,14 +975,20 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 const id = item.dataset.id;
                 const input = item.querySelector('.edit-mode input');
                 const newName = input.value.trim();
-                if (!newName) { alert("Scheme name cannot be empty"); return; }
+                if (!newName) {
+                    alert("Scheme name cannot be empty");
+                    return;
+                }
 
                 let formData = new FormData();
                 formData.append('update_scheme', true);
                 formData.append('id', id);
                 formData.append('name', newName);
 
-                fetch('api_manage_schemes.php', { method: 'POST', body: formData })
+                fetch('api_manage_schemes.php', {
+                        method: 'POST',
+                        body: formData
+                    })
                     .then(res => res.text())
                     .then(response => {
                         if (response === 'success') {
@@ -957,4 +1062,5 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         });
     </script>
 </body>
+
 </html>
