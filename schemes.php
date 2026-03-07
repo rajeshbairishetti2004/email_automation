@@ -124,17 +124,17 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         /* ===== REGION SWITCHER ===== */
-        .region-switcher {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 28px;
-            background: var(--surface);
-            padding: 16px 20px;
-            border-radius: 14px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-        }
+.region-switcher {
+    display: flex;
+    justify-content: flex-end;   /* pushes it to right */
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    background: transparent;     /* optional remove big box */
+    padding: 0;
+    border: none;
+    box-shadow: none;
+}
 
         .region-switcher label {
             font-weight: 600;
