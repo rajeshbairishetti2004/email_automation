@@ -14,6 +14,16 @@
     const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 
+    // ── HELPER: Resolve is_usa flag from a country string ────────────────────
+    // Returns 1 if country is USA or Canada, 0 otherwise.
+    function resolveIsUsa(?string $country): int
+    {
+        $c = strtolower(trim($country ?? ''));
+        return in_array($c, ['usa', 'us', 'united states', 'canada'], true) ? 1 : 0;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+
     function extractSubCategoryAllocation(string $filePath): array
     {
         $spreadsheet = IOFactory::load($filePath);
@@ -175,7 +185,7 @@
 
    
     try {
-               $triggerChecked = false;
+        $triggerChecked = false;
         if (isset($_SESSION['trigger_checked']) && $_SESSION['trigger_checked'] === true) {
             $triggerChecked = true;
         } else {
@@ -183,10 +193,9 @@
             $stmt = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_review_sent_date_on_sent'");
             $triggerExists = $stmt->rowCount() > 0;
 
-           $earlyIsAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
+            $earlyIsAdmin = (strtolower($currentUser['username'] ?? '') === strtolower(getenv('ADMIN_USERNAME') ?: 'admin'));
             if (!$triggerExists && $earlyIsAdmin) {
                 try {
-                   
                     $pdo->exec("DROP TRIGGER IF EXISTS auto_set_review_sent_date_on_sent");
 
                     $createSQL = "
@@ -210,11 +219,78 @@
                 }
             }
 
+            // ── Install is_usa triggers if missing ────────────────────────────
+            if ($earlyIsAdmin) {
+                try {
+                    $stmtIsUsaIns = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_is_usa_on_insert'");
+                    if ($stmtIsUsaIns->rowCount() === 0) {
+                        $pdo->exec("DROP TRIGGER IF EXISTS auto_set_is_usa_on_insert");
+                        $pdo->exec("
+                            CREATE TRIGGER auto_set_is_usa_on_insert
+                            BEFORE INSERT ON clients
+                            FOR EACH ROW
+                            BEGIN
+                                IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'canada') THEN
+                                    SET NEW.is_usa = 1;
+                                ELSE
+                                    SET NEW.is_usa = 0;
+                                END IF;
+                            END
+                        ");
+                        error_log("✅ is_usa INSERT trigger installed successfully");
+                    }
+
+                    $stmtIsUsaUpd = $pdo->query("SHOW TRIGGERS WHERE `Trigger` = 'auto_set_is_usa_on_update'");
+                    if ($stmtIsUsaUpd->rowCount() === 0) {
+                        $pdo->exec("DROP TRIGGER IF EXISTS auto_set_is_usa_on_update");
+                        $pdo->exec("
+                            CREATE TRIGGER auto_set_is_usa_on_update
+                            BEFORE UPDATE ON clients
+                            FOR EACH ROW
+                            BEGIN
+                                IF NEW.country IS NOT NULL THEN
+                                    IF LOWER(TRIM(NEW.country)) IN ('usa', 'us', 'united states', 'canada') THEN
+                                        SET NEW.is_usa = 1;
+                                    ELSE
+                                        SET NEW.is_usa = 0;
+                                    END IF;
+                                END IF;
+                            END
+                        ");
+                        error_log("✅ is_usa UPDATE trigger installed successfully");
+                    }
+                } catch (Exception $e) {
+                    error_log("Could not install is_usa triggers: " . $e->getMessage());
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             $_SESSION['trigger_checked'] = true;
         }
     } catch (Exception $e) {
         // Silently fail - trigger is optional
     }
+
+    // ── BACKFILL: Set is_usa for all existing records based on country ────────
+// ── BACKFILL: Set is_usa for all existing records based on country ────────
+try {
+    $pdo->exec("
+        UPDATE clients
+        SET is_usa = 1
+        WHERE LOWER(TRIM(country)) IN ('usa', 'us', 'united states', 'canada')
+        AND is_usa != 1
+    ");
+    $pdo->exec("
+        UPDATE clients
+        SET is_usa = 0
+        WHERE (country IS NULL OR LOWER(TRIM(country)) NOT IN ('usa', 'us', 'united states', 'canada'))
+        AND is_usa != 0
+    ");
+} catch (Throwable $e) {
+    // Non-critical, swallow silently
+}
+// ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
 
   
     if (
@@ -463,6 +539,7 @@
             
         }
     }
+
     // ── BACKFILL: Set review_sent_date for sent records that are missing it ──
     if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['search_client'])) {
         try {
@@ -480,9 +557,9 @@
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_review_fields') {
         header('Content-Type: application/json');
         try {
-            $clientId          = (int)($_POST['client_id'] ?? 0);
-            $field             = $_POST['field'] ?? '';
-            $value             = $_POST['value'] ?? '';
+            $clientId = (int)($_POST['client_id'] ?? 0);
+            $field    = $_POST['field'] ?? '';
+            $value    = $_POST['value'] ?? '';
 
             $allowedFields = [
                 'sip_amount_lakhs',
@@ -490,6 +567,7 @@
                 'meeting_date',
                 'modifications_action',
                 'meeting_comments',
+                'country',              // ← allows updating country from the UI
             ];
 
             if (!$clientId || !in_array($field, $allowedFields, true)) {
@@ -497,13 +575,19 @@
                 exit;
             }
 
-
-
             // For date fields, allow empty → NULL
             $bindValue = ($value === '') ? null : $value;
 
             $stmt = $pdo->prepare("UPDATE clients SET `$field` = ? WHERE id = ?");
             $stmt->execute([$bindValue, $clientId]);
+
+            // ── When country is updated, keep is_usa in sync ──────────────────
+            if ($field === 'country') {
+                $isUsaVal = resolveIsUsa($value);
+                $pdo->prepare("UPDATE clients SET is_usa = ? WHERE id = ?")
+                    ->execute([$isUsaVal, $clientId]);
+            }
+            // ─────────────────────────────────────────────────────────────────
 
             echo json_encode(['success' => true]);
         } catch (Throwable $e) {
@@ -641,6 +725,7 @@
             exit;
         }
     }
+
    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'fetch_meeting_history') {
         header('Content-Type: application/json');
         try {
@@ -657,7 +742,7 @@
                 FROM clients
                 WHERE name = ?
                 AND id != ?
-AND meeting_remarks IS NOT NULL
+                AND meeting_remarks IS NOT NULL
                 AND meeting_remarks != ''
                 AND report_state != 'pending'
                 ORDER BY created_at DESC
@@ -854,20 +939,24 @@ AND meeting_remarks IS NOT NULL
                 AND month_year = :month_year
             ');
 
+            // country and is_usa are explicitly inserted so the value is
+            // correct even if the DB trigger hasn't been installed yet.
             $insertClient = $pdo->prepare('INSERT INTO clients
                 (name, email, as_on, total_amount, aum, profit, cagr, xirr, absolute_return,
                 total_goal_current, total_goal_target, total_sip,
                 greeting_prefix, intro_text, closing_text, rationale_text,
                 created_by, report_state, assigned_to, month_year, review_cycle,
                 is_latest, previous_version_id, review_attempt,
-                last_review_date, last_meeting_date, prev_modifications_action, prev_meeting_comments)
+                last_review_date, last_meeting_date, prev_modifications_action, prev_meeting_comments,
+                country, is_usa)
                 VALUES
                 (:name, :email, :as_on, :total_amount, :aum, :profit, :cagr, :xirr, :absolute_return,
                 :total_goal_current, :total_goal_target, :total_sip,
                 :greeting_prefix, :intro_text, :closing_text, :rationale_text,
                 :created_by, :report_state, :assigned_to, :month_year, :review_cycle,
                 :is_latest, :previous_version_id, :review_attempt,
-                :last_review_date, :last_meeting_date, :prev_modifications_action, :prev_meeting_comments)');
+                :last_review_date, :last_meeting_date, :prev_modifications_action, :prev_meeting_comments,
+                :country, :is_usa)');
 
             $stmtGoal = $pdo->prepare('INSERT INTO client_goals
                 (client_id, goal, goal_date, current_amount, sip_swp, target_amount, projected, shortfall, completion, status)
@@ -888,8 +977,14 @@ AND meeting_remarks IS NOT NULL
 
             $firstClientId = 0;
             foreach ($allClientReports as $clientData) {
-                $email = trim($clientData['email'] ?? '');
-                $clientName = trim($clientData['name'] ?? '');
+                $email      = trim($clientData['email']   ?? '');
+                $clientName = trim($clientData['name']    ?? '');
+                $country    = trim($clientData['country'] ?? '');
+
+                // ── Derive is_usa from the parsed country value ───────────────
+                $isUsa = resolveIsUsa($country);
+                // ─────────────────────────────────────────────────────────────
+
                 if ($clientName === '') {
                     continue;
                 }
@@ -945,7 +1040,7 @@ AND meeting_remarks IS NOT NULL
                         review_sent_date,
                         meeting_date,
                         modifications_action,
-meeting_comments,
+                        meeting_comments,
                         meeting_remarks,
                         updated_at,
                         created_at,
@@ -981,7 +1076,7 @@ meeting_comments,
                 $stmtLastReview->execute([$clientName, $pendingRowId]);
                 $lastReview = $stmtLastReview->fetch(PDO::FETCH_ASSOC);
 
-               $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
+                $lastReviewDate          = $lastReview['last_review_datetime']  ?? null;
                 $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
                 $prevModificationsAction = $lastReview['modifications_action']  ?? null;
                 $prevMeetingComments     = $lastReview['meeting_remarks']       ?? null;
@@ -1015,6 +1110,8 @@ meeting_comments,
                     ':last_meeting_date'         => $lastMeetingDate,
                     ':prev_modifications_action' => $prevModificationsAction,
                     ':prev_meeting_comments'     => $prevMeetingComments,
+                    ':country'                   => $country ?: null,
+                    ':is_usa'                    => $isUsa,      // ← NEW: auto-derived
                 ]);
 
                 $clientId = (int)$pdo->lastInsertId();
@@ -1522,10 +1619,9 @@ meeting_comments,
             c.meeting_comments,
             c.previous_version_id,
             c.country,
+            c.is_usa,
 
             -- Fetch the report_state of the previous version
--- Fetch the report_state of the previous version
--- Fetch the report_state of the previous version
             (
                 SELECT p.report_state
                 FROM clients p
