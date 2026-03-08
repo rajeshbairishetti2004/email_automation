@@ -35,7 +35,7 @@ if (!isset($schemes) || !is_array($schemes) || empty($schemes)) {
 
 // 4. Match function:
 //    Priority 1 — Exact match (case-insensitive)
-//    Priority 2 — Client scheme CONTAINS the master name (e.g. "Kotak Multi Asset Allocation Fund Reg (G)" contains "Kotak Multi Asset")
+//    Priority 2 — Client scheme CONTAINS the master name
 //    Priority 3 — Master name CONTAINS the client scheme name
 function matchSchemeName(string $clientName, string $masterName): bool
 {
@@ -50,15 +50,14 @@ function matchSchemeName(string $clientName, string $masterName): bool
 
 // 5. Identify matches — deduplicate by BOTH scheme ID and scheme name
 $strategyMatches     = [];
-$alreadyMatched      = []; // prevent duplicate cards for same client scheme ID
-$alreadyMatchedNames = []; // prevent duplicate cards for same scheme name
+$alreadyMatched      = [];
+$alreadyMatchedNames = [];
 
 foreach ($schemes as $s) {
     $clientSchemeName = trim($s['scheme_name']);
     if (empty($clientSchemeName)) continue;
     if (isset($alreadyMatched[$s['id']])) continue;
 
-    // Skip if we've already added a card for this scheme name (case-insensitive)
     $nameKey = strtolower($clientSchemeName);
     if (isset($alreadyMatchedNames[$nameKey])) continue;
 
@@ -71,7 +70,7 @@ foreach ($schemes as $s) {
             ];
             $alreadyMatched[$s['id']]      = true;
             $alreadyMatchedNames[$nameKey] = true;
-            break; // one master match per client scheme is enough
+            break;
         }
     }
 }
@@ -103,7 +102,7 @@ window.CLIENT_ID = <?= (int)$clientId ?>;
     z-index: 10000;
     font-size: 24px;
     transition: all 0.3s ease;
-    position: fixed; /* ensure fixed even if parent is relative */
+    position: fixed;
 }
 .strategy-toggle-trigger:hover {
     transform: scale(1.1);
@@ -248,7 +247,7 @@ window.CLIENT_ID = <?= (int)$clientId ?>;
     border: 1px dashed #cbd5e1;
 }
 
-/* Table row highlighting — region-aware */
+/* Table row highlighting */
 <?php foreach ($strategyMatches as $match): ?>
 tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
     background-color: <?php
@@ -324,39 +323,44 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
 
 <script>
 
-document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('action-dropdown')) {
-        autoSaveSchemeRow(e.target.closest('tr'));
-    }
-});
-
+// =============================================================================
+// FIX: autoSaveSchemeRow now posts to table4.php (save_scheme_field endpoint)
+// instead of the broken parsers.php which had no handler for 'save_scheme_table'.
+// Each field is saved individually using the same format table4.php expects.
+// =============================================================================
 function autoSaveSchemeRow(row) {
     if (!row || !window.CLIENT_ID) return;
 
-    const idInput = row.querySelector('.scheme-id');
+    const schemeId          = row.querySelector('.scheme-id')?.value || 0;
+    const actionStep        = row.querySelector('.action-dropdown')?.value || '';
+    const recommendedScheme = row.querySelector('[data-field="recommended_scheme"]')?.value || '';
+    const recommendedAmount = row.querySelector('[data-field="recommended_amount"]')?.value || '';
 
-    const payload = {
-        action: 'save_scheme_table',
-        client_id: window.CLIENT_ID,
-        rows: [{
-            id:                   idInput ? idInput.value : 0,
-            scheme_name:          row.querySelector('[data-field="scheme_name"]')?.value        || '',
-            sip_swp:              row.querySelector('[data-field="sip_swp"]')?.value            || '',
-            current_value:        row.querySelector('[data-field="current_value"]')?.value      || '',
-            action_step:          row.querySelector('.action-dropdown')?.value                  || '',
-            recommended_scheme:   row.querySelector('[data-field="recommended_scheme"]')?.value || '',
-            recommended_amount:   row.querySelector('[data-field="recommended_amount"]')?.value || ''
-        }]
-    };
+    // Helper: post a single field to table4.php
+    function saveField(field, value) {
+        const form = new FormData();
+        form.append('table4_action', 'save_scheme_field');
+        form.append('client_id', window.CLIENT_ID);
+        form.append('scheme_id', schemeId);
+        form.append('field', field);
+        form.append('value', value);
+        return fetch('table4.php', { method: 'POST', body: form })
+            .then(r => r.json())
+            .catch(err => console.error('table4 save error (' + field + '):', err));
+    }
 
-    fetch('parsers.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    })
-    .then(res => res.json())
-    .then(resp => { if (!resp.success) console.error('Auto-save failed', resp); })
-    .catch(err  => console.error('Auto-save error', err));
+    // Always save action_step
+    saveField('action_step', actionStep);
+
+    // Save recommended_scheme if it has a value
+    if (recommendedScheme !== '') {
+        saveField('recommended_scheme', recommendedScheme);
+    }
+
+    // Save recommended_amount if it has a value
+    if (recommendedAmount !== '') {
+        saveField('recommended_amount', recommendedAmount);
+    }
 }
 
 // ── Toggle panel ──────────────────────────────────────────────────────────────
@@ -396,12 +400,15 @@ function applyStrategy(schemeId, value) {
 
     if (!actionDropdown) return;
 
+    // Set values FIRST — autoSaveSchemeRow reads from the DOM, so values must
+    // be written before calling it.
     actionDropdown.value = value;
 
     if (value !== 'Continue' && presentSchemeInput && recommendedSchemeInput) {
         recommendedSchemeInput.value = presentSchemeInput.value;
     }
 
+    // NOW save — DOM values are already updated above
     autoSaveSchemeRow(row);
 
     actionDropdown.style.backgroundColor = '#dcfce7';

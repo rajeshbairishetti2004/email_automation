@@ -1649,6 +1649,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
                             const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
 
                             element.addEventListener(eventType, function() {
+                                if (element.getAttribute('data-t4-managed') === 'true') return;
                                 const schemeId = element.getAttribute('data-scheme-id');
                                 const field = element.getAttribute('data-field') || 'action_step'; // Default to action_step for dropdown
                                 const value = element.value.trim();
