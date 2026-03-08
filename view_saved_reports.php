@@ -183,6 +183,35 @@
     $pdo = getPdo();
     $pdoSlides = getSlidesPdo();
 
+    // ── GLOBAL BACKFILL: Fix all existing NULL allocation_ids by inheriting
+    //    from the nearest previous record of the same client name.
+    //    Runs on every page load but is a no-op once all rows are fixed.
+    // ─────────────────────────────────────────────────────────────────────────
+    try {
+        $pdo->exec("
+            UPDATE clients c
+            INNER JOIN (
+                SELECT c2.id,
+                       (SELECT p.allocation_id
+                        FROM clients p
+                        WHERE p.name = c2.name
+                          AND p.allocation_id IS NOT NULL
+                          AND p.id != c2.id
+                        ORDER BY p.id DESC
+                        LIMIT 1
+                       ) AS inherited_alloc_id
+                FROM clients c2
+                WHERE c2.allocation_id IS NULL
+            ) AS src ON c.id = src.id
+            SET c.allocation_id = src.inherited_alloc_id
+            WHERE src.inherited_alloc_id IS NOT NULL
+              AND c.allocation_id IS NULL
+        ");
+    } catch (Throwable $e) {
+        // Non-critical, swallow silently
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
    
     try {
         $triggerChecked = false;
@@ -1118,12 +1147,13 @@ $stmtLastReview = $pdo->prepare("
                 $lastMeetingDate         = $lastReview['last_meeting_datetime'] ?? null;
                 $prevModificationsAction = $lastReview['modifications_action']  ?? null;
                 $prevMeetingComments     = $lastReview['meeting_remarks']       ?? null;
+
                 // ── If parsed files didn't provide a country, carry forward from previous record ──
-if (empty($country) && !empty($lastReview['country'])) {
-    $country = $lastReview['country'];
-    $isUsa   = (int)$lastReview['is_usa'];
-}
-// ─────────────────────────────────────────────────────────────────────────────────
+                if (empty($country) && !empty($lastReview['country'])) {
+                    $country = $lastReview['country'];
+                    $isUsa   = (int)$lastReview['is_usa'];
+                }
+                // ─────────────────────────────────────────────────────────────
 
                 $insertClient->execute([
                     ':name'               => $clientName,
@@ -1155,10 +1185,31 @@ if (empty($country) && !empty($lastReview['country'])) {
                     ':prev_modifications_action' => $prevModificationsAction,
                     ':prev_meeting_comments'     => $prevMeetingComments,
                     ':country'                   => $country ?: null,
-                    ':is_usa'                    => $isUsa,      // ← NEW: auto-derived
+                    ':is_usa'                    => $isUsa,
                 ]);
 
                 $clientId = (int)$pdo->lastInsertId();
+
+                // ── BACKFILL allocation_id: inherit from nearest previous record of same client ──
+                if ($clientId > 0) {
+                    $stmtAllocId = $pdo->prepare("
+                        SELECT allocation_id FROM clients
+                        WHERE name = ?
+                          AND allocation_id IS NOT NULL
+                          AND id != ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                    ");
+                    $stmtAllocId->execute([$clientName, $clientId]);
+                    $inheritedAllocId = $stmtAllocId->fetchColumn();
+                    if ($inheritedAllocId) {
+                        $pdo->prepare("
+                            UPDATE clients SET allocation_id = ?
+                            WHERE id = ? AND allocation_id IS NULL
+                        ")->execute([$inheritedAllocId, $clientId]);
+                    }
+                }
+                // ─────────────────────────────────────────────────────────────
 
                 // ── POST-INSERT SAFETY: If country was inherited (not from Excel),
                 //    immediately UPDATE to ensure country + is_usa are correct.
@@ -1217,9 +1268,6 @@ if (empty($country) && !empty($lastReview['country'])) {
                         0
                     ]);
                 }
-
-
-
 
                 if ($firstClientId === 0 && $clientId > 0) {
                     $firstClientId = $clientId;
@@ -1931,6 +1979,7 @@ if (empty($country) && !empty($lastReview['country'])) {
     if (isset($_GET['search_client']) && isset($_GET['q'])) {
         require_once 'db_config.php';
         $pdo = getPdo();
+        
         $q = trim($_GET['q']);
         $stmt = $pdo->prepare("SELECT DISTINCT name FROM clients WHERE name LIKE ? ORDER BY name ASC LIMIT 10");
         $stmt->execute(["%$q%"]);

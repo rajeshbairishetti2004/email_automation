@@ -1,14 +1,3 @@
-<?php
-$prevId    = (int)($c['previous_version_id'] ?? 0);
-$prevState = $c['prev_version_state'] ?? '';
-$hasPrev   = $prevId > 0 && $prevState !== '' && $prevState !== 'pending';
-
-// Fallback for bulk-allocated rows where previous_version_id is NULL
-if (!$hasPrev && !empty($c['fallback_prev_id'])) {
-    $prevId  = (int)$c['fallback_prev_id'];
-    $hasPrev = true;
-}
-?>
 <!DOCTYPE html>
 <html>
 
