@@ -13,7 +13,10 @@ RUN docker-php-ext-install zip
 # -------------------------------------------------------------------------------
 
 # Copy the entire contents of the 'Report/' directory into the web root
-COPY . /var/www/html/ 
+COPY . /var/www/html/
+
+# ← ADD THIS LINE: Copy php.ini to increase upload limits
+COPY php.ini /usr/local/etc/php/conf.d/uploads.ini
 
 # Ensure uploads and attachments directories exist and are writable
 RUN mkdir -p /var/www/html/uploads/attachments && \
