@@ -661,7 +661,7 @@ if (!$sheet) {
     // 🔍 Read header row (Row 1)
     $headers = [];
     foreach ($sheet->rangeToArray("A1:{$highestColumn}1")[0] as $colIndex => $header) {
-        $header = strtolower(trim($header));
+        $header = strtolower(trim((string)($header ?? '')));
 
         if ($header === 'continue') {
             $headers[$colIndex] = 'recommended';
