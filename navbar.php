@@ -118,6 +118,18 @@ $userDesignation = $_SESSION['designation'] ?? '';
             Report Generation
         </a>
 
+        <!-- Manage Schemes — visible to ALL users -->
+        <a href="<?php echo getNavLink('schemes.php'); ?>" class="sidebar-link <?= ($currentPage === 'schemes.php') ? 'active' : '' ?>">
+            <span class="sidebar-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                    <polyline points="2 17 12 22 22 17"/>
+                    <polyline points="2 12 12 17 22 12"/>
+                </svg>
+            </span>
+            Manage Schemes
+        </a>
+
         <?php if ($isAdmin): ?>
         <div class="sidebar-section-label" style="margin-top: 16px;">Admin</div>
 
@@ -147,16 +159,7 @@ $userDesignation = $_SESSION['designation'] ?? '';
         </a>
 
         <!-- Manage Schemes — layers/stack icon -->
-        <a href="<?php echo getNavLink('schemes.php'); ?>" class="sidebar-link <?= ($currentPage === 'schemes.php') ? 'active' : '' ?>">
-            <span class="sidebar-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-                    <polyline points="2 17 12 22 22 17"/>
-                    <polyline points="2 12 12 17 22 12"/>
-                </svg>
-            </span>
-            Manage Schemes
-        </a>
+        <!-- (Removed from here — now shown for all users above) -->
 
         <!-- Profile Management — user with cog icon -->
         <a href="<?php echo getNavLink('profile_management.php'); ?>" class="sidebar-link <?= ($currentPage === 'profile_management.php') ? 'active' : '' ?>">
@@ -221,6 +224,7 @@ $userDesignation = $_SESSION['designation'] ?? '';
             <a href="<?php echo getNavLink('view_saved_reports.php'); ?>" class="<?= ($currentPage === 'view_saved_reports.php') ? 'active' : '' ?>">All Reports</a>
             <a href="<?php echo getNavLink('customer_list.php'); ?>" class="<?= ($currentPage === 'customer_list.php') ? 'active' : '' ?>">Customer List</a>
             <a href="<?php echo $isInReportGenFolder ? 'coming_soon.php' : 'report_generation/coming_soon.php'; ?>" class="<?= $isReportGeneration ? 'active' : '' ?>">Report Generation</a>
+            <a href="<?php echo getNavLink('schemes.php'); ?>" class="<?= ($currentPage === 'schemes.php') ? 'active' : '' ?>">Manage Schemes</a>
         </div>
     </div>
 

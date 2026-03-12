@@ -8,14 +8,17 @@ requireAuth();
 $pdo = getPdo();
 $currentUser = getCurrentUser();
 
+// ── Admin flag ──────────────────────────────────────────────────────────────
+$isAdmin = isset($currentUser['designation']) && $currentUser['designation'] === 'Admin';
+
 $uploadError = '';
 
 // --- Get selected region (default: india) ---
 $selectedRegion = $_GET['region'] ?? 'india'; // 'india' or 'usa'
 $isUsa = ($selectedRegion === 'usa') ? 1 : 0;
 
-// --- A. Handle XLSX File Upload ---
-if (isset($_POST['import_schemes'])) {
+// --- A. Handle XLSX File Upload (admin only) ---
+if ($isAdmin && isset($_POST['import_schemes'])) {
     if ($_FILES['scheme_file']['name']) {
         $filename = $_FILES['scheme_file']['tmp_name'];
         $schemes = [];
@@ -123,18 +126,34 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             margin-top: 30px;
         }
 
+        /* ── View-only banner ── */
+        .view-only-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            border-radius: 10px;
+            padding: 12px 18px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e40af;
+        }
+        .view-only-banner i { font-size: 16px; }
+
         /* ===== REGION SWITCHER ===== */
-.region-switcher {
-    display: flex;
-    justify-content: flex-end;   /* pushes it to right */
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 15px;
-    background: transparent;     /* optional remove big box */
-    padding: 0;
-    border: none;
-    box-shadow: none;
-}
+        .region-switcher {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+            background: transparent;
+            padding: 0;
+            border: none;
+            box-shadow: none;
+        }
 
         .region-switcher label {
             font-weight: 600;
@@ -236,23 +255,16 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
+        /* drag-over only applies when admin — set via JS */
         .scheme-col.drag-over {
             transform: scale(1.02);
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
             background: #f0f9ff;
         }
 
-        .col-recommended {
-            border-top-color: var(--success);
-        }
-
-        .col-observation {
-            border-top-color: var(--warning);
-        }
-
-        .col-drop {
-            border-top-color: var(--danger);
-        }
+        .col-recommended { border-top-color: var(--success); }
+        .col-observation  { border-top-color: var(--warning); }
+        .col-drop         { border-top-color: var(--danger); }
 
         .scheme-col h3 {
             font-family: 'Poppins', sans-serif;
@@ -320,49 +332,31 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             min-height: 100px;
         }
 
-        .scheme-list::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .scheme-list::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 10px;
-        }
-
-        .scheme-list::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-
-        .scheme-list::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
+        .scheme-list::-webkit-scrollbar { width: 6px; }
+        .scheme-list::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .scheme-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .scheme-list::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .scheme-item {
             background: #ffffff;
             border-radius: 10px;
             margin-bottom: 8px;
             padding: 12px 14px;
-            cursor: grab;
             transition: all 0.2s ease;
             border: 1px solid #e2e8f0;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
-        .scheme-item:last-child {
-            margin-bottom: 0;
-        }
+        /* grab cursor only when draggable (admin) */
+        .scheme-item[draggable="true"] { cursor: grab; }
+        .scheme-item[draggable="true"]:active { cursor: grabbing; opacity: 0.8; transform: scale(0.99); }
+
+        .scheme-item:last-child { margin-bottom: 0; }
 
         .scheme-item:hover {
             border-color: #94a3b8;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
             transform: translateY(-1px);
-        }
-
-        .scheme-item:active {
-            cursor: grabbing;
-            opacity: 0.8;
-            transform: scale(0.99);
         }
 
         .scheme-item.dragging {
@@ -401,9 +395,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             transition: opacity 0.2s;
         }
 
-        .scheme-item:hover .action-btns {
-            opacity: 1;
-        }
+        .scheme-item:hover .action-btns { opacity: 1; }
 
         .btn-icon {
             cursor: pointer;
@@ -422,17 +414,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             border: 1px solid #e2e8f0;
         }
 
-        .btn-edit:hover {
-            background: #2563eb;
-            color: white;
-            border-color: #2563eb;
-        }
-
-        .btn-del:hover {
-            background: #ef4444;
-            color: white;
-            border-color: #ef4444;
-        }
+        .btn-edit:hover { background: #2563eb; color: white; border-color: #2563eb; }
+        .btn-del:hover  { background: #ef4444; color: white; border-color: #ef4444; }
 
         .edit-mode {
             display: none;
@@ -449,21 +432,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             outline: none;
         }
 
-        .edit-mode input:focus {
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
+        .edit-mode input:focus { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
 
-        .btn-save {
-            background: #22c55e;
-            color: white;
-            border-color: #22c55e;
-        }
-
-        .btn-cancel {
-            background: #64748b;
-            color: white;
-            border-color: #64748b;
-        }
+        .btn-save   { background: #22c55e; color: white; border-color: #22c55e; }
+        .btn-cancel { background: #64748b; color: white; border-color: #64748b; }
 
         .empty-msg {
             text-align: center;
@@ -488,10 +460,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             box-sizing: border-box;
         }
 
-        #modalSchemeName::placeholder {
-            font-size: 16px;
-            color: #94a3b8;
-        }
+        #modalSchemeName::placeholder { font-size: 16px; color: #94a3b8; }
 
         #modalSchemeName:focus,
         #modalCategory:focus {
@@ -509,40 +478,18 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             font-size: 0.85rem;
         }
 
-        .search-result-item:hover {
-            background-color: #f8f9fa;
-        }
+        .search-result-item:hover { background-color: #f8f9fa; }
 
         @media (max-width: 1024px) {
-            .scheme-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .content-wrap {
-                padding: 0 20px;
-            }
-
-            .top-nav {
-                padding: 20px;
-            }
-
-            .action-btns {
-                opacity: 1;
-            }
+            .scheme-grid { grid-template-columns: 1fr; }
+            .content-wrap { padding: 0 20px; }
+            .top-nav { padding: 20px; }
+            .action-btns { opacity: 1; }
         }
 
-        html::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        html::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 20px;
-        }
-
-        html::-webkit-scrollbar-thumb:hover {
-            background: #2563eb;
-        }
+        html::-webkit-scrollbar { width: 8px; }
+        html::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 20px; }
+        html::-webkit-scrollbar-thumb:hover { background: #2563eb; }
     </style>
 </head>
 
@@ -556,6 +503,14 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 <i class="fa-solid fa-circle-exclamation"></i>
                 <?= htmlspecialchars($uploadError) ?>
             </div>
+        <?php endif; ?>
+
+        <?php if (!$isAdmin): ?>
+        <!-- View-only notice for non-admin users -->
+        <div class="view-only-banner">
+            <i class="fa-solid fa-eye"></i>
+            <span>You are viewing the Strategy Board in <strong>read-only mode</strong>. Contact an Admin to make changes.</span>
+        </div>
         <?php endif; ?>
 
         <!-- ===== REGION SWITCHER ===== -->
@@ -572,24 +527,14 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     USA / Canada
                 </option>
             </select>
-
-            <!-- <?php if ($selectedRegion === 'usa'): ?>
-                <span class="region-badge usa"><i class="fa-solid fa-flag-usa"></i> USA / Canada Mode</span>
-            <?php else: ?>
-                <span class="region-badge india"><i class="fa-solid fa-flag"></i> India &amp; Others Mode</span>
-            <?php endif; ?> -->
         </div>
 
         <?php if ($selectedRegion === 'usa' && array_sum(array_map('count', $allSchemes)) === 0): ?>
-            <!-- USA empty state notice
-            <div class="usa-notice">
-                <i class="fa-solid fa-circle-info"></i>
-                <p>No schemes added for <strong>USA / Canada</strong> yet.</p>
-                <small>Use the <strong>+ Add Scheme</strong> button or upload an XLSX file to add schemes for this region. They will be saved separately from India &amp; Others.</small>
-            </div> -->
+            <!-- USA empty state notice (commented out as per original) -->
         <?php endif; ?>
 
-        <!-- XLSX Upload Form -->
+        <?php if ($isAdmin): ?>
+        <!-- XLSX Upload Form + Add button — admin only -->
         <div style="display:flex; gap:15px; align-items:center; margin-bottom:30px; flex-wrap:wrap;">
             <form action="?region=<?= htmlspecialchars($selectedRegion) ?>" method="post" enctype="multipart/form-data" class="add-form" style="margin:0;">
                 <input type="file" name="scheme_file" accept=".xlsx" required
@@ -608,18 +553,22 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 + Add Scheme
             </button>
         </div>
+        <?php endif; ?>
 
         <!-- SCHEME GRID -->
         <div class="scheme-grid">
             <?php
             $config = [
-                'recommended' => ['title' => 'Recommended', 'icon' => 'circle-check',  'color' => 'success', 'class' => 'col-recommended'],
-                'observation' => ['title' => 'Under Observation',  'icon' => 'eye',           'color' => 'warning', 'class' => 'col-observation'],
-                'drop'        => ['title' => ' Drop',  'icon' => 'circle-xmark',  'color' => 'danger',  'class' => 'col-drop']
+                'recommended' => ['title' => 'Recommended',      'icon' => 'circle-check',  'color' => 'success', 'class' => 'col-recommended'],
+                'observation' => ['title' => 'Under Observation', 'icon' => 'eye',           'color' => 'warning', 'class' => 'col-observation'],
+                'drop'        => ['title' => ' Drop',             'icon' => 'circle-xmark',  'color' => 'danger',  'class' => 'col-drop']
             ];
             foreach ($config as $key => $sec): ?>
                 <div class="scheme-col <?= $sec['class'] ?>" data-category="<?= $key ?>"
-                    ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
+                    <?php if ($isAdmin): ?>
+                        ondrop="dropHandler(event)" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)"
+                    <?php endif; ?>>
+
                     <h3>
                         <i class="fa-solid fa-<?= $sec['icon'] ?>" style="color:var(--<?= $sec['color'] ?>)"></i>
                         <?= $sec['title'] ?>
@@ -628,14 +577,20 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                         </span>
                     </h3>
 
+                    <!-- Search input — always shown; + button only for admin -->
                     <div class="add-form" style="margin-bottom:18px; position:relative;">
-                        <input type="text" placeholder="Enter Scheme name to search..." onkeyup="handleSearch(this)" autocomplete="off">
+                        <input type="text"
+                            placeholder="<?= $isAdmin ? 'Enter Scheme name to search...' : 'Search schemes...' ?>"
+                            onkeyup="handleSearch(this)"
+                            autocomplete="off">
+                        <?php if ($isAdmin): ?>
                         <button type="button"
                             class="btn-add"
                             style="background:var(--<?= $sec['color'] ?>);"
                             onclick="addSchemeFromInput(this)">
                             <i class="fa-solid fa-plus"></i>
                         </button>
+                        <?php endif; ?>
                     </div>
 
                     <ul class="scheme-list">
@@ -645,14 +600,18 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                             <?php foreach ($allSchemes[$key] as $scheme): ?>
                                 <li class="scheme-item"
                                     id="item-<?= $scheme['id'] ?>"
-                                    draggable="true"
-                                    ondragstart="dragStartHandler(event)"
-                                    ondragend="dragEndHandler(event)"
+                                    <?php if ($isAdmin): ?>
+                                        draggable="true"
+                                        ondragstart="dragStartHandler(event)"
+                                        ondragend="dragEndHandler(event)"
+                                    <?php endif; ?>
                                     data-id="<?= $scheme['id'] ?>"
                                     data-name="<?= htmlspecialchars($scheme['scheme_name']) ?>"
                                     data-category="<?= $key ?>">
+
                                     <div class="display-mode">
                                         <span class="scheme-name"><?= htmlspecialchars($scheme['scheme_name']) ?></span>
+                                        <?php if ($isAdmin): ?>
                                         <div class="action-btns">
                                             <button class="btn-icon btn-edit" onclick="toggleEdit(<?= $scheme['id'] ?>, true)" title="Edit Name">
                                                 <i class="fa-solid fa-pen-to-square"></i>
@@ -661,7 +620,10 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                                                 <i class="fa-solid fa-trash-can"></i>
                                             </button>
                                         </div>
+                                        <?php endif; ?>
                                     </div>
+
+                                    <?php if ($isAdmin): ?>
                                     <form class="edit-mode" style="display:none;" onsubmit="return false;">
                                         <input type="text" value="<?= htmlspecialchars($scheme['scheme_name']) ?>" required>
                                         <button class="btn-icon btn-save" title="Save Changes"><i class="fa-solid fa-check"></i></button>
@@ -669,6 +631,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                                             <i class="fa-solid fa-xmark"></i>
                                         </button>
                                     </form>
+                                    <?php endif; ?>
                                 </li>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -678,7 +641,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         </div>
     </div>
 
-    <!-- ADD SCHEME MODAL -->
+    <?php if ($isAdmin): ?>
+    <!-- ADD SCHEME MODAL — admin only -->
     <div id="addSchemeModal" style="
         display:none;
         position:fixed;
@@ -686,8 +650,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         background:rgba(0,0,0,0.4);
         justify-content:center;
         align-items:center;
-        z-index:1000;
-    ">
+        z-index:1000;">
         <div style="background:white;width:420px;padding:30px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.15);">
             <h3 style="margin-bottom:6px;">Add New Scheme</h3>
             <p style="margin:0 0 18px; font-size:13px; color:#64748b;">
@@ -695,7 +658,6 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             </p>
 
             <input type="text" id="modalSchemeName" placeholder="Enter Scheme Name">
-
             <select id="modalCategory">
                 <option value="recommended">Recommended</option>
                 <option value="observation">Under Observation</option>
@@ -718,15 +680,22 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script>
         // ===== REGION =====
         const CURRENT_REGION = '<?= $selectedRegion ?>';
-        const IS_USA = <?= $isUsa ?>;
+        const IS_USA  = <?= $isUsa ?>;
+        const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
 
         function switchRegion(value) {
             window.location.href = 'schemes.php?region=' + value;
         }
+
+        <?php if ($isAdmin): ?>
+        // =========================================================
+        // ADMIN-ONLY FUNCTIONS
+        // =========================================================
 
         // ===== MODAL =====
         function openAddModal() {
@@ -739,13 +708,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         function submitModalScheme() {
-            const name = document.getElementById('modalSchemeName').value.trim();
+            const name     = document.getElementById('modalSchemeName').value.trim();
             const category = document.getElementById('modalCategory').value;
-
-            if (!name) {
-                alert("Please enter scheme name");
-                return;
-            }
+            if (!name) { alert("Please enter scheme name"); return; }
 
             let formData = new FormData();
             formData.append('add_to_board', true);
@@ -753,26 +718,20 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('cat', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', {
-                    method: 'POST',
-                    body: formData
-                })
+            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                 .then(res => res.text())
                 .then(response => {
                     if (response === 'success') {
                         closeAddModal();
                         document.getElementById('modalSchemeName').value = '';
                         refreshCategory(category);
-                    } else {
-                        alert(response);
-                    }
+                    } else { alert(response); }
                 });
         }
 
         document.getElementById('addSchemeModal').addEventListener('click', function(e) {
             if (e.target.id === 'addSchemeModal') closeAddModal();
         });
-
         document.getElementById('modalSchemeName').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') submitModalScheme();
         });
@@ -811,16 +770,13 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         function dropHandler(event) {
             event.preventDefault();
-            const targetCol = event.currentTarget;
+            const targetCol      = event.currentTarget;
             targetCol.classList.remove('drag-over');
             const targetCategory = targetCol.dataset.category;
 
             let dragData;
-            try {
-                dragData = JSON.parse(event.dataTransfer.getData('text/plain'));
-            } catch (e) {
-                return;
-            }
+            try { dragData = JSON.parse(event.dataTransfer.getData('text/plain')); }
+            catch (e) { return; }
 
             if (dragData.category === targetCategory) return;
             moveScheme(dragData.id, dragData.name, targetCategory);
@@ -833,15 +789,12 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('name', schemeName);
             formData.append('target_category', targetCategory);
 
-            fetch('api_manage_schemes.php', {
-                    method: 'POST',
-                    body: formData
-                })
+            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                 .then(async res => {
                     let text = await res.text();
                     if (res.ok && text === 'success') {
                         const draggedElement = document.getElementById(`item-${schemeId}`);
-                        const targetColumn = document.querySelector(`.scheme-col[data-category="${targetCategory}"] .scheme-list`);
+                        const targetColumn   = document.querySelector(`.scheme-col[data-category="${targetCategory}"] .scheme-list`);
                         draggedElement.dataset.category = targetCategory;
                         targetColumn.appendChild(draggedElement);
                         updateCounts();
@@ -856,15 +809,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         // ===== ADD FROM COLUMN INPUT =====
         function addSchemeFromInput(button) {
-            const column = button.closest('.scheme-col');
-            const input = column.querySelector('input[type="text"]');
-            const category = column.dataset.category;
+            const column     = button.closest('.scheme-col');
+            const input      = column.querySelector('input[type="text"]');
+            const category   = column.dataset.category;
             const schemeName = input.value.trim();
-
-            if (!schemeName) {
-                alert("Please enter scheme name");
-                return;
-            }
+            if (!schemeName) { alert("Please enter scheme name"); return; }
 
             let formData = new FormData();
             formData.append('add_to_board', true);
@@ -872,18 +821,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('cat', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', {
-                    method: 'POST',
-                    body: formData
-                })
+            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                 .then(res => res.text())
                 .then(response => {
-                    if (response === 'success') {
-                        input.value = "";
-                        refreshCategory(category);
-                    } else {
-                        alert(response);
-                    }
+                    if (response === 'success') { input.value = ""; refreshCategory(category); }
+                    else { alert(response); }
                 });
         }
 
@@ -894,16 +836,11 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             formData.append('category', category);
             formData.append('is_usa', IS_USA);
 
-            fetch('api_manage_schemes.php', {
-                    method: 'POST',
-                    body: formData
-                })
+            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                 .then(res => res.json())
                 .then(data => {
                     const list = document.querySelector(`.scheme-col[data-category="${category}"] .scheme-list`);
                     list.innerHTML = '';
-
-                    // Remove USA notice if schemes now exist
                     const notice = document.querySelector('.usa-notice');
                     if (notice && data.length > 0) notice.remove();
 
@@ -945,10 +882,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             let formData = new FormData();
             formData.append('delete_scheme', true);
             formData.append('id', id);
-            fetch('api_manage_schemes.php', {
-                    method: 'POST',
-                    body: formData
-                })
+            fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                 .then(() => location.reload());
         }
 
@@ -957,57 +891,55 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             const item = document.getElementById(`item-${id}`);
             if (!item) return;
             const displayMode = item.querySelector('.display-mode');
-            const editMode = item.querySelector('.edit-mode');
+            const editMode    = item.querySelector('.edit-mode');
             if (show) {
                 displayMode.style.display = 'none';
-                editMode.style.display = 'flex';
+                editMode.style.display    = 'flex';
                 item.draggable = false;
             } else {
                 displayMode.style.display = 'flex';
-                editMode.style.display = 'none';
+                editMode.style.display    = 'none';
                 item.draggable = true;
             }
         }
 
         document.addEventListener('click', function(e) {
             if (e.target.closest('.btn-save')) {
-                const item = e.target.closest('.scheme-item');
-                const id = item.dataset.id;
-                const input = item.querySelector('.edit-mode input');
+                const item    = e.target.closest('.scheme-item');
+                const id      = item.dataset.id;
+                const input   = item.querySelector('.edit-mode input');
                 const newName = input.value.trim();
-                if (!newName) {
-                    alert("Scheme name cannot be empty");
-                    return;
-                }
+                if (!newName) { alert("Scheme name cannot be empty"); return; }
 
                 let formData = new FormData();
                 formData.append('update_scheme', true);
                 formData.append('id', id);
                 formData.append('name', newName);
 
-                fetch('api_manage_schemes.php', {
-                        method: 'POST',
-                        body: formData
-                    })
+                fetch('api_manage_schemes.php', { method: 'POST', body: formData })
                     .then(res => res.text())
                     .then(response => {
                         if (response === 'success') {
                             item.querySelector('.scheme-name').innerText = newName;
                             item.dataset.name = newName;
                             toggleEdit(id, false);
-                        } else {
-                            alert(response);
-                        }
+                        } else { alert(response); }
                     });
             }
         });
+
+        <?php endif; // end IS_ADMIN JS block ?>
+
+        // =========================================================
+        // SHARED FUNCTIONS (all users)
+        // =========================================================
 
         // ===== SEARCH =====
         function handleSearch(input) {
             const filter = input.value.toLowerCase().trim();
             const column = input.closest('.scheme-col');
-            const list = column.querySelector('.scheme-list');
-            const items = list.querySelectorAll('.scheme-item');
+            const list   = column.querySelector('.scheme-list');
+            const items  = list.querySelectorAll('.scheme-item');
             let visibleCount = 0;
 
             items.forEach(item => {
@@ -1027,7 +959,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 const msg = document.createElement('li');
                 msg.className = 'search-empty-msg';
                 msg.style.cssText = 'text-align:center;font-size:13px;color:#94a3b8;padding:20px;font-style:italic;';
-                msg.innerHTML = 'Searched scheme is not available.<br>Click <strong>+</strong> to add.';
+                msg.innerHTML = IS_ADMIN
+                    ? 'Searched scheme is not available.<br>Click <strong>+</strong> to add.'
+                    : 'No matching schemes found.';
                 list.appendChild(msg);
             }
             updateCounts();
@@ -1036,8 +970,8 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         // ===== COUNTS =====
         function updateCounts() {
             document.querySelectorAll('.scheme-col').forEach(col => {
-                const category = col.dataset.category;
-                const count = col.querySelectorAll('.scheme-item').length;
+                const category    = col.dataset.category;
+                const count       = col.querySelectorAll('.scheme-item').length;
                 const countElement = document.getElementById(`count-${category}`);
                 if (countElement) countElement.innerText = `(${count})`;
             });

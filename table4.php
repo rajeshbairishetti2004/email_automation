@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
     require_once __DIR__ . '/db_config.php';
     $pdo = getPdo();
 
-    $action = $_POST['table4_action'];
+    $action   = $_POST['table4_action'];
     $clientId = (int)($_POST['client_id'] ?? 0);
 
     if ($action === 'delete_scheme_rows') {
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
         $deleted = 0;
         if (!empty($ids)) {
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
-            $sql = "DELETE FROM client_schemes WHERE client_id = ? AND id IN ($placeholders)";
+            $sql  = "DELETE FROM client_schemes WHERE client_id = ? AND id IN ($placeholders)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute(array_merge([$clientId], $ids));
             $deleted = $stmt->rowCount();
@@ -30,24 +30,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['table4_action'])) {
     }
 
     if ($action === 'save_scheme_field') {
-        $id = (int)($_POST['scheme_id'] ?? 0);
+        $id    = (int)($_POST['scheme_id'] ?? 0);
         $field = $_POST['field'] ?? '';
         $value = $_POST['value'] ?? '';
-        $allowedFields = ['scheme_name', 'sip_swp', 'current_value', 'action_step', 'recommended_scheme', 'recommended_amount'];
+        $allowedFields = ['scheme_name','sip_swp','current_value','action_step','recommended_scheme','recommended_amount'];
         if (!in_array($field, $allowedFields)) {
             echo json_encode(['success' => false, 'error' => 'Invalid field']);
             exit;
         }
 
-        // =================================================================
-        // CRITICAL FIX: JS now sends the RAW number stored in data-raw,
-        // NOT the formatted display string. parseIndianNumber() is kept as
-        // a safety net for human-typed values like "5 lakhs" or "10k".
-        // If the value is already a plain number (e.g. "711547.60"),
-        // parseIndianNumber() returns it unchanged because is_numeric()
-        // catches it first — multiplier stays at 1.
-        // =================================================================
-        if (in_array($field, ['current_value', 'sip_swp', 'recommended_amount'])) {
+        if (in_array($field, ['current_value','sip_swp','recommended_amount'])) {
             $value = parseIndianNumber($value);
         }
 
@@ -117,49 +109,78 @@ try {
 .report-table#schemeTable th,
 .report-table#schemeTable td {
     border: 1px solid #e0e0e0; padding: 8px 10px; text-align: center;
-    font-size: 14px; min-height: 44px; height: 44px; line-height: 1.3;
+    font-size: 14px; min-height: 44px; line-height: 1.3;
     vertical-align: middle; white-space: normal; word-break: break-word;
     padding-top: 10px; padding-bottom: 10px;
 }
+/* Col 2: Present Scheme Name */
 .report-table#schemeTable th:nth-child(2),
 .report-table#schemeTable td:nth-child(2) {
     width: 370px; min-width: 300px; max-width: 600px;
     white-space: normal; word-break: break-word;
 }
+/* Col 3: SIP/SWP */
 .report-table#schemeTable th:nth-child(3),
 .report-table#schemeTable td:nth-child(3) { width: 90px; min-width: 70px; max-width: 110px; white-space: nowrap; }
+/* Col 4: Current Value */
 .report-table#schemeTable th:nth-child(4),
 .report-table#schemeTable td:nth-child(4) { width: 100px; min-width: 80px; max-width: 120px; white-space: nowrap; }
+/* Col 5: Action Step */
 .report-table#schemeTable th:nth-child(5),
 .report-table#schemeTable td:nth-child(5) { width: 120px; min-width: 100px; max-width: 150px; white-space: nowrap; }
+/* Col 6: Recommended Scheme Name */
 .report-table#schemeTable th:nth-child(6),
 .report-table#schemeTable td:nth-child(6) {
     width: 200px; min-width: 120px; max-width: 250px;
     white-space: normal; word-break: break-word;
-    vertical-align: middle; padding-top: 10px; padding-bottom: 10px;
+    vertical-align: middle; padding-top: 6px; padding-bottom: 6px;
 }
-.report-table#schemeTable td:nth-child(6) .scheme-input {
-    min-height: 38px; height: auto; line-height: 1.3; display: block;
-    white-space: normal; word-break: break-word; overflow-wrap: break-word;
-    resize: none; padding-top: 6px; padding-bottom: 6px;
-}
+/* Col 7: Amount */
 .report-table#schemeTable th:nth-child(7),
 .report-table#schemeTable td:nth-child(7) { width: 80px; min-width: 60px; max-width: 100px; white-space: nowrap; }
+
+/* ── Shared font baseline for every editable element in the table ── */
+#schemeTable input.scheme-input,
+#schemeTable textarea.scheme-textarea,
+#schemeTable select.action-dropdown {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 400;
+    color: #1a1a1a;
+    line-height: 1.4;
+}
+
+/* Generic scheme input */
 .scheme-input {
     width: 100%; min-width: 0; max-width: 100%;
-    padding: 6px 8px; font-size: 14px; border: none; background: transparent;
+    padding: 6px 8px; border: none; background: transparent;
     text-align: center; outline: none; transition: background 0.2s;
     white-space: normal; word-break: break-word; overflow-wrap: break-word;
-    min-height: 38px; height: 38px; line-height: 1.3;
+    min-height: 38px; height: 38px;
     display: block; vertical-align: middle; overflow: visible;
 }
+
+/* Auto-height textarea for Recommended Scheme Name */
+.scheme-textarea {
+    width: 100%; min-width: 0; max-width: 100%;
+    padding: 6px 8px; border: none; background: transparent;
+    text-align: center; outline: none;
+    white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
+    display: block; vertical-align: middle;
+    height: auto; min-height: 38px;
+    resize: none; overflow: hidden;
+    box-sizing: border-box;
+    transition: background 0.2s;
+}
+
 .action-dropdown {
     width: 100%; min-width: 0; max-width: 100%;
-    padding: 6px 8px; font-size: 14px; border-radius: 4px;
+    padding: 6px 8px; border-radius: 4px;
     border: 1px solid #e0e0e0; background: #fff; outline: none;
     transition: border-color 0.2s;
 }
 .action-dropdown:focus { border-color: #0288D1; }
+
 #schemeTableActions { margin: 10px 0; display: flex; gap: 10px; }
 .wf-btn.btn-reject {
     background: #f39c12; color: #fff; border: none; border-radius: 5px;
@@ -182,17 +203,17 @@ try {
     <thead>
         <tr>
             <th style="display:none;" class="scheme-checkbox-header"></th>
-            <th colspan="3" style="background: #0288D1; color:white;">Present Schemes</th>
-            <th rowspan="2" style="background: #0288D1; color:white;">Action Step</th>
-            <th colspan="2" style="background: #219150; color:white;">Scheme Changes</th>
+            <th colspan="3" style="background:#0288D1; color:white;">Present Schemes</th>
+            <th rowspan="2" style="background:#0288D1; color:white;">Action Step</th>
+            <th colspan="2" style="background:#219150; color:white;">Scheme Changes</th>
         </tr>
         <tr>
             <th style="display:none;" class="scheme-checkbox-header"></th>
-            <th style="background: #0288D1; color:white;">Scheme Name</th>
-            <th style="background: #0288D1; color:white;">SIP / SWP</th>
-            <th style="background: #0288D1; color:white;">Value as of<br><?= htmlspecialchars($asOn) ?></th>
-            <th style="background: #219150; color:white;">Scheme Name</th>
-            <th style="background: #219150; color:white;">Amount</th>
+            <th style="background:#0288D1; color:white;">Scheme Name</th>
+            <th style="background:#0288D1; color:white;">SIP / SWP</th>
+            <th style="background:#0288D1; color:white;">Value as of<br><?= htmlspecialchars($asOn) ?></th>
+            <th style="background:#219150; color:white;">Scheme Name</th>
+            <th style="background:#219150; color:white;">Amount</th>
         </tr>
     </thead>
     <tbody>
@@ -205,16 +226,12 @@ try {
     <?php else: ?>
         <?php foreach ($schemes as $s): $schemeId = (int)$s['id']; ?>
         <?php
-            // data-raw = plain DB number (e.g. 711547.60)
-            // value    = formatted display (e.g. "7.12 lakh")
-            // JS sends data-raw to PHP on save — never the display string.
-            $sipRaw    = $s['sip_swp'] ?? '';
-            $cvRaw     = $s['current_value'] ?? '';
-            $raRaw     = $s['recommended_amount'] ?? '';
+            $sipRaw    = $s['sip_swp']            ?? '';
+            $cvRaw     = $s['current_value']       ?? '';
+            $raRaw     = $s['recommended_amount']  ?? '';
             $sipDisplay = ($sipRaw !== null && $sipRaw !== '') ? htmlspecialchars(formatAmount($sipRaw)) : '';
             $cvDisplay  = ($cvRaw  !== null && $cvRaw  !== '') ? htmlspecialchars(formatAmount($cvRaw))  : '';
-            // recommended_amount may be text like "5 Lakhs" — only format if numeric
-            $raDisplay  = (is_numeric($raRaw) && $raRaw !== '') ? htmlspecialchars(formatAmount($raRaw)) : htmlspecialchars($raRaw);
+            $raDisplay  = (is_numeric($raRaw) && $raRaw !== '' && (float)$raRaw != 0) ? htmlspecialchars(formatAmount($raRaw)) : (((float)$raRaw == 0 && $raRaw !== '') ? '' : htmlspecialchars($raRaw));
         ?>
         <tr>
             <td class="scheme-checkbox-cell" style="display:none; text-align:center;">
@@ -260,10 +277,10 @@ try {
                 </select>
             </td>
             <td>
-                <textarea class="scheme-input scheme-textarea"
+                <textarea class="scheme-textarea"
                     data-field="recommended_scheme"
                     data-scheme-id="<?= $schemeId ?>"
-                    rows="2"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
+                    rows="1"><?= htmlspecialchars($s['recommended_scheme'] ?? '') ?></textarea>
             </td>
             <td>
                 <input type="text"
@@ -279,7 +296,7 @@ try {
     </tbody>
 </table>
 
-<div id="schemeTableActions" style="margin: 10px 0; display: flex; gap: 10px;">
+<div id="schemeTableActions" style="margin:10px 0; display:flex; gap:10px;">
     <button type="button" id="toggleSchemeDeleteMode" class="wf-btn btn-reject" style="background:#f39c12;">🗑 Delete Mode</button>
     <button type="button" id="addSchemeRow" class="wf-btn btn-ready" style="background:#27ae60;">+ Add Row</button>
     <button type="button" id="deleteSelectedSchemes" class="wf-btn btn-reject" style="display:none;">Delete Selected</button>
@@ -288,29 +305,19 @@ try {
 <script>
 (function () {
 
-    // ==========================================================================
-    // HOW THIS FIX WORKS
-    // ==========================================================================
-    // Problem: Two blur listeners fight over number inputs:
-    //   A) table4.php's own blur handler (this file)
-    //   B) view_report.php's generic .scheme-input/.action-dropdown blur handler
-    //      which sends the formatted display string to view_report.php's
-    //      ajax_scheme handler — that handler has NO number parser and
-    //      stores the raw string, corrupting the DB.
-    //
-    // Fix strategy:
-    //   1. Mark scheme-number-input elements with data-t4-managed="true".
-    //      view_report.php's listener should skip elements with this attribute
-    //      (add one line there — see note at bottom of this script).
-    //   2. Our blur handler runs in CAPTURE phase (fires before bubble listeners).
-    //      - For number inputs: always stopImmediatePropagation() so B never fires.
-    //      - If unchanged: restore display, skip save.
-    //      - If changed: parse, reformat, update data-raw, send raw to PHP.
-    //   3. data-raw holds the plain DB number. We ALWAYS send data-raw to PHP.
-    //      PHP's parseIndianNumber() passes plain numbers through unchanged.
-    // ==========================================================================
+    // =========================================================================
+    // AUTO-HEIGHT HELPER
+    // =========================================================================
+    function autoResizeTextarea(ta) {
+        if (!ta) return;
+        ta.style.height = 'auto';
+        ta.style.height = Math.max(38, ta.scrollHeight) + 'px';
+    }
 
-    // Tag all number inputs so view_report.php can identify and skip them
+    // Run on page load for all pre-filled textareas
+    document.querySelectorAll('#schemeTable .scheme-textarea').forEach(autoResizeTextarea);
+
+    // Tag number inputs so view_report.php can skip them
     document.querySelectorAll('#schemeTable .scheme-number-input').forEach(function (input) {
         input.setAttribute('data-t4-managed', 'true');
     });
@@ -329,10 +336,12 @@ try {
         return isNaN(num) ? '' : String(num);
     }
 
-    function formatAmountJS(value) {
+    // allowZero=true  → show '0' (used for sip_swp, current_value)
+    // allowZero=false → show ''  (used for recommended_amount)
+    function formatAmountJS(value, allowZero = false) {
         const n = parseFloat(value);
         if (isNaN(n) || value === '' || value === null) return String(value ?? '');
-        if (n === 0) return '0';
+        if (n === 0) return allowZero ? '0' : '';
         const sign = n < 0 ? '-' : '';
         const abs  = Math.abs(n);
         let f;
@@ -345,7 +354,7 @@ try {
 
     function _t(num, dec) { return parseFloat(num.toFixed(dec)).toString(); }
 
-    // ---- POST to table4.php ----
+    // ---- POST a single field to table4.php ----
     function autoSaveSchemeField(schemeId, field, value) {
         const form = new FormData();
         form.append('table4_action', 'save_scheme_field');
@@ -380,53 +389,45 @@ try {
         input.select();
     }, true);
 
-    // ---- BLUR (CAPTURE — fires before view_report.php's bubble listener) ----
+    // ---- BLUR (CAPTURE) ----
     schemeTable.addEventListener('blur', function (e) {
         const input = e.target;
 
-        // ── Number inputs ──────────────────────────────────────────────────
         if (input.classList.contains('scheme-number-input')) {
-            // Always stop propagation — view_report.php must NOT also handle this
             e.stopImmediatePropagation();
-
             const field    = input.getAttribute('data-field');
             const schemeId = input.getAttribute('data-scheme-id') || 0;
             const oldRaw   = input.getAttribute('data-raw') ?? '';
             const typed    = input.value.trim();
 
             if (typed === '' || typed === oldRaw) {
-                // Unchanged — restore formatted display, skip save
-                input.value = input.getAttribute('data-display-backup') || formatAmountJS(oldRaw);
+                input.value = input.getAttribute('data-display-backup') || formatAmountJS(oldRaw, field !== 'recommended_amount');
                 return;
             }
 
-            // User typed a new value
-            const parsedRaw = parseIndianNumberJS(typed);
-            const newDisplay = formatAmountJS(parsedRaw !== '' ? parsedRaw : typed);
-
+            const parsedRaw  = parseIndianNumberJS(typed);
+            const newDisplay = formatAmountJS(parsedRaw !== '' ? parsedRaw : typed, field !== 'recommended_amount');
             input.setAttribute('data-raw', parsedRaw !== '' ? parsedRaw : typed);
             input.value = newDisplay;
             input.setAttribute('data-display-backup', newDisplay);
-
-            // Send RAW number to PHP
             autoSaveSchemeField(schemeId, field, parsedRaw !== '' ? parsedRaw : typed);
             return;
         }
 
-        // ── scheme_name text input ─────────────────────────────────────────
         if (input.classList.contains('scheme-input') && !input.classList.contains('scheme-textarea')) {
             const field = input.getAttribute('data-field');
             if (field === 'scheme_name') {
                 autoSaveSchemeField(input.getAttribute('data-scheme-id') || 0, field, input.value);
-                e.stopImmediatePropagation(); // prevent double-save from view_report.php
+                e.stopImmediatePropagation();
             }
         }
-
     }, true);
 
-    // ---- CHANGE: action_step dropdown + textarea fallback ----
+    // ---- CHANGE: action dropdown + textarea ----
     schemeTable.addEventListener('change', function (e) {
+
         if (e.target.classList.contains('scheme-textarea')) {
+            autoResizeTextarea(e.target);
             autoSaveSchemeField(
                 e.target.getAttribute('data-scheme-id') || 0,
                 e.target.getAttribute('data-field'),
@@ -436,25 +437,109 @@ try {
         }
 
         if (e.target.classList.contains('action-dropdown')) {
-            const schemeId = e.target.getAttribute('data-scheme-id') || 0;
-            autoSaveSchemeField(schemeId, 'action_step', e.target.value);
-            e.stopImmediatePropagation(); // prevent view_report.php double-save
+            const schemeId    = e.target.getAttribute('data-scheme-id') || 0;
+            const action      = e.target.value;
+            const tr          = e.target.closest('tr');
 
-            if (e.target.value === 'SIP Cancellation') {
-                const tr = e.target.closest('tr');
-                const nameInput   = tr.querySelector('input[data-field="scheme_name"]');
-                const recTextarea = tr.querySelector('textarea[data-field="recommended_scheme"]');
-                if (nameInput && recTextarea) {
-                    recTextarea.value = nameInput.value;
-                    autoSaveSchemeField(schemeId, 'recommended_scheme', nameInput.value);
+            autoSaveSchemeField(schemeId, 'action_step', action);
+            e.stopImmediatePropagation();
+
+            const nameInput   = tr.querySelector('input[data-field="scheme_name"]');
+            const cvInput     = tr.querySelector('input[data-field="current_value"]');
+            const sipInput    = tr.querySelector('input[data-field="sip_swp"]');
+            const recTextarea = tr.querySelector('textarea[data-field="recommended_scheme"]');
+            const amountInput = tr.querySelector('input[data-field="recommended_amount"]');
+
+            const schemeName  = nameInput ? nameInput.value.trim() : '';
+            const cvRaw       = cvInput  ? parseFloat(cvInput.getAttribute('data-raw')  || '0') : 0;
+            const sipRaw      = sipInput ? parseFloat(sipInput.getAttribute('data-raw') || '0') : 0;
+
+            // =================================================================
+            // MAPPING RULES
+            // -----------------------------------------------------------------
+            // Drop
+            //   → recommended_scheme = present scheme name
+            //   → recommended_amount = -(full current value)         [cvRaw]
+            //
+            // SIP Cancellation
+            //   → recommended_scheme = present scheme name
+            //   → recommended_amount = -(SIP / SWP amount)           [sipRaw]
+            //
+            // Partially Redeem
+            //   → recommended_scheme = present scheme name
+            //   → recommended_amount = -(half current value)         [cvRaw / 2]
+            //
+            // Switch / Under Observation / Continue
+            //   → recommended_scheme = '' (cleared)
+            //   → recommended_amount = '' (cleared)
+            // =================================================================
+
+            if (action === 'Drop') {
+
+                if (recTextarea) {
+                    recTextarea.value = schemeName;
+                    autoResizeTextarea(recTextarea);
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', schemeName);
+                }
+                if (amountInput && cvRaw !== 0) {
+                    const negRaw     = -Math.abs(cvRaw);
+                    const negDisplay = '-' + formatAmountJS(Math.abs(cvRaw));
+                    amountInput.setAttribute('data-raw', negRaw);
+                    amountInput.value = negDisplay;
+                    autoSaveSchemeField(schemeId, 'recommended_amount', String(negRaw));
+                }
+
+            } else if (action === 'SIP Cancellation') {
+
+                if (recTextarea) {
+                    recTextarea.value = schemeName;
+                    autoResizeTextarea(recTextarea);
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', schemeName);
+                }
+                // Amount = negative SIP/SWP value (NOT current value)
+                if (amountInput && sipRaw !== 0) {
+                    const negRaw     = -Math.abs(sipRaw);
+                    const negDisplay = '-' + formatAmountJS(Math.abs(sipRaw));
+                    amountInput.setAttribute('data-raw', negRaw);
+                    amountInput.value = negDisplay;
+                    autoSaveSchemeField(schemeId, 'recommended_amount', String(negRaw));
+                }
+
+            } else if (action === 'Partially Redeem') {
+
+                if (recTextarea) {
+                    recTextarea.value = schemeName;
+                    autoResizeTextarea(recTextarea);
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', schemeName);
+                }
+                if (amountInput && cvRaw !== 0) {
+                    const halfRaw     = -(Math.abs(cvRaw) / 2);
+                    const halfDisplay = '-' + formatAmountJS(Math.abs(cvRaw) / 2);
+                    amountInput.setAttribute('data-raw', halfRaw);
+                    amountInput.value = halfDisplay;
+                    autoSaveSchemeField(schemeId, 'recommended_amount', String(halfRaw));
+                }
+
+            } else {
+                // Switch / Under Observation / Continue → clear both fields
+                if (recTextarea) {
+                    recTextarea.value = '';
+                    autoResizeTextarea(recTextarea);
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', '');
+                }
+                if (amountInput) {
+                    amountInput.setAttribute('data-raw', '');
+                    amountInput.value = '';
+                    autoSaveSchemeField(schemeId, 'recommended_amount', '');
                 }
             }
         }
     }, true);
 
-    // ---- Textarea: debounced input ----
+    // ---- Textarea: auto-resize on input + debounced save ----
     schemeTable.addEventListener('input', function (e) {
         if (!e.target.classList.contains('scheme-textarea')) return;
+        autoResizeTextarea(e.target);
         clearTimeout(e.target._saveTimer);
         e.target._saveTimer = setTimeout(() => {
             autoSaveSchemeField(
@@ -532,20 +617,12 @@ try {
     // ==========================================================================
     // REQUIRED CHANGE IN view_report.php
     // ==========================================================================
-    // Find this block in view_report.php (around line 650+):
-    //
-    //   document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
-    //       const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
-    //       element.addEventListener(eventType, function() {
-    //           const schemeId = element.getAttribute('data-scheme-id');
-    //           ...fetch('view_report.php', ...)
-    //
-    // Add this ONE LINE at the very top of the callback, before anything else:
+    // In the block that registers blur/change on .action-dropdown / .scheme-input,
+    // add this ONE LINE at the very top of the callback:
     //
     //   if (element.getAttribute('data-t4-managed') === 'true') return;
     //
-    // This prevents view_report.php from also saving number inputs that
-    // table4.php already handles, eliminating the double-save entirely.
+    // This prevents view_report.php from double-saving fields table4.php owns.
     // ==========================================================================
 
 })();
