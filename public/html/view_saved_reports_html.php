@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 
@@ -42,42 +43,62 @@
        .country-tooltip {
     display: none;
     position: absolute;
-    bottom: 125%;
-    left: 50%;
-    transform: translateX(-50%);
-    
+    left: 105%;
+    top: 50%;
+    transform: translateY(-50%);
+
     background: #333;
     color: #fff;
-    
+
     font-size: 11px;
     font-weight: 500;
-    
+
     padding: 4px 8px;
     border-radius: 4px;
-    
+
     white-space: nowrap;
-    z-index: 1000;
-    
+    z-index: 9999;
+
     opacity: 0;
     transition: opacity 0.15s ease;
 }
+.table-scroll-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    background: #fff;
+    border-radius: 6px;
+}
+.table-scroll-wrapper table {
+    min-width: 1400px;
+    width: 100%;
+    background: #fff;
+}
+.table-scroll-wrapper::after {
+    content: "";
+    display: block;
+    height: 1px;
+}
+        table td {
+    position: relative;
+    overflow: visible;
+}
 
-       .country-tooltip::after {
+        .country-tooltip::after {
     content: "";
     position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+
     border-width: 5px;
     border-style: solid;
-    border-color: #333 transparent transparent transparent;
+    border-color: transparent #333 transparent transparent;
 }
 
         .client-name-wrapper:hover .country-tooltip {
-    display: block;
-    opacity: 1;
-}
+            display: block;
+            opacity: 1;
+        }
 
         .client-name-wrapper:hover .nri-icon {
             opacity: 1;
@@ -320,12 +341,12 @@
                                     <tr class="group-header">
                                         <?php
                                         // Calculate base columns count dynamically
-                                        $baseColCount = 6; // action-icon, ID, Client Name, AUM, Last Updated, Status
+                                        $baseColCount = 5; // action-icon, ID, Client Name, AUM, Last Updated, Status
                                         if ($isAdmin) $baseColCount += 2; // RM, Reviewer
                                         if ($deleteMode || $reassignMode) $baseColCount++; // checkbox
 
                                         // Current Review columns: SIP, Review Sent, Mtg Date, Modifications/Action, Meeting Status, Meeting Comments = 6
-                                        $currentReviewCols = 6;
+                                        $currentReviewCols = 7;
 
                                         // Last Review columns: Prev SIP, Last Review, Last Meeting, Prev Modifications, Prev Mtg Comments = 5
                                         $lastReviewCols = 6;
@@ -447,7 +468,7 @@
                                                 <div style="font-weight:600; color:#333; display:flex; align-items:center; gap:8px;">
                                                     <span class="client-name-wrapper">
                                                         <span><?php echo htmlspecialchars($c['name']); ?></span>
-                                                         <?php if ($isNRI): ?>
+                                                        <?php if ($isNRI): ?>
                                                             <span class="nri-icon" title="<?= htmlspecialchars($clientCountry) ?>">
                                                                 <img src="public/icons/plane (1).png" alt="NRI Client" style="width:15px;height:15px;">
                                                             </span>
@@ -546,7 +567,7 @@
                                             <?php
                                             $state = $c['report_state'] ?? 'draft';
                                             $statusMap = [
-                                                'pending'  => '<span class="badge badge-grey">Not Started</span>',
+                                                'pending'  => '<span class="badge badge-grey">Pending</span>',
                                                 'draft'    => '<span class="badge badge-yellow">Draft</span>',
                                                 'ready'    => '<span class="badge badge-blue">Ready</span>',
                                                 'reviewed' => '<span class="badge badge-purple">Reviewed</span>',

@@ -14,7 +14,7 @@
     const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 
-    // ── HELPER: Resolve is_usa flag from a country string ────────────────────
+
     // Returns 1 if country is USA or Canada, 0 otherwise.
     function resolveIsUsa(?string $country): int
     {
@@ -37,7 +37,7 @@
                 $headerRow = null;
                 foreach ($rows as $rIdx => $row) {
                     foreach ($row as $cell) {
-                        if (stripos($cell, 'category') !== false) {
+                        if (stripos((string)$cell, 'category') !== false) {
                             $headerRow = $rIdx;
                             break 2;
                         }
@@ -51,8 +51,8 @@
                 $pctCol = null;
 
                 foreach ($header as $col => $val) {
-                    if (stripos($val, 'category') !== false) $catCol = $col;
-                    if (stripos($val, 'share') !== false || stripos($val, '%') !== false) $pctCol = $col;
+                    if (stripos((string)$val, 'category') !== false) $catCol = $col;
+                    if (stripos((string)$val, 'share') !== false || stripos((string)$val, '%') !== false) $pctCol = $col;
                 }
 
                 if (!$catCol || !$pctCol) return [];
@@ -96,7 +96,7 @@
 
                 foreach ($rows as $row) {
                     foreach ($row as $col => $val) {
-                        if (stripos($val, 'share') !== false) {
+                        if (stripos((string)$val, 'share') !== false) {
                             $shareCol = $col;
                             break 2;
                         }
@@ -110,9 +110,9 @@
                     $rowText = implode(' ', $row);
 
                     if (
-                        stripos($rowText, 'equity') !== false &&
-                        stripos($rowText, 'global') !== false &&
-                        stripos($rowText, 'total') !== false
+                        stripos((string)$rowText, 'equity') !== false &&
+                        stripos((string)$rowText, 'global') !== false &&
+                        stripos((string)$rowText, 'total') !== false
                     ) {
                         return (float)($row[$shareCol] ?? 0);
                     }
