@@ -251,9 +251,9 @@ window.CLIENT_ID = <?= (int)$clientId ?>;
 <?php foreach ($strategyMatches as $match): ?>
 tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
     background-color: <?php
-        echo ($match['category'] === 'drop')        ? 'rgba(239, 68, 68, 0.05)'  :
-             (($match['category'] === 'recommended') ? 'rgba(34, 197, 94, 0.05)'  :
-                                                       'rgba(245, 158, 11, 0.05)');
+        echo ($match['category'] === 'drop')         ? 'rgba(239, 68, 68, 0.05)'  :
+             (($match['category'] === 'recommended')  ? 'rgba(34, 197, 94, 0.05)'  :
+                                                        'rgba(245, 158, 11, 0.05)');
     ?> !important;
 }
 <?php endforeach; ?>
@@ -323,46 +323,6 @@ tr[data-scheme-name="<?php echo htmlspecialchars($match['name']); ?>"] {
 
 <script>
 
-// =============================================================================
-// FIX: autoSaveSchemeRow now posts to table4.php (save_scheme_field endpoint)
-// instead of the broken parsers.php which had no handler for 'save_scheme_table'.
-// Each field is saved individually using the same format table4.php expects.
-// =============================================================================
-function autoSaveSchemeRow(row) {
-    if (!row || !window.CLIENT_ID) return;
-
-    const schemeId          = row.querySelector('.scheme-id')?.value || 0;
-    const actionStep        = row.querySelector('.action-dropdown')?.value || '';
-    const recommendedScheme = row.querySelector('[data-field="recommended_scheme"]')?.value || '';
-    const recommendedAmount = row.querySelector('[data-field="recommended_amount"]')?.value || '';
-
-    // Helper: post a single field to table4.php
-    function saveField(field, value) {
-        const form = new FormData();
-        form.append('table4_action', 'save_scheme_field');
-        form.append('client_id', window.CLIENT_ID);
-        form.append('scheme_id', schemeId);
-        form.append('field', field);
-        form.append('value', value);
-        return fetch('table4.php', { method: 'POST', body: form })
-            .then(r => r.json())
-            .catch(err => console.error('table4 save error (' + field + '):', err));
-    }
-
-    // Always save action_step
-    saveField('action_step', actionStep);
-
-    // Save recommended_scheme if it has a value
-    if (recommendedScheme !== '') {
-        saveField('recommended_scheme', recommendedScheme);
-    }
-
-    // Save recommended_amount if it has a value
-    if (recommendedAmount !== '') {
-        saveField('recommended_amount', recommendedAmount);
-    }
-}
-
 // ── Toggle panel ──────────────────────────────────────────────────────────────
 function toggleRecommendations() {
     const container = document.getElementById('strategyMainContainer');
@@ -387,6 +347,29 @@ function toggleRecommendations() {
 }
 
 // ── Apply strategy ────────────────────────────────────────────────────────────
+// =============================================================================
+// HOW THIS WORKS WITH table4.php
+// =============================================================================
+// We simply set the dropdown value then fire a native 'change' event.
+// table4.php's capture-phase listener handles ALL of the following:
+//
+//   Drop / SIP Cancellation
+//     → recommended_scheme = present scheme name
+//     → recommended_amount = -(full current value)
+//
+//   Partially Redeem
+//     → recommended_scheme = present scheme name
+//     → recommended_amount = -(half current value)
+//
+//   Switch / Under Observation / Continue
+//     → recommended_scheme = '' (cleared)
+//     → recommended_amount = '' (cleared)
+//
+//   Auto-height resize of the recommended_scheme textarea is also
+//   handled by table4.php's autoResizeTextarea() call.
+//
+// No duplicate save logic needed here. One source of truth: table4.php.
+// =============================================================================
 function applyStrategy(schemeId, value) {
     const row = Array.from(document.querySelectorAll('input.scheme-id'))
         .find(el => el.value == schemeId)
@@ -394,29 +377,28 @@ function applyStrategy(schemeId, value) {
 
     if (!row) return;
 
-    const actionDropdown         = row.querySelector('.action-dropdown');
-    const presentSchemeInput     = row.querySelector('[data-field="scheme_name"]');
-    const recommendedSchemeInput = row.querySelector('[data-field="recommended_scheme"]');
-
+    const actionDropdown = row.querySelector('.action-dropdown');
     if (!actionDropdown) return;
 
-    // Set values FIRST — autoSaveSchemeRow reads from the DOM, so values must
-    // be written before calling it.
+    // 1. Set the new action value on the dropdown
     actionDropdown.value = value;
 
-    if (value !== 'Continue' && presentSchemeInput && recommendedSchemeInput) {
-        recommendedSchemeInput.value = presentSchemeInput.value;
-    }
+    // 2. Fire a native change event (bubbles: true so capture listeners fire).
+    //    table4.php's capture-phase handler takes over from here and:
+    //      - copies/clears recommended_scheme
+    //      - calculates/clears recommended_amount
+    //      - saves all changed fields to DB
+    //      - resizes the textarea automatically
+    actionDropdown.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // NOW save — DOM values are already updated above
-    autoSaveSchemeRow(row);
-
+    // 3. Brief green flash on the dropdown as visual confirmation
     actionDropdown.style.backgroundColor = '#dcfce7';
     setTimeout(() => { actionDropdown.style.backgroundColor = 'transparent'; }, 1200);
 
+    // 4. Dismiss the popup card for this scheme
     dismissStrategy(schemeId, null);
 
-    if (typeof showToast === 'function') showToast(`"${value}" saved successfully`);
+    if (typeof showToast === 'function') showToast(`"${value}" applied successfully`);
 }
 
 // ── Dismiss a card ────────────────────────────────────────────────────────────
