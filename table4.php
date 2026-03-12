@@ -143,7 +143,7 @@ try {
 #schemeTable input.scheme-input,
 #schemeTable textarea.scheme-textarea,
 #schemeTable select.action-dropdown {
-    font-family: inherit;   /* match the page / report font exactly */
+    font-family: inherit;
     font-size: 14px;
     font-weight: 400;
     color: #1a1a1a;
@@ -168,7 +168,7 @@ try {
     white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
     display: block; vertical-align: middle;
     height: auto; min-height: 38px;
-    resize: none; overflow: hidden; /* JS will expand height */
+    resize: none; overflow: hidden;
     box-sizing: border-box;
     transition: background 0.2s;
 }
@@ -277,7 +277,6 @@ try {
                 </select>
             </td>
             <td>
-                <!-- Auto-height textarea for recommended scheme name -->
                 <textarea class="scheme-textarea"
                     data-field="recommended_scheme"
                     data-scheme-id="<?= $schemeId ?>"
@@ -308,7 +307,6 @@ try {
 
     // =========================================================================
     // AUTO-HEIGHT HELPER
-    // Reset to auto first so shrinking also works, then set to scrollHeight
     // =========================================================================
     function autoResizeTextarea(ta) {
         if (!ta) return;
@@ -316,12 +314,10 @@ try {
         ta.style.height = Math.max(38, ta.scrollHeight) + 'px';
     }
 
-    // Run immediately on page load for all pre-filled textareas
+    // Run on page load for all pre-filled textareas
     document.querySelectorAll('#schemeTable .scheme-textarea').forEach(autoResizeTextarea);
 
-    // =========================================================================
-    // Tag number inputs so view_report.php can skip them (data-t4-managed)
-    // =========================================================================
+    // Tag number inputs so view_report.php can skip them
     document.querySelectorAll('#schemeTable .scheme-number-input').forEach(function (input) {
         input.setAttribute('data-t4-managed', 'true');
     });
@@ -340,6 +336,8 @@ try {
         return isNaN(num) ? '' : String(num);
     }
 
+    // allowZero=true  → show '0' (used for sip_swp, current_value)
+    // allowZero=false → show ''  (used for recommended_amount)
     function formatAmountJS(value, allowZero = false) {
         const n = parseFloat(value);
         if (isNaN(n) || value === '' || value === null) return String(value ?? '');
@@ -391,11 +389,10 @@ try {
         input.select();
     }, true);
 
-    // ---- BLUR (CAPTURE — fires before view_report.php's bubble listener) ----
+    // ---- BLUR (CAPTURE) ----
     schemeTable.addEventListener('blur', function (e) {
         const input = e.target;
 
-        // ── Number inputs ─────────────────────────────────────────────────
         if (input.classList.contains('scheme-number-input')) {
             e.stopImmediatePropagation();
             const field    = input.getAttribute('data-field');
@@ -417,7 +414,6 @@ try {
             return;
         }
 
-        // ── scheme_name text input ────────────────────────────────────────
         if (input.classList.contains('scheme-input') && !input.classList.contains('scheme-textarea')) {
             const field = input.getAttribute('data-field');
             if (field === 'scheme_name') {
@@ -427,10 +423,9 @@ try {
         }
     }, true);
 
-    // ---- CHANGE: action dropdown + textarea fallback ----
+    // ---- CHANGE: action dropdown + textarea ----
     schemeTable.addEventListener('change', function (e) {
 
-        // ── Textarea (direct manual change) ──────────────────────────────
         if (e.target.classList.contains('scheme-textarea')) {
             autoResizeTextarea(e.target);
             autoSaveSchemeField(
@@ -441,41 +436,45 @@ try {
             return;
         }
 
-        // ── Action dropdown ───────────────────────────────────────────────
         if (e.target.classList.contains('action-dropdown')) {
             const schemeId    = e.target.getAttribute('data-scheme-id') || 0;
             const action      = e.target.value;
             const tr          = e.target.closest('tr');
 
-            // Save action_step immediately
             autoSaveSchemeField(schemeId, 'action_step', action);
             e.stopImmediatePropagation();
 
             const nameInput   = tr.querySelector('input[data-field="scheme_name"]');
             const cvInput     = tr.querySelector('input[data-field="current_value"]');
+            const sipInput    = tr.querySelector('input[data-field="sip_swp"]');
             const recTextarea = tr.querySelector('textarea[data-field="recommended_scheme"]');
             const amountInput = tr.querySelector('input[data-field="recommended_amount"]');
 
             const schemeName  = nameInput ? nameInput.value.trim() : '';
-            const cvRaw       = cvInput   ? parseFloat(cvInput.getAttribute('data-raw') || '0') : 0;
+            const cvRaw       = cvInput  ? parseFloat(cvInput.getAttribute('data-raw')  || '0') : 0;
+            const sipRaw      = sipInput ? parseFloat(sipInput.getAttribute('data-raw') || '0') : 0;
 
             // =================================================================
             // MAPPING RULES
             // -----------------------------------------------------------------
-            // Drop / SIP Cancellation
+            // Drop
             //   → recommended_scheme = present scheme name
-            //   → recommended_amount = -(full current value)
+            //   → recommended_amount = -(full current value)         [cvRaw]
+            //
+            // SIP Cancellation
+            //   → recommended_scheme = present scheme name
+            //   → recommended_amount = -(SIP / SWP amount)           [sipRaw]
             //
             // Partially Redeem
             //   → recommended_scheme = present scheme name
-            //   → recommended_amount = -(half current value)
+            //   → recommended_amount = -(half current value)         [cvRaw / 2]
             //
             // Switch / Under Observation / Continue
             //   → recommended_scheme = '' (cleared)
             //   → recommended_amount = '' (cleared)
             // =================================================================
 
-            if (action === 'Drop' || action === 'SIP Cancellation') {
+            if (action === 'Drop') {
 
                 if (recTextarea) {
                     recTextarea.value = schemeName;
@@ -485,6 +484,22 @@ try {
                 if (amountInput && cvRaw !== 0) {
                     const negRaw     = -Math.abs(cvRaw);
                     const negDisplay = '-' + formatAmountJS(Math.abs(cvRaw));
+                    amountInput.setAttribute('data-raw', negRaw);
+                    amountInput.value = negDisplay;
+                    autoSaveSchemeField(schemeId, 'recommended_amount', String(negRaw));
+                }
+
+            } else if (action === 'SIP Cancellation') {
+
+                if (recTextarea) {
+                    recTextarea.value = schemeName;
+                    autoResizeTextarea(recTextarea);
+                    autoSaveSchemeField(schemeId, 'recommended_scheme', schemeName);
+                }
+                // Amount = negative SIP/SWP value (NOT current value)
+                if (amountInput && sipRaw !== 0) {
+                    const negRaw     = -Math.abs(sipRaw);
+                    const negDisplay = '-' + formatAmountJS(Math.abs(sipRaw));
                     amountInput.setAttribute('data-raw', negRaw);
                     amountInput.value = negDisplay;
                     autoSaveSchemeField(schemeId, 'recommended_amount', String(negRaw));
