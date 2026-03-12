@@ -145,15 +145,19 @@ if (!isset($isLocked)) {
         left: 0;
         right: 0;
         background: #ffffff;
-        border-radius: 8px;
+        border-radius: 10px;
         border: 1px solid #e5e7eb;
         z-index: 9999;
-        max-height: 220px;
+        max-height: 240px;
         overflow-y: auto;
         display: none;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-        padding: 4px 0;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+        padding: 6px 0;
         animation: dropdownFade .15s ease-in-out;
+    }
+
+    .scheme-search-item:not(:last-child) {
+        border-bottom: 1px solid #f1f5f9;
     }
 
     @keyframes dropdownFade {
@@ -169,16 +173,21 @@ if (!isset($isLocked)) {
     }
 
     .scheme-search-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         padding: 10px 14px;
         cursor: pointer;
         font-size: 14px;
         color: #1f2937;
-        transition: background .15s ease;
+        transition: all .15s ease;
+        border-left: 3px solid transparent;
     }
 
     .scheme-search-item:hover {
-        background: #f1f5f9;
-        color: #0284c7;
+        background: #f8fafc;
+        border-left: 3px solid #0288D1;
+        color: #0288D1;
     }
 
     .scheme-search-results {
@@ -275,6 +284,14 @@ if (!isset($isLocked)) {
         transition: background 0.2s;
     }
 
+    .scheme-search-item mark {
+        background: #dbeafe;
+        color: #1d4ed8;
+        padding: 1px 4px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+
     .wf-btn.btn-delete:hover {
         background: #c0392b;
     }
@@ -368,6 +385,7 @@ class="form-control scheme-input recommended-scheme-input scheme-search"
 placeholder="Search scheme..."
 autocomplete="off"
 oninput="debouncedSave()"
+onfocus="loadSchemes(this,'')"
 >
 
 <div class="scheme-search-results"></div>
@@ -414,6 +432,66 @@ class="delete-row-btn">
 
         clearTimeout(saveTimer);
         saveTimer = setTimeout(saveSchemesNow, 1000);
+    }
+
+    function loadSchemes(input, query = "") {
+
+        const resultsBox = input.parentElement.querySelector('.scheme-search-results');
+
+        resultsBox.style.display = "block";
+        resultsBox.innerHTML = "<div style='padding:10px;font-size:13px;color:#777;'>Loading...</div>";
+
+        fetch('api_search_schemes.php?q=' + encodeURIComponent(query))
+            .then(res => res.json())
+            .then(data => {
+
+                resultsBox.innerHTML = '';
+
+                if (data.length === 0) {
+                    resultsBox.style.display = 'none';
+                    return;
+                }
+
+                data.forEach(row => {
+
+                    const item = document.createElement('div');
+                    item.className = 'scheme-search-item';
+
+                    let schemeName = row.scheme_name;
+
+                    if (query) {
+                        const regex = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+                        schemeName = schemeName.replace(regex, "<mark>$1</mark>");
+                    }
+
+                    item.innerHTML = `
+<span style="font-size:13px;opacity:.6;">📈</span>
+<span>${schemeName}</span>
+`;
+                    item.onclick = function() {
+
+                        const existing = [...document.getElementsByName('new_scheme_name[]')]
+                            .map(i => i.value.trim().toLowerCase());
+
+                        if (existing.includes(row.scheme_name.toLowerCase())) {
+                            alert("Scheme already added");
+                            return;
+                        }
+
+                        input.value = row.scheme_name;
+                        resultsBox.style.display = 'none';
+                        debouncedSave();
+
+                    };
+
+                    resultsBox.appendChild(item);
+
+                });
+
+                resultsBox.style.display = 'block';
+
+            });
+
     }
 
     function saveSchemesNow() {
@@ -476,53 +554,13 @@ class="delete-row-btn">
 
         const input = e.target;
         const query = input.value.trim();
-        const resultsBox = input.parentElement.querySelector('.scheme-search-results');
 
         if (query.length < 1) {
-            resultsBox.style.display = 'none';
+            loadSchemes(input, "");
             return;
         }
 
-        fetch('api_search_schemes.php?q=' + encodeURIComponent(query))
-            .then(res => res.json())
-            .then(data => {
-
-                resultsBox.innerHTML = '';
-
-                if (data.length === 0) {
-                    resultsBox.style.display = 'none';
-                    return;
-                }
-
-                data.forEach(row => {
-
-                    const item = document.createElement('div');
-                    item.className = 'scheme-search-item';
-                    item.innerText = row.scheme_name;
-
-                    item.onclick = function() {
-
-                        const existing = [...document.getElementsByName('new_scheme_name[]')]
-                            .map(i => i.value.trim().toLowerCase());
-
-                        if (existing.includes(row.scheme_name.toLowerCase())) {
-                            alert("Scheme already added");
-                            return;
-                        }
-
-                        input.value = row.scheme_name;
-                        resultsBox.style.display = 'none';
-                        debouncedSave();
-
-                    };
-
-                    resultsBox.appendChild(item);
-
-                });
-
-                resultsBox.style.display = 'block';
-
-            });
+        loadSchemes(input, query);
 
     });
 
@@ -533,4 +571,11 @@ class="delete-row-btn">
             }
         });
     });
+    document.addEventListener('focus', function(e) {
+
+        if (!e.target.classList.contains('scheme-search')) return;
+
+        loadSchemes(e.target, "");
+
+    }, true);
 </script>
