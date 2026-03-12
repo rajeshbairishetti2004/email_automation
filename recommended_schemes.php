@@ -116,7 +116,7 @@ if (!isset($isLocked)) {
         background: #fff;
         border-radius: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        overflow: hidden;
+        overflow: visible;
     }
 
     .recommended-schemes-table th,
@@ -128,59 +128,125 @@ if (!isset($isLocked)) {
     }
 
     .recommended-schemes-table th {
-        background: #0288D1;
+        background: #f8fafc;
         font-weight: 600;
+        color: #374151;
+        border-bottom: 2px solid #e5e7eb;
     }
 
-    .scheme-search-wrapper{
-position:relative;
-width:100%;
-}
+    .scheme-search-wrapper {
+        position: relative;
+        width: 100%;
+    }
 
-.scheme-search-results{
-position:absolute;
-top:100%;
-left:0;
-right:0;
-background:#fff;
-border:1px solid #ddd;
-z-index:1000;
-max-height:200px;
-overflow-y:auto;
-display:none;
-box-shadow:0 4px 8px rgba(0,0,0,0.1);
-}
+    .scheme-search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        z-index: 9999;
+        max-height: 220px;
+        overflow-y: auto;
+        display: none;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        padding: 4px 0;
+        animation: dropdownFade .15s ease-in-out;
+    }
 
+    @keyframes dropdownFade {
+        from {
+            opacity: 0;
+            transform: translateY(-4px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
 
     .scheme-search-item {
-        padding: 8px 10px;
+        padding: 10px 14px;
         cursor: pointer;
         font-size: 14px;
+        color: #1f2937;
+        transition: background .15s ease;
     }
 
     .scheme-search-item:hover {
         background: #f1f5f9;
+        color: #0284c7;
+    }
+
+    .scheme-search-results {
+        scrollbar-width: thin;
+    }
+
+    .scheme-search-results::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .scheme-search-results::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 10px;
     }
 
     .recommended-scheme-input {
         width: 100%;
-        padding: 6px 8px;
+        padding: 9px 10px;
         font-size: 14px;
-        border: none;
-        background: transparent;
-        text-align: center;
-        outline: none;
-        transition: background 0.2s;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: #fff;
+        transition: border .15s ease, box-shadow .15s ease;
     }
 
     .recommended-scheme-input:focus {
-        background: #e3f2fd;
+        border-color: #0288D1;
+        box-shadow: 0 0 0 2px rgba(2, 136, 209, 0.15);
+        background: #fff;
     }
 
     .recommended-schemes-actions {
         margin: 10px 0;
         display: flex;
         gap: 10px;
+    }
+
+    .add-scheme-btn {
+        background: #0288D1;
+        color: white;
+        border: none;
+        padding: 9px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s ease;
+    }
+
+    .add-scheme-btn:hover {
+        background: #0277bd;
+        transform: translateY(-1px);
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+    }
+
+    .delete-row-btn {
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all .15s ease;
+    }
+
+    .delete-row-btn:hover {
+        background: #dc2626;
+        transform: scale(1.05);
     }
 
     .wf-btn.btn-add {
@@ -212,6 +278,10 @@ box-shadow:0 4px 8px rgba(0,0,0,0.1);
     .wf-btn.btn-delete:hover {
         background: #c0392b;
     }
+
+    .recommended-schemes-table td {
+        position: relative;
+    }
 </style>
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -234,14 +304,19 @@ box-shadow:0 4px 8px rgba(0,0,0,0.1);
                 <?php foreach ($newSchemes as $ns): ?>
                     <tr>
                         <td>
-<input type="text"
-name="new_scheme_name[]"
-value="<?php echo htmlspecialchars($ns['scheme_name']); ?>"
-class="form-control scheme-input recommended-scheme-input"
-placeholder="e.g. HDFC Top 100"
-style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-<?php echo $isLocked ? 'readonly' : ''; ?>>
-</td>
+                            <div class="scheme-search-wrapper">
+                                <input type="text"
+                                    name="new_scheme_name[]"
+                                    value="<?php echo htmlspecialchars($ns['scheme_name']); ?>"
+                                    class="form-control scheme-input recommended-scheme-input scheme-search"
+                                    placeholder="Search scheme..."
+                                    autocomplete="off"
+                                    oninput="debouncedSave()"
+                                    <?php echo $isLocked ? 'readonly' : ''; ?>>
+
+                                <div class="scheme-search-results"></div>
+                            </div>
+                        </td>
                         <td>
                             <input type="text"
                                 name="new_scheme_amount[]"
@@ -254,19 +329,21 @@ style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
                         <td>
                             <button type="button"
                                 onclick="removeRowAndSave(this)"
-                                style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;"
+                                class="delete-row-btn"
                                 <?php echo $isLocked ? 'disabled' : ''; ?>>
                                 &times;
                             </button>
+
                         </td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
         </tbody>
     </table>
+
     <button type="button"
         onclick="addNewSchemeRow()"
-        style="background: #27ae60; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: 500;"
+        class="add-scheme-btn"
         <?php echo $isLocked ? 'disabled' : ''; ?>>
         + Add Scheme
     </button>
@@ -291,7 +368,7 @@ class="form-control scheme-input recommended-scheme-input scheme-search"
 placeholder="Search scheme..."
 autocomplete="off"
 oninput="debouncedSave()"
-style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+>
 
 <div class="scheme-search-results"></div>
 </div>
@@ -306,10 +383,10 @@ style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
             </td>
             <td>
                 <button type="button" 
-                        onclick="removeRowAndSave(this)" 
-                        style="background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
-                    &times;
-                </button>
+onclick="removeRowAndSave(this)" 
+class="delete-row-btn">
+&times;
+</button>
             </td>
         </tr>
     `;
@@ -319,6 +396,7 @@ style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
     function removeRowAndSave(btn) {
         if (recommendedSchemesLocked) return;
         btn.closest('tr').remove();
+        document.querySelectorAll('.scheme-search-results').forEach(e => e.style.display = 'none');
         saveSchemesNow(); // Save immediately on delete
     }
 
@@ -400,7 +478,7 @@ style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
         const query = input.value.trim();
         const resultsBox = input.parentElement.querySelector('.scheme-search-results');
 
-        if (query.length < 2) {
+        if (query.length < 1) {
             resultsBox.style.display = 'none';
             return;
         }
@@ -423,9 +501,19 @@ style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
                     item.innerText = row.scheme_name;
 
                     item.onclick = function() {
+
+                        const existing = [...document.getElementsByName('new_scheme_name[]')]
+                            .map(i => i.value.trim().toLowerCase());
+
+                        if (existing.includes(row.scheme_name.toLowerCase())) {
+                            alert("Scheme already added");
+                            return;
+                        }
+
                         input.value = row.scheme_name;
                         resultsBox.style.display = 'none';
                         debouncedSave();
+
                     };
 
                     resultsBox.appendChild(item);
