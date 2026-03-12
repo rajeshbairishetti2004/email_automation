@@ -7,14 +7,12 @@
 // 1. AJAX HANDLING (when called directly)
 // ==============================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
-    // Handle AJAX requests for recommended schemes
     require_once 'db_config.php';
     require_once 'auth.php';
 
     header('Content-Type: application/json');
 
     try {
-        // Check authentication
         requireAuth();
 
         $ajax_action = $_POST['ajax_action'];
@@ -26,25 +24,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 throw new Exception('Invalid client ID');
             }
 
-            $schemeNames = $_POST['new_scheme_name'] ?? [];
+            $schemeNames   = $_POST['new_scheme_name']   ?? [];
             $schemeAmounts = $_POST['new_scheme_amount'] ?? [];
 
             $pdo = getPdo();
-
-            // Begin transaction
             $pdo->beginTransaction();
 
-            // 1. Clear old entries for this client
             $delStmt = $pdo->prepare("DELETE FROM client_new_schemes WHERE client_id = ?");
             $delStmt->execute([$clientId]);
 
-            // 2. Insert new schemes
             $insStmt = $pdo->prepare("INSERT INTO client_new_schemes (client_id, scheme_name, amount) VALUES (?, ?, ?)");
 
             foreach ($schemeNames as $index => $name) {
-                $name = trim($name);
+                $name   = trim($name);
                 $amount = trim($schemeAmounts[$index] ?? '');
-
                 if ($name !== '') {
                     $insStmt->execute([$clientId, $name, $amount]);
                 }
@@ -52,29 +45,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
             $pdo->commit();
 
-            echo json_encode([
-                'status' => 'success',
-                'message' => 'Schemes saved successfully'
-            ]);
+            echo json_encode(['status' => 'success', 'message' => 'Schemes saved successfully']);
             exit;
         } else {
-            echo json_encode([
-                'status' => 'error',
-                'message' => 'Unknown action'
-            ]);
+            echo json_encode(['status' => 'error', 'message' => 'Unknown action']);
             exit;
         }
     } catch (Exception $e) {
         if (isset($pdo) && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
-
         error_log("Save schemes error: " . $e->getMessage());
-
-        echo json_encode([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ]);
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         exit;
     }
 }
@@ -95,15 +77,23 @@ if (!isset($newSchemes)) {
     $newSchemes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// Fetch client's region (is_usa) so the search dropdown is filtered correctly
+if (!isset($clientIsUsa)) {
+    if (!isset($pdo)) { require_once 'db_config.php'; $pdo = getPdo(); }
+    $regionStmt = $pdo->prepare("SELECT is_usa FROM clients WHERE id = ? LIMIT 1");
+    $regionStmt->execute([$clientId]);
+    $clientIsUsa = (int)($regionStmt->fetchColumn() ?? 0);
+}
+
 if (!isset($isLocked)) {
     require_once __DIR__ . '/db_config.php';
     $pdo = getPdo();
     $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
-    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
-    $reportState = $clientLock['report_state'] ?? 'draft';
+    $clientLock  = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state']  ?? 'draft';
     $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
-    $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
+    $isLocked    = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
 }
 ?>
 
@@ -161,15 +151,8 @@ if (!isset($isLocked)) {
     }
 
     @keyframes dropdownFade {
-        from {
-            opacity: 0;
-            transform: translateY(-4px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(-4px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 
     .scheme-search-item {
@@ -194,14 +177,8 @@ if (!isset($isLocked)) {
         scrollbar-width: thin;
     }
 
-    .scheme-search-results::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .scheme-search-results::-webkit-scrollbar-thumb {
-        background: #ccc;
-        border-radius: 10px;
-    }
+    .scheme-search-results::-webkit-scrollbar { width: 6px; }
+    .scheme-search-results::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 
     .recommended-scheme-input {
         width: 100%;
@@ -269,9 +246,7 @@ if (!isset($isLocked)) {
         transition: background 0.2s;
     }
 
-    .wf-btn.btn-add:hover {
-        background: #219150;
-    }
+    .wf-btn.btn-add:hover { background: #219150; }
 
     .wf-btn.btn-delete {
         background: #f39c12;
@@ -292,13 +267,9 @@ if (!isset($isLocked)) {
         font-weight: 600;
     }
 
-    .wf-btn.btn-delete:hover {
-        background: #c0392b;
-    }
+    .wf-btn.btn-delete:hover { background: #c0392b; }
 
-    .recommended-schemes-table td {
-        position: relative;
-    }
+    .recommended-schemes-table td { position: relative; }
 </style>
 
 <div class="section-card" style="margin-top: 20px; margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -330,7 +301,6 @@ if (!isset($isLocked)) {
                                     autocomplete="off"
                                     oninput="debouncedSave()"
                                     <?php echo $isLocked ? 'readonly' : ''; ?>>
-
                                 <div class="scheme-search-results"></div>
                             </div>
                         </td>
@@ -350,7 +320,6 @@ if (!isset($isLocked)) {
                                 <?php echo $isLocked ? 'disabled' : ''; ?>>
                                 &times;
                             </button>
-
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -367,9 +336,10 @@ if (!isset($isLocked)) {
 </div>
 
 <script>
-    // Recommended Schemes JavaScript Functions
-    const currentClientId = <?php echo isset($client['id']) ? (int)$client['id'] : (isset($clientId) ? (int)$clientId : 0); ?>;
-    const recommendedSchemesLocked = <?php echo $isLocked ? 'true' : 'false'; ?>;
+    const currentClientId            = <?php echo isset($client['id']) ? (int)$client['id'] : (isset($clientId) ? (int)$clientId : 0); ?>;
+    const recommendedSchemesLocked   = <?php echo $isLocked ? 'true' : 'false'; ?>;
+    // Pass client region so the search only returns matching schemes
+    const CLIENT_IS_USA              = <?php echo (int)$clientIsUsa; ?>;
 
     function addNewSchemeRow() {
         if (recommendedSchemesLocked) return;
@@ -377,37 +347,30 @@ if (!isset($isLocked)) {
         const tbody = document.getElementById('newSchemesBody');
         const row = `
         <tr>
-           <td>
-<div class="scheme-search-wrapper">
-<input type="text" 
-name="new_scheme_name[]" 
-class="form-control scheme-input recommended-scheme-input scheme-search"
-placeholder="Search scheme..."
-autocomplete="off"
-oninput="debouncedSave()"
-onfocus="loadSchemes(this,'')"
->
-
-<div class="scheme-search-results"></div>
-</div>
-</td>
- <td>
-                <input type="text" 
-                       name="new_scheme_amount[]" 
-                       class="form-control scheme-input recommended-scheme-input" 
-                       placeholder="Enter amount" 
-                       oninput="debouncedSave()" 
-                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <td>
+                <div class="scheme-search-wrapper">
+                    <input type="text"
+                        name="new_scheme_name[]"
+                        class="form-control scheme-input recommended-scheme-input scheme-search"
+                        placeholder="Search scheme..."
+                        autocomplete="off"
+                        oninput="debouncedSave()"
+                        onfocus="loadSchemes(this, '')">
+                    <div class="scheme-search-results"></div>
+                </div>
             </td>
             <td>
-                <button type="button" 
-onclick="removeRowAndSave(this)" 
-class="delete-row-btn">
-&times;
-</button>
+                <input type="text"
+                    name="new_scheme_amount[]"
+                    class="form-control scheme-input recommended-scheme-input"
+                    placeholder="Enter amount"
+                    oninput="debouncedSave()"
+                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
             </td>
-        </tr>
-    `;
+            <td>
+                <button type="button" onclick="removeRowAndSave(this)" class="delete-row-btn">&times;</button>
+            </td>
+        </tr>`;
         tbody.insertAdjacentHTML('beforeend', row);
     }
 
@@ -415,16 +378,14 @@ class="delete-row-btn">
         if (recommendedSchemesLocked) return;
         btn.closest('tr').remove();
         document.querySelectorAll('.scheme-search-results').forEach(e => e.style.display = 'none');
-        saveSchemesNow(); // Save immediately on delete
+        saveSchemesNow();
     }
 
-    // Debounce: Wait 1 second after typing stops before saving
     let saveTimer;
 
     function debouncedSave() {
         if (recommendedSchemesLocked) return;
 
-        // Show "Saving..." indicator
         const title = document.querySelector('.section-card h3');
         if (title && !title.innerHTML.includes('Saving')) {
             title.innerHTML = "Recommended Schemes <span style='color:orange; font-size:12px;'>(Saving...)</span>";
@@ -435,16 +396,14 @@ class="delete-row-btn">
     }
 
     function loadSchemes(input, query = "") {
-
         const resultsBox = input.parentElement.querySelector('.scheme-search-results');
-
         resultsBox.style.display = "block";
         resultsBox.innerHTML = "<div style='padding:10px;font-size:13px;color:#777;'>Loading...</div>";
 
-        fetch('api_search_schemes.php?q=' + encodeURIComponent(query))
+        // Pass is_usa so only the correct region's schemes are returned
+        fetch('api_search_schemes.php?q=' + encodeURIComponent(query) + '&is_usa=' + CLIENT_IS_USA)
             .then(res => res.json())
             .then(data => {
-
                 resultsBox.innerHTML = '';
 
                 if (data.length === 0) {
@@ -453,23 +412,18 @@ class="delete-row-btn">
                 }
 
                 data.forEach(row => {
-
                     const item = document.createElement('div');
                     item.className = 'scheme-search-item';
 
                     let schemeName = row.scheme_name;
-
                     if (query) {
                         const regex = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
                         schemeName = schemeName.replace(regex, "<mark>$1</mark>");
                     }
 
-                    item.innerHTML = `
-<span style="font-size:13px;opacity:.6;">📈</span>
-<span>${schemeName}</span>
-`;
-                    item.onclick = function() {
+                    item.innerHTML = `<span style="font-size:13px;opacity:.6;">📈</span><span>${schemeName}</span>`;
 
+                    item.onclick = function() {
                         const existing = [...document.getElementsByName('new_scheme_name[]')]
                             .map(i => i.value.trim().toLowerCase());
 
@@ -481,17 +435,13 @@ class="delete-row-btn">
                         input.value = row.scheme_name;
                         resultsBox.style.display = 'none';
                         debouncedSave();
-
                     };
 
                     resultsBox.appendChild(item);
-
                 });
 
                 resultsBox.style.display = 'block';
-
             });
-
     }
 
     function saveSchemesNow() {
@@ -502,44 +452,33 @@ class="delete-row-btn">
             return;
         }
 
-        // Collect Data
-        const names = document.getElementsByName('new_scheme_name[]');
+        const names   = document.getElementsByName('new_scheme_name[]');
         const amounts = document.getElementsByName('new_scheme_amount[]');
 
-        // Create FormData instead of JSON
         const formData = new FormData();
         formData.append('ajax_action', 'save_recommended_schemes');
         formData.append('client_id', currentClientId);
 
         for (let i = 0; i < names.length; i++) {
-            formData.append('new_scheme_name[]', names[i].value);
+            formData.append('new_scheme_name[]',   names[i].value);
             formData.append('new_scheme_amount[]', amounts[i].value);
         }
 
-        // Send AJAX Request to the same file
-        fetch('recommended_schemes.php', {
-                method: 'POST',
-                body: formData
-            })
+        fetch('recommended_schemes.php', { method: 'POST', body: formData })
             .then(response => response.json())
             .then(data => {
                 const title = document.querySelector('.section-card h3');
                 if (data.status === 'success') {
                     title.innerHTML = "Recommended Schemes <span style='color:green; font-size:12px;'>✓ Saved</span>";
-                    setTimeout(() => {
-                        title.innerHTML = "Recommended Schemes";
-                    }, 2000);
+                    setTimeout(() => { title.innerHTML = "Recommended Schemes"; }, 2000);
                 } else {
                     title.innerHTML = "Recommended Schemes <span style='color:red; font-size:12px;'>⚠ Error</span>";
                     console.error('Server Error:', data.message);
                 }
             })
-            .catch(error => {
-                console.error('Network Error:', error);
-            });
+            .catch(error => console.error('Network Error:', error));
     }
 
-    // Attach listener to existing inputs on load
     document.addEventListener('DOMContentLoaded', function() {
         if (!recommendedSchemesLocked) {
             document.querySelectorAll('.scheme-input').forEach(input => {
@@ -548,22 +487,15 @@ class="delete-row-btn">
         }
     });
 
+    // Search on input
     document.addEventListener('input', function(e) {
-
         if (!e.target.classList.contains('scheme-search')) return;
-
         const input = e.target;
         const query = input.value.trim();
-
-        if (query.length < 1) {
-            loadSchemes(input, "");
-            return;
-        }
-
-        loadSchemes(input, query);
-
+        loadSchemes(input, query.length < 1 ? "" : query);
     });
 
+    // Close dropdowns on outside click
     document.addEventListener('click', function(e) {
         document.querySelectorAll('.scheme-search-results').forEach(box => {
             if (!box.parentElement.contains(e.target)) {
@@ -571,11 +503,10 @@ class="delete-row-btn">
             }
         });
     });
+
+    // Load all on focus
     document.addEventListener('focus', function(e) {
-
         if (!e.target.classList.contains('scheme-search')) return;
-
         loadSchemes(e.target, "");
-
     }, true);
 </script>
