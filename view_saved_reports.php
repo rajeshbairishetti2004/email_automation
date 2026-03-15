@@ -1589,18 +1589,19 @@ $stmtLastReview = $pdo->prepare("
     // ─────────────────────────────────────────────────────────────────────────
     $currentMonthYear = date('M Y');
 
-    if (!$isClientSearch) {
-        // Normal mode: current month, latest version only
+if (!$isClientSearch) {
+    array_unshift($whereParts, "c.is_latest = TRUE");
+
+    if ($cycleFilter !== '') {
+        // When a specific cycle is selected, show all months for that cycle
+        $whereParts[] = "c.review_cycle = ?";
+        $params[] = $cycleFilter;
+    } else {
+        // No cycle filter = show current month only (default view)
         $whereParts[] = "c.month_year = ?";
         $params[] = $currentMonthYear;
-
-        if ($cycleFilter !== '') {
-            $whereParts[] = "c.review_cycle = ?";
-            $params[] = $cycleFilter;
-        }
-
-        array_unshift($whereParts, "c.is_latest = TRUE");
-    } else {
+    }
+} else {
         // Search mode: no month/cycle/is_latest restriction — show full history
         // (cycle filter still applies if explicitly set and useful)
         if ($cycleFilter !== '' && $cycleFilter !== $systemCurrentCycle) {
