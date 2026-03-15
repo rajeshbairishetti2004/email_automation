@@ -1079,7 +1079,7 @@
                 $summary = $clientData['current']['summary'] ?? null;
 
                 $totalAmount    = $totals['current'] ?? 0;
-                $aum = $totalAmount > 0 ? ($totalAmount / 10000000) : 0;
+$aum            = $totalAmount; // store raw, display handles conversion
 
                 $profit         = $summary['profit'] ?? ($totals['profit'] ?? 0);
                 $cagr           = $totals['cagr_weighted'] ?? 0;

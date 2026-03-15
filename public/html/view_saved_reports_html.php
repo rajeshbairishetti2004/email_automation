@@ -488,14 +488,14 @@
                                             <td>
                                                 <span style="font-weight:600; color:#1976d2;">
                                                     <?php
-                                                    $aumValue = (float)($c['aum'] ?? 0);
-                                                    if ($aumValue < 1) {
-                                                        // Convert to lakhs (1 crore = 100 lakhs)
-                                                        $lakhsValue = $aumValue * 100;
-                                                        echo '₹' . number_format($lakhsValue, 2) . ' L';
-                                                    } else {
-                                                        echo '₹' . number_format($aumValue, 2) . ' Cr';
-                                                    }
+$aumValue = (float)($c['aum'] ?? 0);
+$aumCrores = $aumValue / 10000000;
+if ($aumCrores < 1) {
+    $lakhsValue = $aumCrores * 100;
+    echo '₹' . number_format($lakhsValue, 2) . ' L';
+} else {
+    echo '₹' . number_format($aumCrores, 2) . ' Cr';
+}
                                                     ?>
                                                 </span>
                                             </td>
