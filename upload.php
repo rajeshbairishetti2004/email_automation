@@ -338,7 +338,7 @@ $availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
                         ?>
                         <div class="aum-box">
                             <div>AUM Handled</div>
-                            <div id="aumValue">₹<?= number_format($totalAum , 2); ?> <span style="font-size:13px;">Cr</span></div>
+                           <div id="aumValue">₹<?= number_format($totalAum / 10000000, 2); ?> <span style="font-size:13px;">Cr</span></div>
                         </div>
                     </div>
                 </div>
@@ -517,7 +517,7 @@ AND YEAR(meeting_date) = ?
                             <div class="aum-box">
                                 <div>AUM Handled</div>
                                 <div id="prevAumValue">
-                                    ₹<?= number_format($prevTotalAum , 2); ?>
+    ₹<?= number_format($prevTotalAum / 10000000, 2); ?>
                                     <span style="font-size:13px;">Cr</span>
                                 </div>
                             </div>
@@ -667,7 +667,7 @@ AND YEAR(meeting_date) = ?
                     document.getElementById("readyCount").innerText = data.ready;
                     document.getElementById("reviewedCount").innerText = data.reviewed;
                     document.getElementById("sentCount").innerText = data.sent;
-                    let crore = (data.aum ).toFixed(2);
+                   let crore = (data.aum / 10000000).toFixed(2);
                     document.getElementById("aumValue").innerHTML = "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
                     if (month.value) {
                         document.getElementById("reviewHeading").innerText =
@@ -693,7 +693,7 @@ AND YEAR(meeting_date) = ?
                     document.getElementById("prevReadyCount").innerText = data.ready;
                     document.getElementById("prevReviewedCount").innerText = data.reviewed;
                     document.getElementById("prevSentCount").innerText = data.sent;
-                    let crore = (data.aum ).toFixed(2);
+                    let crore = (data.aum / 10000000).toFixed(2);
                     document.getElementById("prevAumValue").innerHTML = "₹" + crore + " <span style='font-size:13px;'>Cr</span>";
                     if (prevMonth.value) {
                         document.getElementById("prevReviewHeading").innerText =
