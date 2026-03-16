@@ -142,72 +142,114 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
         .view-only-banner i { font-size: 16px; }
 
-        /* ===== REGION SWITCHER ===== */
-        .region-switcher {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 15px;
-            background: transparent;
-            padding: 0;
-            border: none;
-            box-shadow: none;
-        }
+        /* ===== REGION SWITCHER (Toggle) ===== */
+        /* ===== PREMIUM REGION SWITCH ===== */
 
-        .region-switcher label {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--text-dark);
-            white-space: nowrap;
-        }
+.region-switcher {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 
-        .region-switcher label i {
-            margin-right: 6px;
-            color: var(--primary);
-        }
+/* label */
+.region-switcher-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
 
-        .region-select {
-            height: 42px;
-            padding: 0 14px;
-            border-radius: 10px;
-            border: 1.5px solid var(--border);
-            font-size: 15px;
-            font-weight: 500;
-            color: var(--text-dark);
-            background: #f8fafc;
-            cursor: pointer;
-            outline: none;
-            min-width: 220px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
+/* glass container */
+.region-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
 
-        .region-select:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
+    padding: 4px;
 
-        .region-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-        }
+    border-radius: 999px;
 
-        .region-badge.india {
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-        }
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: blur(12px);
 
-        .region-badge.usa {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #bfdbfe;
-        }
+    border: 1px solid rgba(148,163,184,0.25);
+
+    box-shadow:
+        0 4px 20px rgba(0,0,0,0.06),
+        inset 0 1px 1px rgba(255,255,255,0.6);
+}
+
+/* sliding premium pill */
+.region-toggle-slider {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+
+    height: calc(100% - 8px);
+    width: 0;
+
+    border-radius: 999px;
+
+    background: linear-gradient(180deg,#ffffff,#f1f5f9);
+
+    box-shadow:
+        0 6px 16px rgba(0,0,0,0.12),
+        0 1px 2px rgba(0,0,0,0.08);
+
+    transition:
+        transform .45s cubic-bezier(.22,1,.36,1),
+        width .45s cubic-bezier(.22,1,.36,1);
+
+    z-index: 0;
+}
+
+/* buttons */
+.region-toggle-btn {
+    position: relative;
+    z-index: 1;
+
+    display: flex;
+    align-items: center;
+    gap: 5px;
+
+    padding: 6px 14px;
+
+    border: none;
+    background: transparent;
+
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+
+    border-radius: 999px;
+
+    color: #64748b;
+    cursor: pointer;
+
+    transition:
+        color .25s ease,
+        transform .15s ease,
+        opacity .2s ease;
+}
+
+/* hover interaction */
+.region-toggle-btn:hover {
+    transform: translateY(-1px);
+    opacity: .85;
+}
+
+/* active state */
+.region-toggle-btn.active {
+    color: #0f172a;
+}
+
+/* flag */
+.region-toggle-btn .flag {
+    font-size: 13px;
+    transform: translateY(-0.5px);
+}
+
 
         /* ===== USA EMPTY STATE ===== */
         .usa-notice {
@@ -513,47 +555,66 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         </div>
         <?php endif; ?>
 
-        <!-- ===== REGION SWITCHER ===== -->
-        <div class="region-switcher">
-            <label for="regionSelect">
-                <i class="fa-solid fa-globe"></i>
-                Select Region:
-            </label>
-            <select id="regionSelect" class="region-select" onchange="switchRegion(this.value)">
-                <option value="india" <?= $selectedRegion === 'india' ? 'selected' : '' ?>>
-                    India &amp; Others
-                </option>
-                <option value="usa" <?= $selectedRegion === 'usa' ? 'selected' : '' ?>>
-                    USA / Canada
-                </option>
-            </select>
-        </div>
-
         <?php if ($selectedRegion === 'usa' && array_sum(array_map('count', $allSchemes)) === 0): ?>
             <!-- USA empty state notice (commented out as per original) -->
         <?php endif; ?>
 
-        <?php if ($isAdmin): ?>
-        <!-- XLSX Upload Form + Add button — admin only -->
-        <div style="display:flex; gap:15px; align-items:center; margin-bottom:30px; flex-wrap:wrap;">
-            <form action="?region=<?= htmlspecialchars($selectedRegion) ?>" method="post" enctype="multipart/form-data" class="add-form" style="margin:0;">
-                <input type="file" name="scheme_file" accept=".xlsx" required
-                    style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
-                <button type="submit" name="import_schemes"
-                    class="btn-add"
-                    style="width:auto; min-width:160px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">
-                    <i class="fa-solid fa-upload" style="margin-right:6px;"></i> Upload Schemes
-                </button>
-            </form>
+        <!-- toolbar row: left = upload/add (admin only), right = region toggle (always) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:30px; flex-wrap:wrap; gap:12px;">
 
-            <button onclick="openAddModal()"
-                style="padding:10px 20px; border:none; border-radius:8px; background:#22c55e; color:white; font-weight:600; cursor:pointer;"
-                onmouseover="this.style.background='#16a34a'"
-                onmouseout="this.style.background='#22c55e'">
-                + Add Scheme
-            </button>
+            <?php if ($isAdmin): ?>
+            <!-- XLSX Upload Form + Add button — admin only -->
+            <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                <form action="?region=<?= htmlspecialchars($selectedRegion) ?>" method="post" enctype="multipart/form-data" class="add-form" style="margin:0;">
+                    <input type="file" name="scheme_file" accept=".xlsx" required
+                        style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:14px;">
+                    <button type="submit" name="import_schemes"
+                        class="btn-add"
+                        style="width:auto; min-width:160px; background:var(--primary); font-size:14px; padding:0 18px; border-radius:8px;">
+                        <i class="fa-solid fa-upload" style="margin-right:6px;"></i> Upload Schemes
+                    </button>
+                </form>
+
+                <button onclick="openAddModal()"
+                    style="padding:10px 20px; border:none; border-radius:8px; background:#22c55e; color:white; font-weight:600; cursor:pointer;"
+                    onmouseover="this.style.background='#16a34a'"
+                    onmouseout="this.style.background='#22c55e'">
+                    + Add Scheme
+                </button>
+            </div>
+            <?php else: ?>
+            <div></div><!-- spacer so toggle stays right even for non-admin -->
+            <?php endif; ?>
+
+            <!-- ===== REGION SWITCHER (Toggle) — always visible, pinned right ===== -->
+            <div class="region-switcher">
+                <span class="region-switcher-label">
+                    <i class="fa-solid fa-globe" style="margin-right:4px;"></i>Region
+                </span>
+                <div class="region-toggle" id="regionToggle" role="group" aria-label="Select Region">
+                    <span class="region-toggle-slider" id="regionSlider"></span>
+                    <button
+                        type="button"
+                        id="btnIndia"
+                        class="region-toggle-btn <?= $selectedRegion === 'india' ? 'active' : '' ?>"
+                        onclick="switchRegion('india')"
+                        aria-pressed="<?= $selectedRegion === 'india' ? 'true' : 'false' ?>">
+                        
+                        India &amp; Others
+                    </button>
+                    <button
+                        type="button"
+                        id="btnUsa"
+                        class="region-toggle-btn <?= $selectedRegion === 'usa' ? 'active' : '' ?>"
+                        onclick="switchRegion('usa')"
+                        aria-pressed="<?= $selectedRegion === 'usa' ? 'true' : 'false' ?>">
+                        
+                        USA / Canada
+                    </button>
+                </div>
+            </div>
+
         </div>
-        <?php endif; ?>
 
         <!-- SCHEME GRID -->
         <div class="scheme-grid">
@@ -994,6 +1055,37 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 document.querySelectorAll('.search-results-dropdown').forEach(d => d.style.display = 'none');
             }
         });
+
+        // ===== REGION TOGGLE SLIDER =====
+        (function initToggleSlider() {
+            const toggle   = document.getElementById('regionToggle');
+            const slider   = document.getElementById('regionSlider');
+            const btnIndia = document.getElementById('btnIndia');
+            const btnUsa   = document.getElementById('btnUsa');
+            if (!toggle || !slider || !btnIndia || !btnUsa) return;
+
+            function positionSlider(activeBtn, animate) {
+                if (!animate) slider.style.transition = 'none';
+                const toggleRect = toggle.getBoundingClientRect();
+                const btnRect    = activeBtn.getBoundingClientRect();
+                const offset     = btnRect.left - toggleRect.left - 3; /* subtract toggle padding */
+                slider.style.width     = activeBtn.offsetWidth + 'px';
+                slider.style.transform = 'translateX(' + offset + 'px)';
+                if (!animate) {
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        slider.style.transition = 'transform 0.3s cubic-bezier(0.4,0,0.2,1), width 0.3s cubic-bezier(0.4,0,0.2,1)';
+                    }));
+                }
+            }
+
+            // Snap to correct position on load (no animation)
+            const activeBtn = toggle.querySelector('.region-toggle-btn.active');
+            if (activeBtn) positionSlider(activeBtn, false);
+
+            // Animate on click before page navigates
+            btnIndia.addEventListener('click', () => positionSlider(btnIndia, true));
+            btnUsa.addEventListener('click',   () => positionSlider(btnUsa,   true));
+        })();
     </script>
 </body>
 
