@@ -196,9 +196,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     box-shadow:
         0 2px 8px rgba(0,0,0,.12);
 
-    transition:
-        transform .35s cubic-bezier(.4,0,.2,1),
-        width .35s cubic-bezier(.4,0,.2,1);
+   transition:
+    transform .45s cubic-bezier(.22,1,.36,1),
+    width .45s cubic-bezier(.22,1,.36,1);
 }
 
 /* buttons */
@@ -733,9 +733,28 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         const IS_USA  = <?= $isUsa ?>;
         const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
 
-        function switchRegion(value) {
-            window.location.href = 'schemes.php?region=' + value;
-        }
+       function switchRegion(value) {
+
+    const slider = document.getElementById('regionSlider');
+    const btn = value === 'india'
+        ? document.getElementById('btnIndia')
+        : document.getElementById('btnUsa');
+
+    const toggle = document.getElementById('regionToggle');
+
+    const toggleRect = toggle.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+
+    const offset = btnRect.left - toggleRect.left - 3;
+
+    slider.style.width = btn.offsetWidth + 'px';
+    slider.style.transform = 'translateX(' + offset + 'px)';
+
+    // wait for animation before switching page
+    setTimeout(() => {
+        window.location.href = 'schemes.php?region=' + value;
+    }, 350);   // adjust time here
+}
 
         <?php if ($isAdmin): ?>
         // =========================================================
