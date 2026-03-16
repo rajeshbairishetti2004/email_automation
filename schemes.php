@@ -246,21 +246,9 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         }
 
         /* glow when active */
-        .region-toggle-btn.active::after {
-            content: "";
-            position: absolute;
-            inset: -3px;
-
-            border-radius: 999px;
-
-            box-shadow:
-                0 0 0 3px rgba(59, 130, 246, .15),
-                0 0 14px rgba(59, 130, 246, .35);
-
-            opacity: .8;
-
-            pointer-events: none;
-        }
+        .region-toggle-btn.active{
+    color:#1e293b;
+}
 
         /* ===== USA EMPTY STATE ===== */
         .usa-notice {

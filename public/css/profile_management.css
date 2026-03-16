@@ -195,7 +195,6 @@ body {
 }
 
 /* Badge Styles */
-/* Badge Styles */
 .designation-badge {
     color: #334155;
     font-size: 14px;
@@ -384,12 +383,62 @@ body {
     gap: 8px;
 }
 
+/* Make password fields full width — works inside grid AND standalone */
+.password-field {
+    grid-column: span 2;
+    width: 100%;
+}
+
 .form-group label {
     font-size: 13px;
     font-weight: 700;
+    padding: 5px;
     color: #334155;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+}
+
+/* Password input styling */
+.password-wrapper {
+    position: relative;
+    width: 100%;
+    display: block;
+}
+
+/* password input — full width, matching other inputs */
+.password-wrapper input {
+    width: 100%;
+    padding: 14px 44px 14px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 14px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    color: #0f172a;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.password-wrapper input:focus {
+    outline: none;
+    border-color: #0288D1;
+    box-shadow: 0 0 0 4px rgba(2, 136, 209, 0.1);
+}
+
+/* eye icon position */
+.toggle-password {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 16px;
+    color: #64748b;
+}
+
+.toggle-password:hover {
+    color: #0288D1;
 }
 
 .form-group input,
@@ -403,6 +452,8 @@ body {
     transition: all 0.2s ease;
     background: white;
     font-family: 'Inter', sans-serif;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .form-group input:focus,
@@ -506,6 +557,10 @@ body {
     .form-grid {
         grid-template-columns: 1fr;
     }
+
+    .password-field {
+        grid-column: span 1;
+    }
 }
 
 @media (max-width: 768px) {
@@ -560,7 +615,7 @@ body {
 
 /* Thin scrollbar for main scroll area */
 .main-scroll-container::-webkit-scrollbar {
-    width: 4px;   /* thinner */
+    width: 4px;
 }
 
 .main-scroll-container::-webkit-scrollbar-track {

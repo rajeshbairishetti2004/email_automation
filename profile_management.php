@@ -188,6 +188,7 @@ $designations = [
     <title>Profile Management - Admin</title>
     <link rel="stylesheet" href="public/css/profile_management.css">
     <link rel="stylesheet" href="public/css/navbar.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
@@ -423,14 +424,20 @@ $designations = [
                         <input type="text" id="username_display" disabled>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group password-field">
                         <label for="new_password">New Password *</label>
-                        <input type="password" id="new_password" name="new_password" required>
+                        <div class="password-wrapper">
+                            <input type="password" id="new_password" name="new_password" required autocomplete="new-password">
+                            <span class="toggle-password" onclick="togglePassword('new_password', this)"><i class="fa-solid fa-eye"></i></span>
+                        </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group password-field">
                         <label for="confirm_password">Confirm Password *</label>
-                        <input type="password" id="confirm_password" required>
+                        <div class="password-wrapper">
+                            <input type="password" id="confirm_password" required autocomplete="new-password">
+                            <span class="toggle-password" onclick="togglePassword('confirm_password', this)"><i class="fa-solid fa-eye"></i></span>
+                        </div>
                     </div>
 
                     <div class="form-actions">
@@ -489,8 +496,25 @@ $designations = [
             function openPasswordModal(userId, username) {
                 document.getElementById('password_user_id').value = userId;
                 document.getElementById('username_display').value = username;
+
+                const newPass = document.getElementById('new_password');
+                const confirmPass = document.getElementById('confirm_password');
+
+                newPass.value = '';
+                confirmPass.value = '';
+
+                newPass.type = 'password';
+                confirmPass.type = 'password';
+
+                document.querySelectorAll('.toggle-password i').forEach(icon => {
+                    icon.classList.remove("fa-eye-slash");
+                    icon.classList.add("fa-eye");
+                });
+
                 document.getElementById('passwordModal').style.display = 'flex';
             }
+
+
 
             function deleteUser(userId, username) {
                 if (username.toLowerCase() === 'admin') {
@@ -510,10 +534,16 @@ $designations = [
                 const newPass = document.getElementById('new_password').value;
                 const confirmPass = document.getElementById('confirm_password').value;
 
+                if (newPass.trim() === '') {
+                    alert('Password cannot be empty!');
+                    return false;
+                }
+
                 if (newPass !== confirmPass) {
                     alert('Passwords do not match!');
                     return false;
                 }
+
                 return true;
             }
 
@@ -534,6 +564,19 @@ $designations = [
                     message.style.display = 'none';
                 });
             }, 5000);
+
+            function togglePassword(inputId, icon) {
+                const input = document.getElementById(inputId);
+                const eye = icon.querySelector("i");
+
+                if (input.type === "password") {
+                    input.type = "text";
+                    eye.classList.replace("fa-eye", "fa-eye-slash");
+                } else {
+                    input.type = "password";
+                    eye.classList.replace("fa-eye-slash", "fa-eye");
+                }
+            }
         </script>
     </div>
 
