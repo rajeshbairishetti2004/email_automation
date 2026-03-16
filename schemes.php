@@ -145,111 +145,95 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         /* ===== REGION SWITCHER (Toggle) ===== */
         /* ===== PREMIUM REGION SWITCH ===== */
 
-.region-switcher {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+/* ===== MODERN REGION SWITCH ===== */
+
+.region-switcher{
+    display:flex;
+    align-items:center;
+    gap:10px;
 }
 
-/* label */
-.region-switcher-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: .05em;
+.region-switcher-label{
+    font-size:11px;
+    font-weight:600;
+    color:#94a3b8;
+    text-transform:uppercase;
+    letter-spacing:.05em;
 }
 
-/* glass container */
-.region-toggle {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
+/* main container */
+.region-toggle{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
 
-    padding: 4px;
+    padding:3px;
 
-    border-radius: 999px;
+    border-radius:999px;
 
-    background: rgba(255,255,255,0.65);
-    backdrop-filter: blur(12px);
+    background:#f1f5f9;
 
-    border: 1px solid rgba(148,163,184,0.25);
+    border:1px solid #e2e8f0;
 
     box-shadow:
-        0 4px 20px rgba(0,0,0,0.06),
-        inset 0 1px 1px rgba(255,255,255,0.6);
+        inset 0 1px 2px rgba(0,0,0,.05),
+        0 1px 2px rgba(0,0,0,.05);
 }
 
-/* sliding premium pill */
-.region-toggle-slider {
-    position: absolute;
-    top: 4px;
-    left: 4px;
+/* sliding pill */
+.region-toggle-slider{
+    position:absolute;
+    top:3px;
+    left:3px;
 
-    height: calc(100% - 8px);
-    width: 0;
+    height:calc(100% - 6px);
+    width:0;
 
-    border-radius: 999px;
+    border-radius:999px;
 
-    background: linear-gradient(180deg,#ffffff,#f1f5f9);
+    background:white;
 
     box-shadow:
-        0 6px 16px rgba(0,0,0,0.12),
-        0 1px 2px rgba(0,0,0,0.08);
+        0 2px 8px rgba(0,0,0,.12);
 
     transition:
-        transform .45s cubic-bezier(.22,1,.36,1),
-        width .45s cubic-bezier(.22,1,.36,1);
-
-    z-index: 0;
+        transform .35s cubic-bezier(.4,0,.2,1),
+        width .35s cubic-bezier(.4,0,.2,1);
 }
 
 /* buttons */
-.region-toggle-btn {
-    position: relative;
-    z-index: 1;
+.region-toggle-btn{
+    position:relative;
+    z-index:1;
 
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    display:flex;
+    align-items:center;
+    gap:5px;
 
-    padding: 6px 14px;
+    padding:6px 14px;
 
-    border: none;
-    background: transparent;
+    border:none;
+    background:transparent;
 
-    font-family: 'Inter', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
+    font-size:12px;
+    font-weight:600;
+    font-family:'Inter',sans-serif;
 
-    border-radius: 999px;
+    border-radius:999px;
 
-    color: #64748b;
-    cursor: pointer;
+    color:#64748b;
+    cursor:pointer;
 
-    transition:
-        color .25s ease,
-        transform .15s ease,
-        opacity .2s ease;
+    transition:color .2s ease;
 }
 
-/* hover interaction */
-.region-toggle-btn:hover {
-    transform: translateY(-1px);
-    opacity: .85;
+.region-toggle-btn.active{
+    color:#0f172a;
 }
 
-/* active state */
-.region-toggle-btn.active {
-    color: #0f172a;
+.region-toggle-btn .flag{
+    font-size:13px;
 }
-
-/* flag */
-.region-toggle-btn .flag {
-    font-size: 13px;
-    transform: translateY(-0.5px);
-}
-
 
         /* ===== USA EMPTY STATE ===== */
         .usa-notice {
