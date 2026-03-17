@@ -25,7 +25,6 @@ vendor/
 .env
 .env.*
 
-env_loader.php
 
 # Ignore upload directories (generated at runtime)
 uploads/
