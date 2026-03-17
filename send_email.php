@@ -3,7 +3,6 @@
 require_once 'db_config.php';
 require_once 'auth.php';
 
-$pdo->query("USE email_automation_develop_db");
 
 /* Logged-in user info */
 $loggedInEmail       = $_SESSION['email'] ?? '';

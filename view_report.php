@@ -18,6 +18,9 @@ $clientId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 // [PATCH] Save New Recommended Schemes Synchronously
 // This ensures data is saved immediately when changing state/clicking save
+
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 if (isset($_POST['new_scheme_name']) && is_array($_POST['new_scheme_name'])) {
     // 1. Clear old entries for this client first
     $delNs = $pdo->prepare("DELETE FROM client_new_schemes WHERE client_id = ?");
@@ -428,6 +431,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_scheme']) && $_P
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // --- 1. EMAIL SENDING (Must be checked first) ---
+    error_log("POST DATA: " . print_r($_POST, true));
     if (isset($_POST['send_email']) && $_POST['send_email'] == '1') {
         // Backend security check is in handleEmailSending() - no need to check here
         // because $reportState is not yet loaded at this point in the code

@@ -1,19 +1,27 @@
-# Dockerfile
 FROM php:8.3-apache
 
 # Install the necessary PDO MySQL extension.
 RUN docker-php-ext-install pdo_mysql
 
-# --- CRITICAL FIX: Install libzip-dev before installing the PHP zip extension ---
+# Install system dependencies for zip and gd
 RUN apt-get update && apt-get install -y \
     libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install zip
-# -------------------------------------------------------------------------------
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install zip gd
 
-# Copy the entire contents of the 'Report/' directory into the web root
+# Copy the entire contents of the directory into the web root
 COPY . /var/www/html/ 
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+RUN composer install --no-dev --optimize-autoloader
 
 # Ensure uploads and attachments directories exist and are writable
 RUN mkdir -p /var/www/html/uploads/attachments && \
