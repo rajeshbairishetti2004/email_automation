@@ -248,12 +248,12 @@
                 <?php endif; ?>
 
                 <select id="stateFilter" name="filter" style="padding:8px; border:1px solid #ccc; border-radius:4px; min-width:160px;">
-                    <option value="">All States (<?php echo $allStatesTotal; ?>)</option>
-                    <option value="pending" <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started (<?= $statusTotals['pending']  ?? 0 ?>)</option>
-                    <option value="draft" <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft (<?= $statusTotals['draft']    ?? 0 ?>)</option>
-                    <option value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready (<?= $statusTotals['ready']    ?? 0 ?>)</option>
-                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed (<?= $statusTotals['reviewed'] ?? 0 ?>)</option>
-                    <option value="sent" <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent (<?= $statusTotals['sent']     ?? 0 ?>)</option>
+                    <option value="">All States </option>
+                    <option value="pending" <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started </option>
+                    <option value="draft" <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft </option>
+                    <option value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready </option>
+                    <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed </option>
+                    <option value="sent" <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent </option>
                 </select>
 
                 <select name="sort" class="sort-dropdown">

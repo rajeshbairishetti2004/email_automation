@@ -1661,17 +1661,15 @@ if (!$isClientSearch) {
     }
     $whereState = $stateWhereParts ? 'WHERE ' . implode(' AND ', $stateWhereParts) : '';
 
-    $statusTotals = [];
+    
     $statusCountStmt = $pdo->prepare("
         SELECT c.report_state, COUNT(DISTINCT c.name) as total 
         FROM clients c $whereState 
         GROUP BY c.report_state HAVING total > 0
     ");
     $statusCountStmt->execute($stateParams);
-    foreach ($statusCountStmt as $row) {
-        $statusTotals[$row['report_state']] = (int)$row['total'];
-    }
-    $allStatesTotal = array_sum($statusTotals);
+    
+    
 
     $stmtCount = $pdo->prepare("
         SELECT COUNT(*)

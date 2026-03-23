@@ -224,7 +224,7 @@ function handleEmailSending($clientId)
     $rationaleStored = trim((string)($client['rationale_text'] ?? ''));
     $signatureStored = trim((string)($client['signature_block'] ?? ''));
 
-    $DEFAULT_RATIONALE = 'Rationale for recommendations';
+    $rationaleText = $rationaleStored;
 
     $clientMessage = implode("\n\n", [
         $greetingStored,
@@ -232,7 +232,7 @@ function handleEmailSending($clientId)
         $closingTextStored
     ]);
 
-    $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
+
 
     /* --- FIX: PRIORITIZE DYNAMIC SIGNATURE FROM DROPDOWN --- */
     $dynamicSignature = trim($_POST['custom_signature'] ?? '');
@@ -638,7 +638,8 @@ function handleEmailSending($clientId)
 
         // --- Schemes Table Section ---
         ?>
-        <h4>4. Recommended Schemes</h4>
+        
+        <h4>4. Appropriate Scheme Selection</h4>
         <table>
             <thead>
                 <tr>
