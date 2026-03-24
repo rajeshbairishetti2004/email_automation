@@ -1803,7 +1803,7 @@ if (!$isClientSearch) {
         AND p.report_state != 'pending'
         AND p.id < c.id
         ORDER BY
-            (p.report_state = 'sent') DESC,
+            (p.report_state = 'sent') DESC, 
             (p.review_sent_date IS NOT NULL) DESC,
             p.id DESC
         LIMIT 1
