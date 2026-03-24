@@ -171,15 +171,15 @@ function fetchDashboardStats(PDO $pdo, string $context, int $userId, string $cyc
         $params[] = $yearFilter;
     }
 
-    $sql = "SELECT
-                COUNT(DISTINCT name) AS total,
-                SUM(CASE WHEN report_state = 'pending'  THEN 1 ELSE 0 END) AS count_pending,
-                SUM(CASE WHEN report_state = 'draft'    THEN 1 ELSE 0 END) AS count_draft,
-                SUM(CASE WHEN report_state = 'ready'    THEN 1 ELSE 0 END) AS count_ready,
-                SUM(CASE WHEN report_state = 'reviewed' THEN 1 ELSE 0 END) AS count_reviewed,
-                SUM(CASE WHEN report_state = 'sent'     THEN 1 ELSE 0 END) AS count_sent
-            FROM clients
-            WHERE is_latest = TRUE AND {$baseWhere}";
+$sql = "SELECT
+            COUNT(DISTINCT name) AS total,
+            SUM(CASE WHEN report_state = 'pending'  THEN 1 ELSE 0 END) AS count_pending,
+            SUM(CASE WHEN report_state = 'draft'    THEN 1 ELSE 0 END) AS count_draft,
+            SUM(CASE WHEN report_state IN ('ready','reviewed','sent')    THEN 1 ELSE 0 END) AS count_ready,
+            SUM(CASE WHEN report_state IN ('reviewed','sent') THEN 1 ELSE 0 END) AS count_reviewed,
+            SUM(CASE WHEN report_state = 'sent'     THEN 1 ELSE 0 END) AS count_sent
+        FROM clients
+        WHERE is_latest = TRUE AND {$baseWhere}";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
