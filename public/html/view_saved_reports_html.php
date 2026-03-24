@@ -251,7 +251,7 @@
                     <option value="">All States </option>
                     <option value="pending" <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started </option>
                     <option value="draft" <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft </option>
-                    <option value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready </option>
+                    <option B value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready </option>
                     <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed </option>
                     <option value="sent" <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent </option>
                 </select>
