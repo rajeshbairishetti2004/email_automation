@@ -61,8 +61,8 @@ $sql = "SELECT
             COUNT(DISTINCT name) AS total,
             SUM(CASE WHEN report_state = 'pending' THEN 1 ELSE 0 END) AS pending,
             SUM(CASE WHEN report_state = 'draft' THEN 1 ELSE 0 END) AS draft,
-            SUM(CASE WHEN report_state = 'ready' THEN 1 ELSE 0 END) AS ready,
-            SUM(CASE WHEN report_state = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
+            SUM(CASE WHEN report_state IN ('ready','reviewed','sent') THEN 1 ELSE 0 END) AS ready,
+            SUM(CASE WHEN report_state IN ('reviewed','sent') THEN 1 ELSE 0 END) AS reviewed,
             SUM(CASE WHEN report_state = 'sent' THEN 1 ELSE 0 END) AS sent,
             SUM(aum) AS total_aum
         FROM clients
