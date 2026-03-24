@@ -172,9 +172,6 @@ if (!isset($isLocked)) {
 .status-on {
     background-color: #0aa914 !important;
     color: #fff !important;
-    border-radius: 6px;
-    padding: 6px 16px;
-    display: inline-block;
     font-weight: 600;
     text-align: center;
     border: none;
@@ -183,40 +180,41 @@ if (!isset($isLocked)) {
 .status-off {
     background-color: #f44d0b !important;
     color: #fff !important;
-    border-radius: 6px;
-    padding: 6px 16px;
-    display: inline-block;
     font-weight: 600;
     text-align: center;
     border: none;
 }
 
-/* Make sure select doesn't override background for selected option */
 .goal-status-dropdown {
-    border: none;   
+    border: none;
     font-weight: 600;
     font-size: 15px;
     padding: 6px 16px;
-    border-radius: 6px;
+    border-radius: 0;
     color: #fff;
     background: transparent;
-    /* Remove default arrow for custom look if needed */
-    /* appearance: none; -webkit-appearance: none; -moz-appearance: none; */
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: pointer;
+    outline: none;
 }
 
 .goal-status-dropdown.status-on {
     background-color: #0aa914 !important;
     color: #fff !important;
+    border-radius: 0 !important;
 }
 
 .goal-status-dropdown.status-off {
     background-color: #f44d0b !important;
     color: #fff !important;
+    border-radius: 0 !important;
 }
 
 /* Remove border radius from all cells */
-.report-table-section th, .report-table-section td {
-    border-radius: 0 !important;
+.report-table-section td:has(.goal-status-dropdown) {
+    padding: 0 !important;
 }
 </style>
 
