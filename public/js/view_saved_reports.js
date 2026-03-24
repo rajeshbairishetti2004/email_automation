@@ -62,11 +62,17 @@
                             let displayText = value;
                             if (field === 'sip_amount_lakhs' && value !== '') {
                                 displayText = parseFloat(value).toFixed(2);
-                            } else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
-                                const d = new Date(value);
-                                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                displayText = d.getDate() + '-' + months[d.getMonth()];
-                            }
+                            }// To this:
+ else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
+    const d = new Date(value);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h12 = ((hours % 12) || 12);
+    displayText = d.getDate() + '-' + months[d.getMonth()] + '-' + d.getFullYear()
+                + '\n' + h12 + ':' + minutes + ' ' + ampm;
+}
                             displayVal.textContent = displayText || '—';
                             displayVal.classList.toggle('placeholder-text', !displayText);
                             showToast('✓ Saved');
@@ -103,10 +109,12 @@
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded'
                         },
-                        body: new URLSearchParams({
-                            action: 'fetch_scheme_changes',
-                            client_id: clientId
-                        })
+body: new URLSearchParams({
+    action: 'save_review_fields',
+    client_id: clientId,
+    field: field,
+    value: (field === 'meeting_date' && value) ? value.replace('T', ' ') + ':00' : value
+})
                     })
                     .then(res => res.json())
                     .then(data => {

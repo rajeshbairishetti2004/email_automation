@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 
@@ -40,60 +39,64 @@
             opacity: 1;
         }
 
-       .country-tooltip {
-    display: none;
-    position: absolute;
-    left: 105%;
-    top: 50%;
-    transform: translateY(-50%);
+        .country-tooltip {
+            display: none;
+            position: absolute;
+            left: 105%;
+            top: 50%;
+            transform: translateY(-50%);
 
-    background: #333;
-    color: #fff;
+            background: #333;
+            color: #fff;
 
-    font-size: 11px;
-    font-weight: 500;
+            font-size: 11px;
+            font-weight: 500;
 
-    padding: 4px 8px;
-    border-radius: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
 
-    white-space: nowrap;
-    z-index: 9999;
+            white-space: nowrap;
+            z-index: 9999;
 
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-.table-scroll-wrapper {
-    overflow-x: auto;
-    overflow-y: visible;
-    background: #fff;
-    border-radius: 6px;
-}
-.table-scroll-wrapper table {
-    min-width: 1400px;
-    width: 100%;
-    background: #fff;
-}
-.table-scroll-wrapper::after {
-    content: "";
-    display: block;
-    height: 1px;
-}
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .table-scroll-wrapper {
+            overflow-x: auto;
+            overflow-y: visible;
+            background: #fff;
+            border-radius: 6px;
+        }
+
+        .table-scroll-wrapper table {
+            min-width: 1400px;
+            width: 100%;
+            background: #fff;
+        }
+
+        .table-scroll-wrapper::after {
+            content: "";
+            display: block;
+            height: 1px;
+        }
+
         table td {
-    position: relative;
-    overflow: visible;
-}
+            position: relative;
+            overflow: visible;
+        }
 
         .country-tooltip::after {
-    content: "";
-    position: absolute;
-    right: 100%;
-    top: 50%;
-    transform: translateY(-50%);
+            content: "";
+            position: absolute;
+            right: 100%;
+            top: 50%;
+            transform: translateY(-50%);
 
-    border-width: 5px;
-    border-style: solid;
-    border-color: transparent #333 transparent transparent;
-}
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent #333 transparent transparent;
+        }
 
         .client-name-wrapper:hover .country-tooltip {
             display: block;
@@ -251,7 +254,7 @@
                     <option value="">All States </option>
                     <option value="pending" <?= ($filter === 'pending')  ? 'selected' : '' ?>>Review Not Started </option>
                     <option value="draft" <?= ($filter === 'draft')    ? 'selected' : '' ?>>Draft </option>
-                    <option value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready </option>
+                    <option B value="ready" <?= ($filter === 'ready')    ? 'selected' : '' ?>>Ready </option>
                     <option value="reviewed" <?= ($filter === 'reviewed') ? 'selected' : '' ?>>Reviewed </option>
                     <option value="sent" <?= ($filter === 'sent')     ? 'selected' : '' ?>>Sent </option>
                 </select>
@@ -488,14 +491,14 @@
                                             <td>
                                                 <span style="font-weight:600; color:#1976d2;">
                                                     <?php
-$aumValue = (float)($c['aum'] ?? 0);
-$aumCrores = $aumValue / 10000000;
-if ($aumCrores < 1) {
-    $lakhsValue = $aumCrores * 100;
-    echo '₹' . number_format($lakhsValue, 2) . ' L';
-} else {
-    echo '₹' . number_format($aumCrores, 2) . ' Cr';
-}
+                                                    $aumValue = (float)($c['aum'] ?? 0);
+                                                    $aumCrores = $aumValue / 10000000;
+                                                    if ($aumCrores < 1) {
+                                                        $lakhsValue = $aumCrores * 100;
+                                                        echo '₹' . number_format($lakhsValue, 2) . ' L';
+                                                    } else {
+                                                        echo '₹' . number_format($aumCrores, 2) . ' Cr';
+                                                    }
                                                     ?>
                                                 </span>
                                             </td>
@@ -602,11 +605,13 @@ if ($aumCrores < 1) {
                                                 }
                                                 ?>
                                             </td><!-- Meeting Date -->
-                                            <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="date">
+                                            <td class="col-current editable-cell" data-client="<?= $c['id'] ?>" data-field="meeting_date" data-type="datetime-local">
                                                 <span class="display-val <?= empty($c['meeting_date']) ? 'placeholder-text' : '' ?>">
-                                                    <?= fmtDate($c['meeting_date'], 'd-M') ?>
+                                                    <?= empty($c['meeting_date']) ? 'click to set' : fmtDateTime($c['meeting_date']) ?>
                                                 </span>
-                                                <input type="date" value="<?= htmlspecialchars($c['meeting_date'] ?? '') ?>">
+                                                <input type="datetime-local" value="<?= htmlspecialchars(
+                                                                                        !empty($c['meeting_date']) ? date('Y-m-d\TH:i', strtotime($c['meeting_date'])) : ''
+                                                                                    ) ?>">
                                             </td>
 
                                             <!-- Modifications / Action — shows only non-Continue actions with clickable modal -->

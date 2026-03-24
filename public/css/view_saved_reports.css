@@ -624,6 +624,7 @@ input[type="checkbox"] {
 
 .editable-cell input[type="text"],
 .editable-cell input[type="date"],
+.editable-cell input[type="datetime-local"],  
 .editable-cell input[type="number"],
 .editable-cell textarea {
     display: none;
