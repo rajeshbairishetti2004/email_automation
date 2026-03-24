@@ -1311,3 +1311,259 @@ td.has-view-btn {
 #client-search-dropdown::-webkit-scrollbar-thumb:hover {
     background: #aaa;
 }
+/* ── CUSTOM DATETIME PICKER MODAL ────────────────────────────── */
+#dtPickerModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(0,0,0,0.4);
+    align-items: center;
+    justify-content: center;
+}
+
+#dtPickerModal.open {
+    display: flex;
+}
+
+#dtPickerCard {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    padding: 0;
+    width: 320px;
+    overflow: hidden;
+    animation: modalFadeIn 0.2s ease;
+}
+
+#dtPickerHeader {
+    background: linear-gradient(135deg, #1976d2, #42a5f5);
+    color: #fff;
+    padding: 16px 20px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+#dtPickerHeader .dt-display-date {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+}
+
+#dtPickerBody {
+    padding: 16px 18px 0;
+}
+
+/* Calendar nav */
+.dt-cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.dt-cal-nav button {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: #1976d2;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    line-height: 1;
+}
+
+.dt-cal-nav button:hover {
+    background: #e3f2fd;
+}
+
+.dt-cal-nav .dt-month-label {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1a1a2e;
+    cursor: pointer;
+}
+
+/* Day-of-week headers */
+.dt-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 4px;
+}
+
+.dt-weekdays span {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    padding: 2px 0;
+    text-transform: uppercase;
+}
+
+/* Calendar grid */
+.dt-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 14px;
+}
+
+.dt-day {
+    text-align: center;
+    padding: 6px 2px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #334155;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+    font-weight: 500;
+}
+
+.dt-day:hover {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.dt-day.today {
+    border: 1.5px solid #1976d2;
+    color: #1976d2;
+    font-weight: 700;
+}
+
+.dt-day.selected {
+    background: #1976d2;
+    color: #fff !important;
+    font-weight: 700;
+}
+
+.dt-day.other-month {
+    color: #cbd5e1;
+}
+
+.dt-day.other-month:hover {
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+/* Time row */
+.dt-time-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid #f1f5f9;
+    padding: 12px 0 14px;
+}
+
+.dt-time-row label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+.dt-time-row input[type="number"] {
+    width: 48px;
+    text-align: center;
+    padding: 5px 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    -moz-appearance: textfield;
+    outline: none;
+}
+
+.dt-time-row input[type="number"]:focus {
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
+}
+
+.dt-time-row input::-webkit-inner-spin-button,
+.dt-time-row input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+}
+
+.dt-time-sep {
+    font-size: 18px;
+    font-weight: 700;
+    color: #64748b;
+    line-height: 1;
+}
+
+.dt-ampm-toggle {
+    margin-left: auto;
+    display: flex;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.dt-ampm-toggle button {
+    background: none;
+    border: none;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #64748b;
+    transition: background 0.15s, color 0.15s;
+}
+
+.dt-ampm-toggle button.active {
+    background: #1976d2;
+    color: #fff;
+}
+
+/* Footer buttons */
+#dtPickerFooter {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 18px 16px;
+    border-top: 1px solid #f1f5f9;
+}
+
+#dtPickerFooter button {
+    padding: 7px 20px;
+    border-radius: 7px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#dtCancelBtn {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+#dtCancelBtn:hover {
+    background: #e2e8f0;
+}
+
+#dtOkBtn {
+    background: #1976d2;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(25,118,210,0.3);
+}
+
+#dtOkBtn:hover {
+    background: #1565c0;
+}
+
+/* Hide the raw datetime-local input always — we use custom modal */
+.editable-cell input[type="datetime-local"] {
+    display: none !important;
+}

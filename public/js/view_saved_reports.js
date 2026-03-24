@@ -629,3 +629,348 @@ if (status === 'yes') {
         closeListMeetingModal();
     }
 }
+
+// ── TOAST ────────────────────────────────────────────────────
+function showToast(msg) {
+    const t = document.getElementById('saveToast');
+    t.textContent = msg || '✓ Saved';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── CUSTOM DATETIME PICKER ───────────────────────────────────
+(function () {
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+    const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+                          'Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    let activeDtCell   = null;
+    let activeDtInput  = null;  // the hidden <input type="datetime-local">
+    let origDtValue    = '';
+
+    // picker state
+    let pickYear, pickMonth, pickDay, pickHour, pickMinute, pickAmPm;
+
+    function openDtPicker(cell) {
+        activeDtCell  = cell;
+        activeDtInput = cell.querySelector('input[type="datetime-local"]');
+        origDtValue   = activeDtInput ? activeDtInput.value : '';
+
+        // Parse existing value or default to now
+        const now = new Date();
+        if (origDtValue) {
+            const parts = origDtValue.split('T');
+            const d = parts[0].split('-');
+            const t = parts[1] ? parts[1].split(':') : ['12','00'];
+            pickYear  = parseInt(d[0]);
+            pickMonth = parseInt(d[1]) - 1;
+            pickDay   = parseInt(d[2]);
+            const h24 = parseInt(t[0]);
+            pickMinute = parseInt(t[1]);
+            pickAmPm = h24 >= 12 ? 'PM' : 'AM';
+            pickHour = h24 % 12 || 12;
+        } else {
+            pickYear   = now.getFullYear();
+            pickMonth  = now.getMonth();
+            pickDay    = now.getDate();
+            pickHour   = 12;
+            pickMinute = 0;
+            pickAmPm   = 'AM';
+        }
+
+        syncTimeInputs();
+        renderCalendar();
+        updateHeader();
+
+        document.getElementById('dtPickerModal').classList.add('open');
+    }
+
+    function closeDtPicker(save) {
+        if (save && activeDtCell && activeDtInput) {
+            // Build "YYYY-MM-DDTHH:MM" value
+            const h24 = to24(pickHour, pickAmPm);
+            const mm  = String(pickMinute).padStart(2, '0');
+            const hh  = String(h24).padStart(2, '0');
+            const dd  = String(pickDay).padStart(2, '0');
+            const mo  = String(pickMonth + 1).padStart(2, '0');
+            const val = `${pickYear}-${mo}-${dd}T${hh}:${mm}`;
+
+            activeDtInput.value = val;
+
+            const clientId = activeDtCell.dataset.client;
+            const field    = activeDtCell.dataset.field;
+            saveField(activeDtCell, clientId, field, val);
+        } else if (!save && activeDtCell) {
+            // Cancel — restore original and close editing state
+            if (activeDtInput) activeDtInput.value = origDtValue;
+            activeDtCell.classList.remove('editing');
+        }
+
+        document.getElementById('dtPickerModal').classList.remove('open');
+        activeDtCell  = null;
+        activeDtInput = null;
+    }
+
+    function to24(h12, ampm) {
+        if (ampm === 'AM') return h12 === 12 ? 0 : h12;
+        return h12 === 12 ? 12 : h12 + 12;
+    }
+
+    function syncTimeInputs() {
+        document.getElementById('dtHour').value   = pickHour;
+        document.getElementById('dtMinute').value = String(pickMinute).padStart(2, '0');
+        document.getElementById('dtAmBtn').classList.toggle('active', pickAmPm === 'AM');
+        document.getElementById('dtPmBtn').classList.toggle('active', pickAmPm === 'PM');
+    }
+
+    function updateHeader() {
+        const h24 = to24(pickHour, pickAmPm);
+        const mm  = String(pickMinute).padStart(2,'0');
+        const hh  = String(pickHour).padStart(2,'0');
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const d = new Date(pickYear, pickMonth, pickDay);
+        document.getElementById('dtHeaderDisplay').textContent =
+            `${dayNames[d.getDay()]}, ${pickDay} ${SHORT_MONTHS[pickMonth]} ${pickYear}  ${hh}:${mm} ${pickAmPm}`;
+    }
+
+    function renderCalendar() {
+        document.getElementById('dtMonthLabel').textContent =
+            `${MONTHS[pickMonth]} ${pickYear}`;
+
+        const grid  = document.getElementById('dtDaysGrid');
+        grid.innerHTML = '';
+
+        const firstDay = new Date(pickYear, pickMonth, 1).getDay();
+        const daysInMonth = new Date(pickYear, pickMonth + 1, 0).getDate();
+        const daysInPrev  = new Date(pickYear, pickMonth, 0).getDate();
+        const today = new Date();
+
+        // Prev month overflow
+        for (let i = firstDay - 1; i >= 0; i--) {
+            const d = daysInPrev - i;
+            addDay(grid, d, 'other-month', pickMonth - 1, pickYear);
+        }
+        // Current month
+        for (let d = 1; d <= daysInMonth; d++) {
+            const isToday = (d === today.getDate() && pickMonth === today.getMonth() && pickYear === today.getFullYear());
+            const isSelected = (d === pickDay);
+            addDay(grid, d, (isToday ? 'today ' : '') + (isSelected ? 'selected' : ''), pickMonth, pickYear, d);
+        }
+        // Next month overflow
+        const total = firstDay + daysInMonth;
+        const remaining = total % 7 === 0 ? 0 : 7 - (total % 7);
+        for (let d = 1; d <= remaining; d++) {
+            addDay(grid, d, 'other-month', pickMonth + 1, pickYear);
+        }
+    }
+
+    function addDay(grid, label, cls, month, year, dayVal) {
+        const el = document.createElement('div');
+        el.className = 'dt-day ' + cls.trim();
+        el.textContent = label;
+        if (dayVal) {
+            el.addEventListener('click', function () {
+                pickDay = dayVal;
+                renderCalendar();
+                updateHeader();
+            });
+        }
+        grid.appendChild(el);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Prev / Next month
+        document.getElementById('dtPrevMonth').addEventListener('click', function () {
+            pickMonth--;
+            if (pickMonth < 0) { pickMonth = 11; pickYear--; }
+            // Keep pickDay valid
+            const maxDay = new Date(pickYear, pickMonth + 1, 0).getDate();
+            if (pickDay > maxDay) pickDay = maxDay;
+            renderCalendar();
+            updateHeader();
+        });
+
+        document.getElementById('dtNextMonth').addEventListener('click', function () {
+            pickMonth++;
+            if (pickMonth > 11) { pickMonth = 0; pickYear++; }
+            const maxDay = new Date(pickYear, pickMonth + 1, 0).getDate();
+            if (pickDay > maxDay) pickDay = maxDay;
+            renderCalendar();
+            updateHeader();
+        });
+
+        // Hour input
+        document.getElementById('dtHour').addEventListener('input', function () {
+            let v = parseInt(this.value) || 1;
+            if (v < 1)  v = 1;
+            if (v > 12) v = 12;
+            pickHour = v;
+            updateHeader();
+        });
+
+        // Minute input
+        document.getElementById('dtMinute').addEventListener('input', function () {
+            let v = parseInt(this.value);
+            if (isNaN(v) || v < 0)  v = 0;
+            if (v > 59) v = 59;
+            pickMinute = v;
+            updateHeader();
+        });
+
+        // AM / PM toggle
+        document.getElementById('dtAmBtn').addEventListener('click', function () {
+            pickAmPm = 'AM';
+            syncTimeInputs();
+            updateHeader();
+        });
+        document.getElementById('dtPmBtn').addEventListener('click', function () {
+            pickAmPm = 'PM';
+            syncTimeInputs();
+            updateHeader();
+        });
+
+        // OK / Cancel
+        document.getElementById('dtOkBtn').addEventListener('click',     function () { closeDtPicker(true);  });
+        document.getElementById('dtCancelBtn').addEventListener('click', function () { closeDtPicker(false); });
+         document.getElementById('dtClearBtn').addEventListener('click', function () {
+    if (activeDtCell && activeDtInput) {
+        // 1. Clear value
+        activeDtInput.value = '';
+
+        // 2. Save empty value to backend
+        const clientId = activeDtCell.dataset.client;
+        const field    = activeDtCell.dataset.field;
+
+        saveField(activeDtCell, clientId, field, '');
+    }
+
+    // 3. Close picker
+    document.getElementById('dtPickerModal').classList.remove('open');
+    activeDtCell  = null;
+    activeDtInput = null;
+});
+        // Click outside card closes (cancel)
+        document.getElementById('dtPickerModal').addEventListener('click', function (e) {
+            if (e.target === this) closeDtPicker(false);
+        });
+
+        // ESC closes
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && document.getElementById('dtPickerModal').classList.contains('open')) {
+                closeDtPicker(false);
+            }
+        });
+
+        // ── Wire up ALL editable cells ──────────────────────────────
+        document.querySelectorAll('.editable-cell').forEach(cell => {
+            const displayVal = cell.querySelector('.display-val');
+            const input      = cell.querySelector('input, textarea');
+            const clientId   = cell.dataset.client;
+            const field      = cell.dataset.field;
+            const type       = cell.dataset.type;
+
+            if (!displayVal || !input) return;
+
+            displayVal.addEventListener('click', function () {
+                if (type === 'datetime-local') {
+                    // Open custom picker instead of native input
+                    openDtPicker(cell);
+                } else {
+                    cell.classList.add('editing');
+                    input.focus();
+                    if (input.tagName === 'TEXTAREA') {
+                        input.selectionStart = input.selectionEnd = input.value.length;
+                    }
+                }
+            });
+
+            // Only non-datetime fields use blur-to-save
+            if (type !== 'datetime-local') {
+                input.addEventListener('blur', function () {
+                    saveField(cell, clientId, field, input.value);
+                });
+
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' && input.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        input.blur();
+                    }
+                    if (e.key === 'Escape') {
+                        cell.classList.remove('editing');
+                    }
+                });
+            }
+        });
+    });
+
+    // Expose openDtPicker so it can be called from inline onclick if ever needed
+    window.openDtPicker = openDtPicker;
+})();
+
+// ── SAVE FIELD ───────────────────────────────────────────────
+function saveField(cell, clientId, field, value) {
+    const input      = cell.querySelector('input, textarea');
+    const displayVal = cell.querySelector('.display-val');
+
+    fetch('view_saved_reports.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            action:    'save_review_fields',
+            client_id: clientId,
+            field:     field,
+            value:     value
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            let displayHtml = '';
+
+            if (field === 'sip_amount_lakhs' && value !== '') {
+                displayHtml = parseFloat(value).toFixed(2) + ' Lakh';
+
+            } else if ((field === 'review_sent_date' || field === 'meeting_date') && value) {
+                // Parse "YYYY-MM-DDTHH:MM" safely without timezone shift
+                const parts     = value.split('T');
+                const dateParts = parts[0].split('-');
+                const timeParts = parts[1] ? parts[1].split(':') : ['0','0'];
+
+                const year  = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1;
+                const day   = parseInt(dateParts[2], 10);
+                const hours = parseInt(timeParts[0], 10);
+                const mins  = parseInt(timeParts[1], 10);
+
+                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+                                'Jul','Aug','Sep','Oct','Nov','Dec'];
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                const h12  = (hours % 12) || 12;
+                const mStr = String(mins).padStart(2, '0');
+
+                displayHtml = `${day}-${MONTHS[month]}-${year}<br>`
+                            + `<span style="color:#999;font-size:11px;">${h12}:${mStr} ${ampm}</span>`;
+
+            } else {
+                displayHtml = value ? value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') : '';
+            }
+
+            if (displayHtml) {
+                displayVal.innerHTML = displayHtml;
+                displayVal.classList.remove('placeholder-text');
+            } else {
+                displayVal.innerHTML = '—';
+                displayVal.classList.add('placeholder-text');
+            }
+            showToast('✓ Saved');
+        } else {
+            alert('Save failed: ' + (data.error || 'Unknown error'));
+        }
+        cell.classList.remove('editing');
+    })
+    .catch(() => {
+        alert('Network error while saving.');
+        cell.classList.remove('editing');
+    });
+}

@@ -902,6 +902,42 @@
                 </div>
             </div>
         </div>
+        <!-- ── Custom DateTime Picker Modal ── -->
+<div id="dtPickerModal">
+    <div id="dtPickerCard">
+        <div id="dtPickerHeader">
+            <div style="opacity:0.85; font-size:11px; text-transform:uppercase; letter-spacing:1px;">Select Date &amp; Time</div>
+            <div class="dt-display-date" id="dtHeaderDisplay">—</div>
+        </div>
+        <div id="dtPickerBody">
+            <div class="dt-cal-nav">
+                <button id="dtPrevMonth">&#8249;</button>
+                <span class="dt-month-label" id="dtMonthLabel"></span>
+                <button id="dtNextMonth">&#8250;</button>
+            </div>
+            <div class="dt-weekdays">
+                <span>Su</span><span>Mo</span><span>Tu</span>
+                <span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+            </div>
+            <div class="dt-days" id="dtDaysGrid"></div>
+            <div class="dt-time-row">
+                <label>Time</label>
+                <input type="number" id="dtHour" min="1" max="12" placeholder="HH">
+                <span class="dt-time-sep">:</span>
+                <input type="number" id="dtMinute" min="0" max="59" placeholder="MM">
+                <div class="dt-ampm-toggle">
+                    <button id="dtAmBtn" class="active">AM</button>
+                    <button id="dtPmBtn">PM</button>
+                </div>
+            </div>
+        </div>
+<div id="dtPickerFooter">
+    <button id="dtCancelBtn">Cancel</button>
+    <button id="dtClearBtn" style="background:#f44336; color:#fff;">Clear</button>
+    <button id="dtOkBtn">OK</button>
+</div>
+    </div>
+</div>
 
     </div><!-- /main-scroll-container -->
 
