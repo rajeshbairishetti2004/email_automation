@@ -467,7 +467,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                 // AUM Cleaning & Crore Conversion
                 $cleanAumVal = preg_replace('/[^-0-9.]/', '', (string)$rawAum);
                 $numericAum  = (float)$cleanAumVal;
-                $aumInCrores = $numericAum > 0 ? round($numericAum / 10000000, 4) : 0;
 
                 // Duplicate check (same client + month + allocation)
                 $checkDuplicateStmt->execute([
@@ -510,8 +509,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
                         ':email'         => $clientEmail,
                         ':assign'        => $assignedToId,
                         ':reviewer'      => $reviewerId,
-                        ':aum'           => $aumInCrores,
-                        ':aum_val'       => $aumInCrores,
+                        ':aum'           => $numericAum,
+                        ':aum_val'       => $numericAum,
                         ':prio'          => $finalPriority,
                         ':cycle'         => $cleanReviewCycle,  // "RF", never "RF, NRI"
                         ':country'       => $countryValue,      // "USA", "Singapore", or null
@@ -749,16 +748,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             const el = document.getElementById('successMessage');
             el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({ behavior: 'smooth' });
-            setTimeout(() => { el.style.display = 'none'; }, 5000);
+            el.scrollIntoView({
+                behavior: 'smooth'
+            });
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
         }
 
         function showError(message) {
             const el = document.getElementById('errorMessage');
             el.textContent = message;
             el.style.display = 'block';
-            el.scrollIntoView({ behavior: 'smooth' });
-            setTimeout(() => { el.style.display = 'none'; }, 5000);
+            el.scrollIntoView({
+                behavior: 'smooth'
+            });
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
         }
 
         function escapeHtml(text) {
@@ -771,7 +778,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['allocation_file'])) 
             if (!dateString) return 'Never';
             const date = new Date(dateString);
             const day = date.getDate().toString().padStart(2, '0');
-            const month = date.toLocaleString('en-GB', { month: 'short' });
+            const month = date.toLocaleString('en-GB', {
+                month: 'short'
+            });
             const year = date.getFullYear();
             const hours = date.getHours().toString().padStart(2, '0');
             const mins = date.getMinutes().toString().padStart(2, '0');
