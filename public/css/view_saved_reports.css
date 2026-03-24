@@ -1472,16 +1472,29 @@ td.has-view-btn {
 }
 
 .dt-time-row input[type="number"] {
-    width: 48px;
+    width: 52px;
     text-align: center;
     padding: 5px 6px;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: #1a1a2e;
     -moz-appearance: textfield;
+}
+
+/* Remove arrows */
+.dt-time-row input[type="number"]::-webkit-outer-spin-button,
+.dt-time-row input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Focus styling */
+.dt-time-row input[type="number"]:focus {
     outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
 }
 
 .dt-time-row input[type="number"]:focus {
