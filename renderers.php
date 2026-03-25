@@ -26,7 +26,7 @@ function renderClientReport(
     $schemes    = $clientData['schemes'] ?? [];
     $goals      = $clientData['goals'] ?? [];
 
-    $totals  = $clientData['current']['totals'] ?? ['purchase'=>0,'current'=>0,'profit'=>0,'cagr_weighted'=>0,'xirr_weighted'=>0];
+    $totals  = $clientData['current']['totals'] ?? ['purchase' => 0, 'current' => 0, 'profit' => 0, 'cagr_weighted' => 0, 'xirr_weighted' => 0];
     $summary = $clientData['current']['summary'] ?? null;
 
     $totalAmount = $totals['current'];
@@ -53,16 +53,29 @@ function renderClientReport(
 
     $base = trim($greetingBase);
     if ($base === '') $base = $DEFAULT_GREETING;
-    $fullGreeting = rtrim($base) . ' ' . $name . ',';
+    $firstName = '';
+    if (!empty($name)) {
+        $firstName = explode(' ', trim($name))[0];
+    }
+
+    if (strpos($base, '{{name}}') !== false) {
+        $fullGreeting = str_replace('{{name}}', $firstName, $base);
+    } else {
+        $fullGreeting = rtrim($base) . ' ' . $firstName;
+    }
+
+    $fullGreeting .= ',';
+
     
+
     // Merge into single client message
     $client_message = $fullGreeting . "\n\n" . $introText . "\n\n" . $closingText;
-    
+
     // Default signature (Hardcoded here, but dynamic in view_report/email_handler)
     $DEFAULT_SIGNATURE = "Regards,\n\nVivek Sharma,\nRelationship Manager,\nFinance Doctor Private Limited.\n\nMobile - 888 4091 666.\nEmail - vivek.sharma@financedoctor.in\nUrl: www.financedoctor.in";
     $signature_block = $DEFAULT_SIGNATURE;
 
-    ?>
+?>
     <?php
     $asOnFormatted = $asOn;
     $asOnDate = DateTime::createFromFormat('d/m/Y', $asOn);
@@ -81,7 +94,9 @@ function renderClientReport(
 
         <h3>1. Current Situation</h3>
         <table class="report-table">
-            <tr><th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th></tr>
+            <tr>
+                <th colspan="2">Current Situation as of <?php echo htmlspecialchars($asOnFormatted); ?></th>
+            </tr>
             <tr>
                 <td>Total Amount</td>
                 <td><?php echo formatAmount($totalAmount); ?></td>
@@ -150,13 +165,13 @@ function renderClientReport(
                 if ($shareVal <= 0) continue;
 
                 $sumShare += $shareVal;
-                ?>
+            ?>
                 <tr>
                     <td><?php echo htmlspecialchars($asset); ?></td>
                     <td><?php echo number_format($shareVal, 2); ?></td>
                 </tr>
             <?php endforeach; ?>
-            
+
             <tr style="font-weight: bold; background-color: #f8f9fa;">
                 <td>Total</td>
                 <td><?php echo number_format($sumShare, 2); ?></td>
@@ -177,8 +192,8 @@ function renderClientReport(
                 <th>Scheme Name</th>
                 <th>Amount</th>
             </tr>
-            <?php 
-            foreach ($schemes as $s): 
+            <?php
+            foreach ($schemes as $s):
             ?>
                 <tr>
                     <td><?php echo htmlspecialchars($s['scheme']); ?></td>
@@ -207,18 +222,19 @@ function renderClientReport(
                 <?php foreach ($annexureLines as $line):
                     $line = trim($line);
                     if ($line === '') continue;
-                    ?>
+                ?>
                     <li><?php echo htmlspecialchars($line); ?></li>
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
     </div>
-    <?php
+<?php
 }
 
 // Only declare formatPercent if it does not already exist
 if (!function_exists('formatPercent')) {
-    function formatPercent($value) {
+    function formatPercent($value)
+    {
         if ($value === null || $value === '' || !is_numeric($value)) return '';
         return number_format((float)$value, 2) . '%';
     }

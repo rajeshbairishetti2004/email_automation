@@ -2,22 +2,21 @@
 // client_communication.php
 // Complete standalone template management for greeting, intro, and closing sections
 // Also handles workflow actions and auto-save
+// UPDATED: Greeting auto-appends client first name when template is loaded or on first visit
 
-
-// Handle AJAX requests for template management AND workflow actions
+// Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
     ob_start();
     header('Content-Type: application/json');
-    
+
     $action = $_POST['ajax_action'] ?? '';
     $response = ['success' => false];
-    
+
     try {
         require_once 'db_config.php';
         $pdo = getPdo();
-        
-        // Template management actions
+
         if ($action === 'edit_template') {
             $stmt = $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?");
             $stmt->execute([
@@ -26,665 +25,699 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 (int)$_POST['template_id']
             ]);
             $response['success'] = true;
-        } 
-        elseif ($action === 'delete_template') {
+        } elseif ($action === 'delete_template') {
             $stmt = $pdo->prepare("DELETE FROM report_templates WHERE id = ?");
             $stmt->execute([(int)$_POST['template_id']]);
             $response['success'] = true;
             $response['deleted_id'] = (int)$_POST['template_id'];
-        }
-        elseif ($action === 'save_template') {
+        } elseif ($action === 'save_template') {
             $section = $_POST['section_type'] ?? '';
-            $name = trim($_POST['template_name'] ?? '');
+            $name    = trim($_POST['template_name'] ?? '');
             $content = $_POST['template_content'] ?? '';
-            
+
             if ($name === '' || $content === '') {
                 throw new Exception('Template name and content are required');
             }
-            
+
             $stmt = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (?, ?, ?)");
             $stmt->execute([$name, $section, $content]);
             $newId = $pdo->lastInsertId();
-            
-            $response['success'] = true;
-            $response['new_id'] = $newId;
-            $response['template_name'] = $name;
-            $response['template_content'] = $content;
-        }
-        // Workflow actions
-        elseif ($action === 'save_draft') {
+
+            $response = ['success' => true, 'new_id' => $newId,
+                         'template_name' => $name, 'template_content' => $content];
+        } elseif ($action === 'save_draft') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', draft_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
-            $stmt->execute([':id' => $clientId]);
+            $pdo->prepare("UPDATE clients SET report_state='draft', draft_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Draft saved successfully.', 'updated_state' => 'draft']);
             exit;
-        }
-        elseif ($action === 'ready_for_review') {
+        } elseif ($action === 'ready_for_review') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'ready', ready_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
-            $stmt->execute([':id' => $clientId]);
+            $pdo->prepare("UPDATE clients SET report_state='ready', ready_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked Ready for Review.', 'updated_state' => 'ready']);
             exit;
-        }
-        elseif ($action === 'approve_review') {
+        } elseif ($action === 'approve_review') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-
-            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'reviewed', reviewed_at = NOW(), review_not_ok = 0, review_comment = NULL WHERE id = :id");
-            $stmt->execute([':id' => $clientId]);
+            $pdo->prepare("UPDATE clients SET report_state='reviewed', reviewed_at=NOW(), review_not_ok=0, review_comment=NULL WHERE id=:id")->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report Approved (Reviewed).', 'updated_state' => 'reviewed']);
             exit;
-        }
-        elseif ($action === 'review_not_ok') {
+        } elseif ($action === 'review_not_ok') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             $comment  = trim($_POST['review_comment'] ?? '');
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             if (empty($comment)) throw new Exception("A comment is required for rejection.");
-
-            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'draft', review_not_ok = 1, review_comment = :comment WHERE id = :id");
-            $stmt->execute([':id' => $clientId, ':comment' => $comment]);
+            $pdo->prepare("UPDATE clients SET report_state='draft', review_not_ok=1, review_comment=:comment WHERE id=:id")->execute([':id' => $clientId, ':comment' => $comment]);
             echo json_encode(['success' => true, 'message' => 'Report rejected and moved back to Draft.', 'updated_state' => 'draft']);
             exit;
-        }
-        elseif ($action === 'email_sent') {
+        } elseif ($action === 'email_sent') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
-            
-            $stmt = $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :id");
-            $stmt->execute([':id' => $clientId]);
+            $pdo->prepare("UPDATE clients SET report_state='sent', sent_at=NOW() WHERE id=:id")->execute([':id' => $clientId]);
             echo json_encode(['success' => true, 'message' => 'Report marked as Sent.', 'updated_state' => 'sent']);
             exit;
-        }
-        // Auto-save client field (from view_report.php blur event)
-        elseif ($action === 'save_client_field') {
+        } elseif ($action === 'save_client_field') {
             $clientId = (int)($_POST['client_id'] ?? 0);
-            $field = trim($_POST['field'] ?? '');
-            $value = trim($_POST['value'] ?? '');
-            
+            $field    = trim($_POST['field'] ?? '');
+            $value    = $_POST['value'] ?? '';
+
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
             if (empty($field)) throw new Exception("Field name is required.");
-            
-            // Validate field name to prevent SQL injection
+
             $allowedFields = ['greeting_prefix', 'intro_text', 'closing_text'];
             if (!in_array($field, $allowedFields)) {
                 throw new Exception("Invalid field name.");
             }
-            
-            $stmt = $pdo->prepare("UPDATE clients SET $field = ? WHERE id = ?");
-            $stmt->execute([$value, $clientId]);
+
+            $pdo->prepare("UPDATE clients SET $field = ? WHERE id = ?")->execute([$value, $clientId]);
             echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved successfully.']);
             exit;
-        }
-        else {
-            // Unknown action
+        } else {
             echo json_encode(['success' => false, 'error' => 'Unknown action: ' . $action]);
             exit;
         }
-        
-        // Only for template actions that haven't exited yet
+
         ob_end_clean();
         echo json_encode($response);
         exit;
-        
     } catch (Throwable $e) {
-        // Clean output buffer and return error
         ob_end_clean();
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         exit;
     }
 }
 
-// Load stored communication fields if not provided
+// ── Load stored communication fields ─────────────────────────────────────────
 if (!isset($greetingStored) || !isset($introTextStored) || !isset($closingTextStored)) {
     require_once __DIR__ . '/db_config.php';
     $pdo = getPdo();
 
-    $stmt = $pdo->prepare("
-        SELECT greeting_prefix, intro_text, closing_text
-        FROM clients WHERE id = ?
-    ");
+    $stmt = $pdo->prepare("SELECT greeting_prefix, intro_text, closing_text FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-    $greetingStored  = trim((string)($row['greeting_prefix'] ?? ''));
-    $introTextStored = trim((string)($row['intro_text'] ?? ''));
-    $closingTextStored = trim((string)($row['closing_text'] ?? ''));
+    $greetingStored    = (string)($row['greeting_prefix'] ?? '');
+    $introTextStored   = (string)($row['intro_text'] ?? '');
+    $closingTextStored = (string)($row['closing_text'] ?? '');
+}
+
+// ── Derive client first name ──────────────────────────────────────────────────
+// $name is set by view_report.php before this file is included.
+// We extract only the first word of the full name as the salutation first name.
+$clientFirstName = '';
+if (!empty($name)) {
+    $clientFirstName = explode(' ', trim($name))[0];
+    // Title-case it cleanly
+    $clientFirstName = ucfirst(strtolower($clientFirstName));
+}
+
+// ── Decide whether the stored greeting already contains the client name ───────
+// Strategy: if the stored greeting is plain text that equals a bare salutation
+// (no HTML, no name beyond "Mr." / "Mrs." etc.) we need to append the first name.
+// We detect "needs name" when the stripped text does NOT already contain the
+// client first name (case-insensitive).
+function _greetingNeedsName(string $stored, string $firstName): bool
+{
+    if ($firstName === '') return false;
+    // Strip HTML tags to get plain text
+    $plain = trim(strip_tags($stored));
+    // If empty → definitely needs name
+    if ($plain === '') return true;
+    // If already contains the first name (case-insensitive) → name already there
+    if (mb_stripos($plain, $firstName) !== false) return false;
+    // Bare salutation patterns: "Dear Mr.", "Dear Mrs.", "Dear", "Hello", etc.
+    return true;
+}
+
+$greetingNeedsName = _greetingNeedsName($greetingStored, $clientFirstName);
+
+// If greeting is empty or bare default, build a proper initial value:
+// "<stored/default> <FirstName>,"
+$BARE_DEFAULTS = ['Dear Mr.', 'Dear Mrs.', 'Dear Ms.', 'Dear Dr.', 'Dear', 'Hello'];
+
+if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_DEFAULTS, true)) {
+    // Stored is literally the default constant — build a full greeting
+    $salutation = trim(strip_tags($greetingStored));
+    if ($salutation === '') $salutation = 'Dear Mr.';
+    if ($clientFirstName !== '') {
+        $greetingInitial = $salutation . ' ' . $clientFirstName . ',';
+    } else {
+        $greetingInitial = $salutation;
+    }
+    // If it had HTML colour formatting, keep the HTML but append name in plain text after
+    // For bare default (no HTML) just use the plain string
+    if (strip_tags($greetingStored) === $greetingStored) {
+        // No HTML — use plain constructed string
+        $greetingForEditor = $greetingInitial;
+    } else {
+        // Had HTML — append name outside HTML
+        $greetingForEditor = rtrim($greetingStored, ' ,') . ' ' . $clientFirstName . ',';
+    }
+    // Auto-save this back to DB so it persists without needing user interaction
+    $greetingNeedsSave = true;
+} else {
+    // Stored value already has the name (or is a custom greeting)
+    $greetingForEditor = $greetingStored;
+    $greetingNeedsSave = false;
 }
 
 ?>
 
+<?php if (!defined('QUILL_CSS_LOADED')): define('QUILL_CSS_LOADED', true); ?>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet">
+<?php endif; ?>
+
 <style>
-/* Client Communication module styles - matching rationale.php blue theme */
-.comm-section {
-    margin-top: 18px;
-    margin-bottom: 18px;
-    padding: 14px;
-    border: 1px solid #e6f2fb;
-    border-radius: 8px;
-    background: linear-gradient(180deg, #fbfdff 0%, #f6fbff 100%);
-    box-shadow: 0 1px 0 rgba(2,136,209,0.03);
-    font-family: Inter, Arial, sans-serif;
-}
-
-.comm-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #e6f2fb;
-}
-
-.comm-title {
-    font-weight: 700;
-    color: #083744;
-    font-size: 16px;
-    margin: 0;
-}
-
-.comm-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-}
-
-.comm-select {
-    min-width: 300px;
-    padding: 8px 10px;
-    border: 1px solid #dbeefb;
-    border-radius: 6px;
-    background: #fff;
-    color: #083744;
-    font-size: 14px;
-    box-shadow: inset 0 1px 0 rgba(2,136,209,0.02);
-}
-
-.comm-btn {
-    padding: 8px 12px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
-    transition: background-color 0.12s ease, transform 0.06s ease;
-}
-
-/* Blue-themed buttons to match page */
-.comm-btn.save {
-    background: #0288D1; /* primary */
-    color: #fff;
-}
-.comm-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
-
-.comm-btn.edit {
-    background: #039be5; /* lighter blue */
-    color: #fff;
-}
-.comm-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
-
-/* Delete: base blue, hover becomes red */
-.comm-btn.del {
-    background: #0277bd; /* darker blue */
-    color: #fff;
-}
-.comm-btn.del:hover { background: #dc3545 !important; transform: translateY(-1px); }
-
-/* Add button (plus) specific styling */
-.comm-btn.add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border-radius: 50%;
-    background: #eaf7ff;
-    border: 1px solid #cfeefc;
-    color: #0288d1;
-}
-
-/* Disabled button state */
-.comm-btn[disabled] {
-    opacity: 0.65;
-    cursor: not-allowed;
-    transform: none !important;
-}
-
-/* Focus / keyboard accessibility */
-.comm-btn:focus,
-.comm-select:focus,
-.comm-textarea:focus {
-    outline: 3px solid rgba(2,136,209,0.12);
-    outline-offset: 2px;
-}
-
-/* Textarea with auto-grow */
-.comm-textarea {
-    width: 100%;
-    padding: 12px;
-    font-size: 14px;
-    min-height: 100px;
-    height: auto;
-    line-height: 1.5;
-    box-sizing: border-box;
-    border: 1px solid #dbeefb;
-    border-radius: 6px;
-    background: #fff;
-    color: #052b36;
-    resize: none;
-    overflow: hidden;
-}
-
-/* Flash messages area */
-.comm-flash { 
-    margin-top: 8px; 
-    min-height: 26px; 
-    font-size: 13px;
-}
-
-.flash-success {
-    color: #2eb85c;
-    background: #edf9f0;
-    padding: 6px 10px;
-    border-radius: 4px;
-    border-left: 3px solid #2eb85c;
-}
-
-.flash-error {
-    color: #dc3545;
-    background: #fef2f2;
-    padding: 6px 10px;
-    border-radius: 4px;
-    border-left: 3px solid #dc3545;
-}
-
-/* Make buttons consistent on small screens */
-@media (max-width: 640px) {
-    .comm-controls { 
-        flex-direction: column; 
-        align-items: stretch; 
+    .comm-section {
+        margin-top: 18px;
+        margin-bottom: 18px;
+        padding: 14px;
+        border: 1px solid #e6f2fb;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #fbfdff 0%, #f6fbff 100%);
+        box-shadow: 0 1px 0 rgba(2, 136, 209, 0.03);
+        font-family: Inter, Arial, sans-serif;
     }
-    .comm-select { 
-        width: 100%; 
-    }
-    .comm-btn:not(.add) { 
-        width: 100%; 
-        text-align: center; 
-    }
-}
 
-/* SVG plus icon */
-.comm-btn.add svg {
-    width: 16px;
-    height: 16px;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
+    .comm-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e6f2fb;
+    }
+
+    .comm-title {
+        font-weight: 700;
+        color: #083744;
+        font-size: 16px;
+        margin: 0;
+    }
+
+    .comm-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .comm-select {
+        min-width: 300px;
+        padding: 8px 10px;
+        border: 1px solid #dbeefb;
+        border-radius: 6px;
+        background: #fff;
+        color: #083744;
+        font-size: 14px;
+    }
+
+    .comm-btn {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+        transition: background-color 0.12s ease, transform 0.06s ease;
+    }
+
+    .comm-btn.save  { background: #0288D1; color: #fff; }
+    .comm-btn.save:hover  { background: #2eb85c !important; transform: translateY(-1px); }
+    .comm-btn.edit  { background: #039be5; color: #fff; }
+    .comm-btn.edit:hover  { background: #0288d1; transform: translateY(-1px); }
+    .comm-btn.del   { background: #0277bd; color: #fff; }
+    .comm-btn.del:hover   { background: #dc3545 !important; transform: translateY(-1px); }
+
+    .comm-btn:focus, .comm-select:focus {
+        outline: 3px solid rgba(2, 136, 209, 0.12);
+        outline-offset: 2px;
+    }
+
+    .comm-quill-wrap {
+        border: 1px solid #dbeefb;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #fff;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .comm-quill-wrap:focus-within {
+        border-color: #0288d1;
+        box-shadow: 0 0 0 3px rgba(2, 136, 209, 0.10);
+    }
+
+    .comm-quill-wrap .ql-toolbar.ql-snow {
+        border: none;
+        border-bottom: 1px solid #e6f2fb;
+        background: #f5fbff;
+        padding: 6px 10px;
+    }
+
+    .comm-quill-wrap .ql-container.ql-snow { border: none; }
+
+    .comm-quill-wrap .ql-editor {
+        min-height: 100px;
+        max-height: 360px;
+        overflow-y: auto;
+        font-family: Inter, Arial, sans-serif;
+        font-size: 14px;
+        color: #052b36;
+        line-height: 1.6;
+        padding: 10px 12px;
+    }
+
+    .comm-quill-wrap .ql-editor.ql-blank::before {
+        font-style: normal;
+        color: #aac6d8;
+        font-size: 13px;
+    }
+
+    .comm-quill-wrap .ql-toolbar .ql-stroke  { stroke: #4a7a92; }
+    .comm-quill-wrap .ql-toolbar .ql-fill    { fill:   #4a7a92; }
+    .comm-quill-wrap .ql-toolbar button:hover .ql-stroke { stroke: #0288d1; }
+    .comm-quill-wrap .ql-toolbar button:hover .ql-fill   { fill:   #0288d1; }
+    .comm-quill-wrap .ql-toolbar .ql-active  .ql-stroke  { stroke: #0288d1; }
+    .comm-quill-wrap .ql-toolbar .ql-active  .ql-fill    { fill:   #0288d1; }
+    .comm-quill-wrap .ql-snow .ql-picker      { color: #4a7a92; }
+    .comm-quill-wrap .ql-snow .ql-picker-options {
+        background: #fff;
+        border: 1px solid #dbeefb;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.10);
+    }
+
+    .comm-quill-wrap.is-locked .ql-toolbar { display: none; }
+    .comm-quill-wrap.is-locked .ql-editor  { background: #f8fbff; cursor: default; }
+
+    .comm-flash      { margin-top: 8px; min-height: 26px; font-size: 13px; }
+    .flash-success   { color: #2eb85c; background: #edf9f0; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #2eb85c; }
+    .flash-error     { color: #dc3545; background: #fef2f2; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #dc3545; }
+
+    @media (max-width: 640px) {
+        .comm-controls  { flex-direction: column; align-items: stretch; }
+        .comm-select    { width: 100%; }
+        .comm-btn:not(.add) { width: 100%; text-align: center; }
+    }
 </style>
 
 <?php
-// Define $clientId and $isLocked if not already defined
 $clientId = $clientId ?? 0;
 
-// --- ADD THIS LOGIC to ensure $isLocked is set based on DB state if not passed ---
 if (!isset($isLocked)) {
     require_once __DIR__ . '/db_config.php';
     $pdo = getPdo();
     $stmt = $pdo->prepare("SELECT report_state, review_not_ok FROM clients WHERE id = ?");
     $stmt->execute([$clientId]);
-    $clientLock = $stmt->fetch(PDO::FETCH_ASSOC);
-    $reportState = $clientLock['report_state'] ?? 'draft';
+    $clientLock  = $stmt->fetch(PDO::FETCH_ASSOC);
+    $reportState = $clientLock['report_state']  ?? 'draft';
     $reviewNotOk = (int)($clientLock['review_not_ok'] ?? 0);
     $isLocked = (($reportState === 'reviewed' && $reviewNotOk === 0) || $reportState === 'sent');
 }
 
 $sections = [
     'greeting' => [
-        'title' => 'Greeting',
-        'stored' => $greetingStored ?? '',
-        'db_field' => 'greeting_prefix'
+        'title'       => 'Greeting',
+        // Use the pre-processed value that already has the first name appended
+        'stored'      => $greetingForEditor,
+        'db_field'    => 'greeting_prefix',
+        'placeholder' => 'Enter greeting text…',
     ],
     'intro' => [
-        'title' => 'Introduction',
-        'stored' => $introTextStored ?? '',
-        'db_field' => 'intro_text'
+        'title'       => 'Introduction',
+        'stored'      => $introTextStored,
+        'db_field'    => 'intro_text',
+        'placeholder' => 'Enter introduction text…',
     ],
     'closing' => [
-        'title' => 'Closing',
-        'stored' => $closingTextStored ?? '',
-        'db_field' => 'closing_text'
-    ]
+        'title'       => 'Closing',
+        'stored'      => $closingTextStored,
+        'db_field'    => 'closing_text',
+        'placeholder' => 'Enter closing remarks…',
+    ],
 ];
 
 foreach ($sections as $sec => $data):
-    $templates_for_section = $templates[$sec] ?? [];
+    $tpls      = $templates[$sec] ?? [];
+    $editorId  = $sec . '_quill_editor';
+    $wrapperId = $sec . '_quill_wrap';
 ?>
 <div class="comm-section" id="<?= $sec ?>_section">
     <div class="comm-header">
-        <div class="comm-title"><?= htmlspecialchars($data['title']) ?>
-            <?php if (isset($isLocked) && $isLocked): ?>
+        <div class="comm-title">
+            <?= htmlspecialchars($data['title']) ?>
+            <?php if ($isLocked): ?>
                 <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
             <?php endif; ?>
         </div>
     </div>
+
     <div class="comm-controls">
         <select id="<?= $sec ?>_template_selector" class="comm-select" <?= $isLocked ? 'disabled' : '' ?>>
             <option value="0">-- Select saved <?= strtolower($data['title']) ?> template --</option>
-            <?php if (!empty($templates_for_section)): ?>
-                <?php foreach ($templates_for_section as $t): 
-                    $tid = (int)($t['id'] ?? 0);
-                    $tname = htmlspecialchars($t['name'] ?? '');
-                    $tcontent = htmlspecialchars($t['content'] ?? '');
-                ?>
-                    <option value="<?= $tid ?>" data-content="<?= $tcontent ?>">
-                        <?= $tname ?>
-                    </option>
-                <?php endforeach; ?>
-            <?php endif; ?>
+            <?php
+            $defaultTemplateId = 0;
+            if (!empty($tpls)) {
+                foreach ($tpls as $t) {
+                    if ((int)($t['is_default'] ?? 0) === 1) {
+                        $defaultTemplateId = (int)$t['id'];
+                        break;
+                    }
+                }
+                if ($defaultTemplateId === 0) {
+                    $defaultTemplateId = (int)$tpls[0]['id'];
+                }
+                foreach ($tpls as $t):
+                    $tid      = (int)($t['id'] ?? 0);
+                    $tname    = htmlspecialchars($t['name'] ?? '');
+                    $tcontent = htmlspecialchars($t['content'] ?? '', ENT_QUOTES);
+            ?>
+                <option
+                    value="<?= $tid ?>"
+                    data-content="<?= $tcontent ?>"
+                    <?= ($tid === $defaultTemplateId) ? 'selected' : '' ?>>
+                    <?= $tname ?>
+                </option>
+            <?php endforeach; } ?>
         </select>
-        <button id="<?= $sec ?>_add_btn" class="comm-btn add" type="button" title="Add new template" aria-label="Add new template" <?= $isLocked ? 'disabled' : '' ?>>
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-                <path d="M12 5v14M5 12h14" stroke="currentColor"/>
-            </svg>
-        </button>
-        <button id="<?= $sec ?>_save_btn" class="comm-btn save" type="button" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
-        <button id="<?= $sec ?>_edit_btn" class="comm-btn edit" type="button" <?= $isLocked ? 'disabled' : '' ?>>Edit</button>
-        <button id="<?= $sec ?>_delete_btn" class="comm-btn del" type="button" <?= $isLocked ? 'disabled' : '' ?>>Delete</button>
     </div>
-    <!-- CRITICAL: Add name attribute to match view_report.php POST fields and data attributes for auto-save -->
-    <textarea id="<?= $sec ?>_textarea"
+
+    <!-- Quill editor -->
+    <div id="<?= $wrapperId ?>" class="comm-quill-wrap<?= $isLocked ? ' is-locked' : '' ?>">
+        <div id="<?= $editorId ?>"></div>
+    </div>
+
+    <!-- Hidden textarea for form POST fallback -->
+    <textarea
+        id="<?= $sec ?>_textarea"
         name="<?= $sec ?>"
         data-client-id="<?= (int)$clientId ?>"
         data-field="<?= $data['db_field'] ?>"
-        class="comm-textarea large-textarea"
-        <?= $isLocked ? 'readonly' : '' ?>><?= htmlspecialchars($data['stored']) ?></textarea>
+        style="display:none;"><?= htmlspecialchars($data['stored']) ?></textarea>
+
     <div id="<?= $sec ?>_flash_container" class="comm-flash"></div>
 </div>
-<script>
-(function(){
-    const section = '<?= $sec ?>';
-    const selector = document.getElementById(section + '_template_selector');
-    const textarea = document.getElementById(section + '_textarea');
-    const saveBtn = document.getElementById(section + '_save_btn');
-    const editBtn = document.getElementById(section + '_edit_btn');
-    const delBtn = document.getElementById(section + '_delete_btn');
-    const addBtn = document.getElementById(section + '_add_btn');
-    const flash = document.getElementById(section + '_flash_container');
-    const isLocked = <?= $isLocked ? 'true' : 'false' ?>;
 
-    // --- Auto-grow logic (must be inside IIFE) ---
-    function autoGrow(el) {
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
-    }
-    // Initial resize
-    autoGrow(textarea);
-    // Resize on typing
-    textarea.addEventListener('input', () => autoGrow(textarea));
-    // Resize on paste
-    textarea.addEventListener('paste', () => {
-        setTimeout(() => autoGrow(textarea), 0);
+<?php if (!defined('QUILL_JS_LOADED')): define('QUILL_JS_LOADED', true); ?>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
+<?php endif; ?>
+
+<script>
+(function () {
+    /* ── CONFIG ── */
+    const SEC         = <?= json_encode($sec) ?>;
+    const DB_FIELD    = <?= json_encode($data['db_field']) ?>;
+    const CLIENT_ID   = <?= json_encode((int)$clientId) ?>;
+    const IS_LOCKED   = <?= $isLocked ? 'true' : 'false' ?>;
+    const PLACEHOLDER = <?= json_encode($data['placeholder']) ?>;
+
+    // For greeting only: the client first name and whether we need to auto-save
+    const IS_GREETING       = (SEC === 'greeting');
+    const CLIENT_FIRST_NAME = <?= json_encode($clientFirstName) ?>;
+    const GREETING_NEEDS_SAVE = <?= (!$isLocked && $sec === 'greeting' && $greetingNeedsSave) ? 'true' : 'false' ?>;
+
+    /* ── DOM refs ── */
+    const selector = document.getElementById(SEC + '_template_selector');
+    const hiddenTA = document.getElementById(SEC + '_textarea');
+    const flash    = document.getElementById(SEC + '_flash_container');
+
+    /* ── INITIALISE QUILL ── */
+    const quill = new Quill('#' + SEC + '_quill_editor', {
+        theme: 'snow',
+        readOnly: IS_LOCKED,
+        placeholder: PLACEHOLDER,
+        modules: { toolbar: false }
     });
 
-    function findOptionByValue(val) {
-        if (!selector) return null;
-        const target = String(val);
-        for (const option of selector.options) {
-            if (option.value === target) return option;
-        }
-        return null;
+    /* ── SYNC Quill → hidden textarea ── */
+    function syncToHidden() {
+        hiddenTA.value = quill.root.innerHTML;
     }
 
-    function upsertTemplateOption(id, name, content) {
-        if (!selector) return null;
-        const value = String(id);
-        let opt = findOptionByValue(value);
-        if (!opt) {
-            opt = document.createElement('option');
-            opt.value = value;
-            selector.appendChild(opt);
-        }
-        opt.textContent = name;
-        opt.setAttribute('data-content', content);
-        return opt;
-    }
+    quill.on('text-change', syncToHidden);
 
-    function removeTemplateOption(id) {
-        const opt = findOptionByValue(id);
-        if (opt) opt.remove();
-    }
-
+    /* ── HELPERS ── */
     function showFlash(type, msg) {
-        flash.innerHTML = '<div class="flash-message ' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
-                         (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
+        flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">'
+            + (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
         setTimeout(() => { flash.innerHTML = ''; }, 3500);
     }
 
-    function setButtonsDisabled(state) {
-        [addBtn, saveBtn, editBtn, delBtn].forEach(btn => {
-            if (!btn) return;
-            btn.disabled = !!state;
-        });
+    function normalize(html) {
+        return html.replace(/\s+/g, ' ').trim();
     }
 
-    // Auto-save on blur (using client_communication.php endpoint)
-    textarea.addEventListener('blur', function() {
-        if (isLocked) return;
-        
-        const clientId = textarea.getAttribute('data-client-id');
-        const field = textarea.getAttribute('data-field');
-        const value = textarea.value.trim();
+    function saveToServer(html, silent) {
+        return fetch('client_communication.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: new URLSearchParams({
+                ajax_action: 'save_client_field',
+                client_id:   CLIENT_ID,
+                field:       DB_FIELD,
+                value:       html
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (!silent) {
+                if (d.success) showFlash('success', d.message || 'Saved');
+                else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
+            }
+            return d;
+        })
+        .catch(() => { if (!silent) showFlash('error', 'Network error'); });
+    }
 
-        if (clientId && field) {
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                },
-                body: new URLSearchParams({
-                    ajax_action: 'save_client_field',
-                    client_id: clientId,
-                    field: field,
-                    value: value
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Show flash message
-                    showFlash('success', data.message || 'Saved');
-                } else {
-                    showFlash('error', 'Save failed: ' + (data.error || 'Unknown error'));
-                }
-            })
-            .catch(err => {
-                console.error('Save error:', err);
-                showFlash('error', 'Network error while saving');
-            });
+    /* ── Append first name to greeting text ─────────────────────────────────
+       Called when a template is loaded from the dropdown for the greeting
+       section. Strips any trailing comma/space, then appends " FirstName,"
+       unless the name is already present.
+    ── */
+    function appendFirstNameToGreeting(html) {
+        if (!IS_GREETING || !CLIENT_FIRST_NAME) return html;
+
+        // Check if name already present (plain-text comparison)
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        const plain = tmp.textContent || tmp.innerText || '';
+
+        if (plain.toLowerCase().indexOf(CLIENT_FIRST_NAME.toLowerCase()) !== -1) {
+            // Name already in there
+            return html;
         }
+
+        // Append to the end of the HTML: strip trailing whitespace/comma then add name
+        // We work on the plain text approach: rebuild as "<template text> FirstName,"
+        const trimmedPlain = plain.replace(/[,\s]+$/, '');
+        // Rebuild: keep original HTML but replace its text content
+        // Simple approach: append a text node after existing content
+        const frag = document.createElement('div');
+        frag.innerHTML = html;
+
+        // Find the last text node or last element
+        const lastChild = frag.lastChild;
+        if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
+            lastChild.textContent = lastChild.textContent.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
+        } else if (lastChild) {
+            // Append as a text node
+            const existing = frag.innerHTML.replace(/[,\s]+$/, '');
+            frag.innerHTML = existing + ' ' + CLIENT_FIRST_NAME + ',';
+        } else {
+            frag.innerHTML = html.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
+        }
+        return frag.innerHTML;
+    }
+
+    /* ── LOAD STORED HTML into Quill ── */
+    (function loadStoredContent() {
+        const stored = hiddenTA.value.trim();
+        if (stored) {
+            quill.clipboard.dangerouslyPasteHTML(stored);
+        }
+    })();
+
+    /* ── AUTO-SAVE greeting on first visit if name was missing ── */
+    if (GREETING_NEEDS_SAVE && !IS_LOCKED) {
+        // Give Quill a tick to fully render before reading innerHTML
+        setTimeout(function () {
+            const html = quill.root.innerHTML;
+            saveToServer(html, true /* silent */);
+        }, 300);
+    }
+
+    /* ── Load default template if editor is empty ── */
+    (function loadDefaultTemplate() {
+        if (!selector) return;
+        const selectedOption = selector.options[selector.selectedIndex];
+        if (!selectedOption || selector.value === '0') return;
+
+        const isEditorEmpty  = quill.getLength() <= 1;
+        const isStoredEmpty  = !hiddenTA.value || hiddenTA.value === '<p><br></p>';
+
+        if (isEditorEmpty && isStoredEmpty) {
+            let decoded = selectedOption.getAttribute('data-content') || '';
+            const tmp = document.createElement('div');
+            tmp.innerHTML = decoded;
+            decoded = tmp.innerHTML;
+
+            if (IS_GREETING) {
+                decoded = appendFirstNameToGreeting(decoded);
+            }
+
+            quill.clipboard.dangerouslyPasteHTML(decoded);
+            syncToHidden();
+
+            if (!IS_LOCKED) {
+                saveToServer(quill.root.innerHTML, true /* silent */);
+            }
+        }
+    })();
+
+    /* ── Tracking for auto-save ── */
+    let lastSaved = '';
+    setTimeout(() => { lastSaved = quill.root.innerHTML; }, 0);
+
+    let isSaving = false;
+
+    /* ── AUTO-SAVE on blur ── */
+    quill.root.addEventListener('blur', function () {
+        if (IS_LOCKED || isSaving) return;
+
+        const html = quill.root.innerHTML;
+        if (normalize(html) === normalize(lastSaved)) return;
+
+        isSaving = true;
+        saveToServer(html, false)
+            .then(() => { lastSaved = html; })
+            .finally(() => { isSaving = false; });
     });
 
-    // Auto-load when selection changes
+    /* ── PERIODIC AUTO-SAVE (every 15 s) ── */
+    setInterval(function () {
+        if (IS_LOCKED || isSaving) return;
+        const html = quill.root.innerHTML;
+        if (normalize(html) !== normalize(lastSaved)) {
+            isSaving = true;
+            saveToServer(html, true)
+                .then(() => { lastSaved = html; })
+                .finally(() => { isSaving = false; });
+        }
+    }, 15000);
+
+    /* ── TEMPLATE SELECTOR: load on change ── */
     if (selector) {
-        selector.addEventListener('change', function() {
+        selector.addEventListener('change', function () {
             const id = selector.value;
-            if (id && id !== '0') {
-                const opt = selector.options[selector.selectedIndex];
-                textarea.value = opt.getAttribute('data-content') || '';
-                autoGrow(textarea);
-                showFlash('success', 'Template loaded into editor.');
-                
-                // Auto-save the loaded template content
-                if (!isLocked) {
-                    textarea.dispatchEvent(new Event('blur'));
-                }
-            }
-        });
-    }
+            if (!id || id === '0') return;
 
-    // Add: create new template from current textarea content
-    if (addBtn) {
-        addBtn.addEventListener('click', function() {
-            if (isLocked) return;
-            
-            const content = (textarea.value || '').trim();
-            if (!content) {
-                showFlash('error', '<?= ucfirst($data['title']) ?> content cannot be empty.');
-                return;
-            }
-            const name = prompt('Enter a name for this new <?= strtolower($data['title']) ?> template:');
-            if (!name || !name.trim()) return;
-
-            setButtonsDisabled(true);
-            const body = new URLSearchParams();
-            body.append('ajax_action', 'save_template');
-            body.append('template_name', name.trim());
-            body.append('template_content', content);
-            body.append('section_type', section);
-
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: body
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data && data.success) {
-                    if (data.new_id) {
-                        const opt = upsertTemplateOption(data.new_id, name.trim(), content);
-                        if (opt) selector.value = String(data.new_id);
-                    }
-                    showFlash('success', 'Template added successfully.');
-                } else {
-                    throw new Error(data && data.error ? data.error : 'Save failed');
-                }
-            })
-            .catch((err) => showFlash('error', err.message))
-            .finally(() => setButtonsDisabled(false));
-        });
-    }
-
-    // Edit: load selected template into editor
-    if (editBtn) {
-        editBtn.addEventListener('click', function() {
-            if (isLocked) return;
-            
-            const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to edit.');
-                return;
-            }
             const opt = selector.options[selector.selectedIndex];
-            textarea.value = opt.getAttribute('data-content') || '';
-            autoGrow(textarea);
-            textarea.focus();
+            const tmp = document.createElement('div');
+            tmp.innerHTML = opt.getAttribute('data-content') || '';
+            let decoded = tmp.innerHTML;
+
+            // For greeting: append the client first name after the template text
+            if (IS_GREETING) {
+                decoded = appendFirstNameToGreeting(decoded);
+            }
+
+            quill.clipboard.dangerouslyPasteHTML(decoded);
+            syncToHidden();
+            showFlash('success', 'Template loaded' + (IS_GREETING && CLIENT_FIRST_NAME ? ' — name added' : '') + '.');
+
+            if (!IS_LOCKED) {
+                saveToServer(quill.root.innerHTML, true /* silent */);
+            }
         });
     }
 
-    // Save: update selected template or create new if none selected
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-            if (isLocked) return;
-            
-            const id = selector.value;
-            const content = (textarea.value || '').trim();
-            if (!content) {
-                showFlash('error', '<?= ucfirst($data['title']) ?> content cannot be empty.');
-                return;
-            }
+    /* ── Option helpers (for save/edit/delete buttons if present) ── */
+    function findOption(id) {
+        const v = String(id);
+        for (const o of selector.options) if (o.value === v) return o;
+        return null;
+    }
 
-            let name;
-            if (id && id !== '0') {
-                // update existing: use current option text as name
-                name = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
-            } else {
-                name = prompt('Enter a name for this new <?= strtolower($data['title']) ?> template:');
-                if (!name || !name.trim()) {
-                    showFlash('error', 'Template name is required.');
-                    return;
-                }
-            }
+    function upsertOption(id, name, htmlContent) {
+        let opt = findOption(id);
+        if (!opt) { opt = document.createElement('option'); opt.value = String(id); selector.appendChild(opt); }
+        opt.textContent = name;
+        opt.setAttribute('data-content', htmlContent);
+        return opt;
+    }
 
-            setButtonsDisabled(true);
-            const body = new URLSearchParams();
-            body.append('ajax_action', id && id !== '0' ? 'edit_template' : 'save_template');
-            body.append('template_name', name.trim());
-            body.append('template_content', content);
-            body.append('section_type', section);
+    function removeOption(id) { const o = findOption(id); if (o) o.remove(); }
 
-            if (id && id !== '0') {
-                body.append('template_id', id);
-            }
+    /* ── SAVE button (if present) ── */
+    const saveBtn = document.getElementById(SEC + '_save_btn');
+    saveBtn && saveBtn.addEventListener('click', function () {
+        if (IS_LOCKED) return;
+        const id   = selector.value;
+        const html = quill.root.innerHTML;
+        if (!quill.getText().trim()) { showFlash('error', 'Content cannot be empty.'); return; }
 
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: body
-            })
+        let tplName;
+        if (id && id !== '0') {
+            tplName = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
+        } else {
+            tplName = prompt('Enter a name for this new ' + SEC + ' template:');
+            if (!tplName || !tplName.trim()) { showFlash('error', 'Template name is required.'); return; }
+        }
+
+        const body = new URLSearchParams({
+            ajax_action:      id && id !== '0' ? 'edit_template' : 'save_template',
+            template_name:    tplName.trim(),
+            template_content: html,
+            section_type:     SEC
+        });
+        if (id && id !== '0') body.append('template_id', id);
+
+        fetch('client_communication.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body })
             .then(r => r.json())
-            .then(data => {
-                if (data && data.success) {
-                    const templateId = data.new_id || id;
-                    if (templateId) {
-                        const opt = upsertTemplateOption(templateId, name.trim(), content);
-                        if (opt) selector.value = String(templateId);
-                    }
+            .then(d => {
+                if (d && d.success) {
+                    const tid = d.new_id || id;
+                    if (tid) { upsertOption(tid, tplName.trim(), html); selector.value = String(tid); }
                     showFlash('success', 'Template saved successfully.');
-                } else {
-                    showFlash('error', 'Save failed: ' + (data.error || 'Unknown'));
-                }
+                } else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
             })
-            .catch(() => showFlash('error', 'Network error while saving template.'))
-            .finally(() => setButtonsDisabled(false));
-        });
-    }
+            .catch(() => showFlash('error', 'Network error while saving template.'));
+    });
 
-    // Delete: delete selected template
-    if (delBtn) {
-        delBtn.addEventListener('click', function() {
-            if (isLocked) return;
-            
-            const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to delete.');
-                return;
-            }
-            if (!confirm('Delete selected template? This cannot be undone.')) return;
+    /* ── EDIT button (if present) ── */
+    const editBtn = document.getElementById(SEC + '_edit_btn');
+    editBtn && editBtn.addEventListener('click', function () {
+        if (IS_LOCKED) return;
+        const id = selector.value;
+        if (!id || id === '0') { showFlash('error', 'Please select a template to edit.'); return; }
+        const opt = selector.options[selector.selectedIndex];
+        const tmp = document.createElement('div');
+        tmp.innerHTML = opt.getAttribute('data-content') || '';
+        quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
+        syncToHidden();
+        quill.focus();
+    });
 
-            setButtonsDisabled(true);
-            const body = new URLSearchParams();
-            body.append('ajax_action', 'delete_template');
-            body.append('template_id', id);
+    /* ── DELETE button (if present) ── */
+    const delBtn = document.getElementById(SEC + '_delete_btn');
+    delBtn && delBtn.addEventListener('click', function () {
+        if (IS_LOCKED) return;
+        const id = selector.value;
+        if (!id || id === '0') { showFlash('error', 'Please select a template to delete.'); return; }
+        if (!confirm('Delete selected template? This cannot be undone.')) return;
 
-            fetch('client_communication.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                body: body
-            })
+        fetch('client_communication.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: new URLSearchParams({ ajax_action: 'delete_template', template_id: id }) })
             .then(r => r.json())
-            .then(data => {
-                if (data && data.success) {
-                    removeTemplateOption(id);
-                    selector.value = '0';
-                    showFlash('success', 'Template deleted successfully.');
-                } else {
-                    showFlash('error', 'Delete failed: ' + (data.error || 'Unknown'));
-                }
+            .then(d => {
+                if (d && d.success) { removeOption(id); selector.value = '0'; showFlash('success', 'Template deleted.'); }
+                else showFlash('error', 'Delete failed: ' + (d.error || 'Unknown'));
             })
-            .catch(() => showFlash('error', 'Network error while deleting template.'))
-            .finally(() => setButtonsDisabled(false));
-        });
-    }
+            .catch(() => showFlash('error', 'Network error while deleting.'));
+    });
+
 })();
 </script>
 <?php endforeach; ?>

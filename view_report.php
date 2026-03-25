@@ -165,6 +165,10 @@ if (!function_exists('getNextClientId')) {
         return $stmt->fetchColumn();
     }
 }
+
+$defaultGreeting = getDefaultTemplate('greeting');
+$defaultIntro    = getDefaultTemplate('intro');
+$defaultClosing  = getDefaultTemplate('closing');
 // --------------------------------------------------------------------------
 
 

@@ -184,6 +184,15 @@ $userDesignation = $_SESSION['designation'] ?? '';
             </span>
             Send Emails
         </a>
+        <a href="<?php echo getNavLink('template_management.php'); ?>" class="sidebar-link <?= ($currentPage === 'template_management.php') ? 'active' : '' ?>">
+            <span class="sidebar-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 2L11 13"/>
+                    <path d="M22 2L15 22l-4-9-9-4 20-7z"/>
+                </svg>
+            </span>
+            Manage Templates
+        </a>
 
         <?php endif; ?>
     </nav>
