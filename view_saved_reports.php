@@ -1793,67 +1793,33 @@ if (!$isClientSearch) {
             ) AS last_review_date,
 
             -- ── LAST MEETING DATE ────────────────────────────────────────────────
-            COALESCE(
-                c.last_meeting_date,
-                (
-                    SELECT
-                        CASE
-                            WHEN p.meeting_date IS NOT NULL AND p.report_state = 'sent'
-                                THEN CONCAT(p.meeting_date, ' ', TIME(p.created_at))
-                            WHEN p.meeting_date IS NOT NULL
-                                THEN CONCAT(p.meeting_date, ' ', TIME(COALESCE(p.updated_at, p.created_at)))
-                            ELSE NULL
-                        END
-                    FROM clients p
-                    WHERE p.name = c.name
-                    AND p.id != c.id
-                    AND p.report_state != 'pending'
-                    AND p.id < c.id
-                    ORDER BY
-                        (p.report_state = 'sent') DESC,
-                        (p.review_sent_date IS NOT NULL) DESC,
-                        p.id DESC
-                    LIMIT 1
-                )
-            ) AS last_meeting_date,
+           COALESCE(
+    c.last_meeting_date,
+    (
+        SELECT p.meeting_date
+        FROM clients p
+        WHERE p.name = c.name
+        AND p.id != c.id
+        AND p.report_state != 'pending'
+        AND p.id < c.id
+        ORDER BY
+            (p.report_state = 'sent') DESC, 
+            (p.review_sent_date IS NOT NULL) DESC,
+            p.id DESC
+        LIMIT 1
+    )
+) AS last_meeting_date,
 
-            COALESCE(
-                c.prev_modifications_action,
-                (
-                    SELECT p.modifications_action
-                    FROM clients p
-                    WHERE p.name = c.name
-                    AND p.id != c.id
-                    AND p.report_state != 'pending'
-                    AND p.id < c.id
-                    AND p.modifications_action IS NOT NULL
-                    AND p.modifications_action != ''
-                    ORDER BY
-                        (p.report_state = 'sent') DESC,
-                        p.id DESC
-                    LIMIT 1
-                ),
-                (
-                    SELECT GROUP_CONCAT(
-                        CONCAT(s.scheme_name, '-', s.action_step)
-                        ORDER BY s.id ASC
-                        SEPARATOR ' | '
-                    )
-                    FROM client_schemes s
-                    WHERE s.client_id = (
-                        SELECT p2.id FROM clients p2
-                        WHERE p2.name = c.name
-                        AND p2.id != c.id
-                        AND p2.report_state != 'pending'
-                        AND p2.id < c.id
-                        ORDER BY (p2.report_state = 'sent') DESC, p2.id DESC
-                        LIMIT 1
-                    )
-                    AND s.action_step != 'Continue'
-                    AND s.action_step != ''
-                    AND s.scheme_name != ''
-                )
-            ) AS prev_modifications_action,
+           
+               (
+    SELECT p.modifications_action
+    FROM clients p
+    WHERE p.name = c.name
+    AND p.id < c.id
+    AND p.report_state = 'sent'
+    ORDER BY p.id DESC
+    LIMIT 1
+) AS prev_modifications_action,
 
             (
                 SELECT p.completed_scheme_ids
@@ -1869,23 +1835,15 @@ if (!$isClientSearch) {
                 LIMIT 1
             ) AS prev_completed_scheme_ids,
 
-            COALESCE(
-                c.prev_meeting_comments,
-                (
-                    SELECT p.meeting_remarks
-                    FROM clients p
-                    WHERE p.name = c.name
-                    AND p.id != c.id
-                    AND p.report_state != 'pending'
-                    AND p.id < c.id
-                    AND p.meeting_remarks IS NOT NULL
-                    AND p.meeting_remarks != ''
-                    ORDER BY
-                        (p.report_state = 'sent') DESC,
-                        p.id DESC
-                    LIMIT 1
-                )
-            ) AS prev_meeting_comments,
+(
+    SELECT p.meeting_remarks
+    FROM clients p
+    WHERE p.name = c.name
+    AND p.id < c.id
+    AND p.report_state = 'sent'
+    ORDER BY p.id DESC
+    LIMIT 1
+) AS prev_meeting_comments,
 
             COALESCE(
                 (
