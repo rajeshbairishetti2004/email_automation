@@ -629,7 +629,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 searchDropdown.innerHTML = '';
                 return;
             }
-            fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val))
+            const cycleVal = document.getElementById('cycle-filter') ? document.getElementById('cycle-filter').value : '';
+fetch('view_saved_reports.php?search_client=1&q=' + encodeURIComponent(val) + '&cycle_filter=' + encodeURIComponent(cycleVal))
                 .then(res => res.json())
                 .then(data => {
                     if (data.length > 0) {
