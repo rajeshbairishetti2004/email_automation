@@ -1602,10 +1602,8 @@ if (!$isClientSearch) {
         $params[] = $currentMonthYear;
     }
 } else {
-        // Search mode: no month/cycle/is_latest restriction — show full history
-        // (cycle filter still applies if explicitly set and useful)
-        if ($cycleFilter !== '' && $cycleFilter !== $systemCurrentCycle) {
-            // Only apply cycle filter if user explicitly changed it from default
+        // Search mode: apply cycle filter always
+        if ($cycleFilter !== '') {
             $whereParts[] = "c.review_cycle = ?";
             $params[] = $cycleFilter;
         }
@@ -1933,22 +1931,42 @@ if (!$isClientSearch) {
     $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // --- AJAX endpoint for client name search ---
-    if (isset($_GET['search_client']) && isset($_GET['q'])) {
-        require_once 'db_config.php';
-        $pdo = getPdo();
-        
-        $q = trim($_GET['q']);
-        $stmt = $pdo->prepare("SELECT DISTINCT name FROM clients WHERE name LIKE ? ORDER BY name ASC LIMIT 10");
+    // --- AJAX endpoint for client name search ---
+if (isset($_GET['search_client']) && isset($_GET['q'])) {
+    require_once 'db_config.php';
+    $pdo = getPdo();
+    
+    $q = trim($_GET['q']);
+    $cycle = strtoupper(trim($_GET['cycle_filter'] ?? ''));
+    $allowedCycles = ['RJ', 'RF', 'RM'];
+
+    if (in_array($cycle, $allowedCycles)) {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT name FROM clients 
+            WHERE name LIKE ? 
+              AND review_cycle = ?
+              AND is_latest = TRUE
+            ORDER BY name ASC LIMIT 10
+        ");
+        $stmt->execute(["%$q%", $cycle]);
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT name FROM clients 
+            WHERE name LIKE ?
+              AND is_latest = TRUE
+            ORDER BY name ASC LIMIT 10
+        ");
         $stmt->execute(["%$q%"]);
-        $clients = [];
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $clients[] = $row['name'];
-        }
-        header('Content-Type: application/json');
-        echo json_encode($clients);
-        exit;
     }
 
+    $clients = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $clients[] = $row['name'];
+    }
+    header('Content-Type: application/json');
+    echo json_encode($clients);
+    exit;
+}
     // Helper: format a date/datetime value for display
     function fmtDate(?string $d, string $fmt = 'd-M-Y'): string
     {
