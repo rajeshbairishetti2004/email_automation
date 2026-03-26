@@ -224,7 +224,8 @@
                                 border-top:none;
                                 max-height:200px;
                                 overflow-y:auto;
-                                box-sizing:border-box;">
+                                box-sizing:border-box;
+                                scrollbar-width: thin;">
                     </div>
                 </div>
 
