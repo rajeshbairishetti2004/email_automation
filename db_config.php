@@ -103,7 +103,12 @@ function getAllActiveUserEmails(): array {
 
 function getReportTemplates(string $section_type): array {
     $pdo = getPdo();
-    $stmt = $pdo->prepare("SELECT id, name, content FROM report_templates WHERE section_type = :section_type ORDER BY name ASC");
+    $stmt = $pdo->prepare("
+        SELECT id, name, content, is_default
+        FROM report_templates
+        WHERE section_type = :section_type
+        ORDER BY name ASC
+    ");
     $stmt->execute([':section_type' => $section_type]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -112,6 +117,21 @@ function deleteTemplate(int $template_id): bool {
     $pdo = getPdo();
     $stmt = $pdo->prepare("DELETE FROM report_templates WHERE id = :id");
     return $stmt->execute([':id' => $template_id]);
+}
+
+if (!function_exists('getDefaultTemplate')) {
+    function getDefaultTemplate($section) {
+        $pdo = getPdo();
+        $stmt = $pdo->prepare("
+            SELECT * 
+            FROM report_templates 
+            WHERE section_type = ? 
+            AND is_default = 1 
+            LIMIT 1
+        ");
+        $stmt->execute([$section]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
 }
 
 function getTemplateContent(int $template_id): ?string {

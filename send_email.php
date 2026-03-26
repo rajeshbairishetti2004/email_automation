@@ -495,12 +495,7 @@ if (isset($_GET['search_emails'], $_GET['query'])) {
                                 </div>
                             </div>
 
-                            <div class="followup-template-options">
-                                <span class="template-label">Quick templates:</span>
-                                <button type="button" class="template-btn" onclick="applyTemplate('default')">Default Follow-up</button>
-                                <button type="button" class="template-btn" onclick="applyTemplate('review')">Quarterly Review</button>
-                                <button type="button" class="template-btn" onclick="applyTemplate('meeting')">Meeting Request</button>
-                            </div>
+                           
                         </div>
                     </div>
                     
@@ -1060,7 +1055,12 @@ function toggleSendAsDropdown() {
         const section = document.getElementById("followup_section");
         const textarea = document.getElementById("followup_message");
 
-        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        const clientName = "<?php
+    $fullName  = $clientInfo['name'] ?? 'Client';
+    $firstName = explode(' ', trim($fullName))[0];
+    $firstName = ucfirst(strtolower($firstName));
+    echo addslashes($firstName);
+?>";
 
         if (checkbox.checked) {
             section.classList.add('active');
@@ -1113,7 +1113,12 @@ function toggleSendAsDropdown() {
     
     function applyTemplate(templateKey) {
         const textarea = document.getElementById('followup_message');
-        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        const clientName = "<?php
+    $fullName  = $clientInfo['name'] ?? 'Client';
+    $firstName = explode(' ', trim($fullName))[0];
+    $firstName = ucfirst(strtolower($firstName));
+    echo addslashes($firstName);
+?>";
         
         // Get the signature from signature.php textarea
         const signatureTextarea = document.getElementById('signature_block');
@@ -1178,7 +1183,12 @@ ${signature}`
     
     function resetFollowupContent() {
         const textarea = document.getElementById('followup_message');
-        const clientName = "<?php echo addslashes($clientInfo['name'] ?? 'Client'); ?>";
+        const clientName = "<?php
+    $fullName  = $clientInfo['name'] ?? 'Client';
+    $firstName = explode(' ', trim($fullName))[0];
+    $firstName = ucfirst(strtolower($firstName));
+    echo addslashes($firstName);
+?>";
         
         // Get the signature from signature.php textarea
         const signatureTextarea = document.getElementById('signature_block');
