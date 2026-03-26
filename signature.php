@@ -11,35 +11,34 @@ $pdo = getPdo();
    ========================================================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     header('Content-Type: application/json');
-    
+
     $ajax_type = $_POST['ajax'];
-    
+
     try {
         switch ($ajax_type) {
+
             // Auto-save signature block when dropdown changes
             case 'save_signature':
-                $clientId = (int)($_POST['client_id'] ?? 0);
-                $userId = (int)($_POST['user_id'] ?? 0);
+                $clientId      = (int)($_POST['client_id'] ?? 0);
+                $userId        = (int)($_POST['user_id'] ?? 0);
                 $signatureText = $_POST['signature_text'] ?? '';
-                
+
                 if ($clientId <= 0) {
                     echo json_encode(['success' => false, 'error' => 'Invalid client ID']);
                     exit;
                 }
-                
-                // Save signature to clients table
-                $stmt = $pdo->prepare("UPDATE clients SET signature_block = :value WHERE id = :id");
-                $stmt->execute([':value' => $signatureText, ':id' => $clientId]);
-                
-                // Also update assigned_to if user is selected
+
+                $pdo->prepare("UPDATE clients SET signature_block = :value WHERE id = :id")
+                    ->execute([':value' => $signatureText, ':id' => $clientId]);
+
                 if ($userId > 0) {
-                    $stmt2 = $pdo->prepare("UPDATE clients SET assigned_to = :user_id WHERE id = :id");
-                    $stmt2->execute([':user_id' => $userId, ':id' => $clientId]);
+                    $pdo->prepare("UPDATE clients SET assigned_to = :user_id WHERE id = :id")
+                        ->execute([':user_id' => $userId, ':id' => $clientId]);
                 }
-                
+
                 echo json_encode(['success' => true, 'message' => 'Signature saved and user assigned']);
                 exit;
-                
+
             // Update user details
             case 'user_update':
                 $userId = (int)($_POST['user_id'] ?? 0);
@@ -47,28 +46,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     echo json_encode(['success' => false, 'error' => 'Invalid user ID']);
                     exit;
                 }
-                
-                $fields = ['name', 'username', 'designation', 'mobile', 'email', 'status'];
+
+                $fields  = ['name', 'username', 'designation', 'mobile', 'email', 'status'];
                 $updates = [];
-                $params = [':id' => $userId];
-                
+                $params  = [':id' => $userId];
+
                 foreach ($fields as $f) {
                     if (isset($_POST[$f])) {
-                        $updates[] = "$f = :$f";
+                        $updates[]   = "$f = :$f";
                         $params[":$f"] = $_POST[$f];
                     }
                 }
-                
+
                 if ($updates) {
-                    $sql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = :id";
-                    $stmt = $pdo->prepare($sql);
-                    $stmt->execute($params);
+                    $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = :id")
+                        ->execute($params);
                     echo json_encode(['success' => true, 'message' => 'User updated successfully']);
                 } else {
                     echo json_encode(['success' => false, 'error' => 'No fields to update']);
                 }
                 exit;
-                
+
             // Add new user
             case 'user_add':
                 $required = ['name', 'username', 'email', 'designation', 'mobile'];
@@ -78,31 +76,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                         exit;
                     }
                 }
-                
-                // Default password
+
                 $defaultPassword = password_hash('Welcome@123', PASSWORD_DEFAULT);
-                
-                $stmt = $pdo->prepare("
-                    INSERT INTO users 
-                    (name, username, email, designation, mobile, password_hash, status, created_at) 
-                    VALUES 
-                    (:name, :username, :email, :designation, :mobile, :password, :status, NOW())
-                ");
-                
-                $stmt->execute([
-                    ':name' => $_POST['name'],
-                    ':username' => $_POST['username'],
-                    ':email' => $_POST['email'],
+
+                $pdo->prepare("
+                    INSERT INTO users (name, username, email, designation, mobile, password_hash, status, created_at)
+                    VALUES (:name, :username, :email, :designation, :mobile, :password, :status, NOW())
+                ")->execute([
+                    ':name'        => $_POST['name'],
+                    ':username'    => $_POST['username'],
+                    ':email'       => $_POST['email'],
                     ':designation' => $_POST['designation'],
-                    ':mobile' => $_POST['mobile'],
-                    ':password' => $defaultPassword,
-                    ':status' => $_POST['status'] ?? 'active'
+                    ':mobile'      => $_POST['mobile'],
+                    ':password'    => $defaultPassword,
+                    ':status'      => $_POST['status'] ?? 'active'
                 ]);
-                
+
                 $newId = $pdo->lastInsertId();
                 echo json_encode(['success' => true, 'message' => 'User added successfully', 'id' => $newId]);
                 exit;
-                
+
             // Delete user
             case 'user_delete':
                 $userId = (int)($_POST['user_id'] ?? 0);
@@ -110,41 +103,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     echo json_encode(['success' => false, 'error' => 'Invalid user ID']);
                     exit;
                 }
-                
-                // Check if this user is assigned to any client
+
                 $checkStmt = $pdo->prepare("SELECT COUNT(*) as count FROM clients WHERE assigned_to = :id");
                 $checkStmt->execute([':id' => $userId]);
                 $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if ($result['count'] > 0) {
                     echo json_encode(['success' => false, 'error' => 'Cannot delete user assigned to clients. Reassign clients first.']);
                     exit;
                 }
-                
-                $stmt = $pdo->prepare("DELETE FROM users WHERE id = :id");
-                $stmt->execute([':id' => $userId]);
-                
+
+                $pdo->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $userId]);
                 echo json_encode(['success' => true, 'message' => 'User deleted successfully']);
                 exit;
-                
+
             // Fetch all users for management
             case 'get_all_users':
-                $stmt = $pdo->query("
-                    SELECT id, username, name, email, mobile, designation, status, 
+                $stmt  = $pdo->query("
+                    SELECT id, username, name, email, mobile, designation, status,
                            DATE_FORMAT(created_at, '%d-%m-%Y %H:%i') as created_date
-                    FROM users 
-                    ORDER BY 
-                        CASE 
+                    FROM users
+                    ORDER BY
+                        CASE
                             WHEN designation = 'Relationship Manager' THEN 1
                             WHEN designation = 'Associate Relationship Manager' THEN 2
                             ELSE 3
-                        END,
-                        name
+                        END, name
                 ");
                 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 echo json_encode(['success' => true, 'users' => $users]);
                 exit;
-                
+
             // Get client signature info
             case 'get_client_signature':
                 $clientId = (int)($_POST['client_id'] ?? 0);
@@ -152,18 +141,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
                     echo json_encode(['success' => false, 'error' => 'Invalid client ID']);
                     exit;
                 }
-                
-                $stmt = $pdo->prepare("SELECT signature_block, assigned_to FROM clients WHERE id = :id");
+
+                $stmt   = $pdo->prepare("SELECT signature_block, assigned_to FROM clients WHERE id = :id");
                 $stmt->execute([':id' => $clientId]);
                 $client = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 echo json_encode([
-                    'success' => true, 
+                    'success'         => true,
                     'signature_block' => $client['signature_block'] ?? '',
-                    'assigned_to' => $client['assigned_to'] ?? 0
+                    'assigned_to'     => $client['assigned_to'] ?? 0
                 ]);
                 exit;
-                
+
             default:
                 echo json_encode(['success' => false, 'error' => 'Invalid AJAX request']);
                 exit;
@@ -179,7 +168,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
    2. NORMAL PAGE LOAD (RENDER SIGNATURE UI)
    ========================================================= */
 
-// Expected variables from view_report.php scope
 $clientId        = (int)($clientId ?? 0);
 $signatureStored = $signatureStored ?? '';
 
@@ -188,104 +176,98 @@ $assignedUserId = 0;
 if ($clientId > 0) {
     $stmt = $pdo->prepare("SELECT signature_block, assigned_to FROM clients WHERE id = :id");
     $stmt->execute([':id' => $clientId]);
-    $clientData = $stmt->fetch(PDO::FETCH_ASSOC);
+    $clientData      = $stmt->fetch(PDO::FETCH_ASSOC);
     $signatureStored = $clientData['signature_block'] ?? '';
-    $assignedUserId = $clientData['assigned_to'] ?? 0;
+    $assignedUserId  = $clientData['assigned_to'] ?? 0;
 }
 
-// Get all active users for dropdown
+// Get all active RM / ARM users for dropdown
 $userStmt = $pdo->query("
     SELECT id, name, username, designation, mobile, email, status
     FROM users
     WHERE designation IN ('Relationship Manager', 'Associate Relationship Manager')
-    AND status = 'active'
-    ORDER BY 
-        CASE 
+      AND status = 'active'
+    ORDER BY
+        CASE
             WHEN designation = 'Relationship Manager' THEN 1
             WHEN designation = 'Associate Relationship Manager' THEN 2
             ELSE 3
-        END,
-        name
+        END, name
 ");
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Also get all users for management view
+// All users for management table
 $allUsersStmt = $pdo->query("
-    SELECT id, username, name, email, mobile, designation, status, 
+    SELECT id, username, name, email, mobile, designation, status,
            DATE_FORMAT(created_at, '%d-%m-%Y %H:%i') as created_date
-    FROM users 
-    ORDER BY 
-        CASE 
+    FROM users
+    ORDER BY
+        CASE
             WHEN designation = 'Relationship Manager' THEN 1
             WHEN designation = 'Associate Relationship Manager' THEN 2
             ELSE 3
-        END,
-        name
+        END, name
 ");
 $allUsers = $allUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Determine default user (assigned user or logged-in user)
+// Default user (logged-in RM)
 $defaultUser = [
-    'name'        => $rmName ?? '',
+    'name'        => $rmName        ?? '',
     'designation' => $rmDesignation ?? '',
-    'mobile'      => $rmMobile ?? '',
-    'email'       => $rmEmail ?? ''
+    'mobile'      => $rmMobile      ?? '',
+    'email'       => $rmEmail       ?? ''
 ];
 
-// Build signature for a user
+/*
+ * build_signature() — returns PLAIN TEXT with \n line breaks.
+ * This is stored in the DB and shown in the textarea.
+ * email_handler.php converts it to HTML at send time via nl2br().
+ */
 function build_signature($user) {
-    return "Regards,\n\n" .
-        "{$user['name']},\n" .
-        "{$user['designation']},\n" .
-        "Finance Doctor Private Limited.\n\n" .
-        "Mobile - {$user['mobile']}\n" .
-        "Email - {$user['email']}\n" .
-        "Url: www.financedoctor.in";
+    return "Regards,\n\n"
+        . $user['name'] . ",\n"
+        . $user['designation'] . ",\n"
+        . "Finance Doctor Private Limited.\n\n"
+        . "Mobile - " . $user['mobile'] . "\n"
+        . "Email - "  . $user['email']  . "\n"
+        . "Url: www.financedoctor.in";
 }
 
-// Find which user is currently assigned and get their signature
+// Build signatures map for all users
 $selectedUserId = $assignedUserId;
-$signaturesMap = [];
+$signaturesMap  = [];
 
-// Build signatures for all users
 foreach ($users as $u) {
     $signaturesMap[$u['id']] = build_signature($u);
-    
-    // If no assigned user but we have stored signature, try to match
+
+    // Try to match stored signature to a user if none is assigned
     if ($selectedUserId == 0 && !empty($signatureStored)) {
-        $userSignature = build_signature($u);
-        if (trim($userSignature) === trim($signatureStored)) {
+        if (trim(build_signature($u)) === trim($signatureStored)) {
             $selectedUserId = $u['id'];
         }
     }
 }
 
-// If we have an assigned user but they're not in active users list,
-// try to get their details anyway
+// If assigned user is inactive/missing from the active list, fetch them anyway
 if ($selectedUserId > 0) {
     $foundInList = false;
     foreach ($users as $u) {
-        if ($u['id'] == $selectedUserId) {
-            $foundInList = true;
-            break;
-        }
+        if ($u['id'] == $selectedUserId) { $foundInList = true; break; }
     }
-    
+
     if (!$foundInList) {
-        // Get the assigned user even if inactive
         $stmt = $pdo->prepare("SELECT id, name, designation, mobile, email, status FROM users WHERE id = :id");
         $stmt->execute([':id' => $selectedUserId]);
         $assignedUser = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($assignedUser) {
-            // Add to users array for dropdown
-            $users[] = $assignedUser;
-            $signaturesMap[$assignedUser['id']] = build_signature($assignedUser);
+            $users[]                               = $assignedUser;
+            $signaturesMap[$assignedUser['id']]    = build_signature($assignedUser);
         }
     }
 }
 
-// Use stored signature if available, otherwise build from selected user
+// Determine what to show in the textarea
 if (!empty($signatureStored)) {
     $signatureBlock = $signatureStored;
 } elseif ($selectedUserId > 0 && isset($signaturesMap[$selectedUserId])) {
@@ -293,15 +275,9 @@ if (!empty($signatureStored)) {
 } else {
     $signatureBlock = build_signature($defaultUser);
 }
-
-// Debug info (remove in production)
-error_log("Client ID: $clientId");
-error_log("Assigned User ID: $selectedUserId");
-error_log("Stored signature length: " . strlen($signatureStored ?? ''));
 ?>
 
 <style>
-/* filepath: c:\xampp\htdocs\email_automation\signature.php */
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 .sig-box {
     margin-top: 22px;
@@ -330,7 +306,6 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
     color: #083744;
     font-size: 15px;
     font-family: 'Roboto', Arial, sans-serif;
-    box-shadow: 0 1px 0 rgba(2,136,209,0.02);
     transition: border 0.15s;
 }
 .sig-select:focus { border-color: #0288d1; outline: none; }
@@ -369,21 +344,20 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
     color: #666;
     cursor: not-allowed;
 }
-/* Remove scroll bar and always show all content in textarea */
 .sig-textarea {
     width: 100%;
     padding: 13px;
     font-size: 15px;
-    min-height: 200px;
+    min-height: 160px;
     box-sizing: border-box;
     border: 1.5px solid #b3e0fc;
     border-radius: 7px;
     background: #fff;
     color: #052b36;
-    resize: none; /* Prevent manual resizing */
+    resize: none;
     font-family: 'Roboto', Arial, sans-serif;
     margin-bottom: 4px;
-    overflow: hidden; /* Hide scroll bar */
+    overflow: hidden;
 }
 .sig-flash { margin-top: 8px; min-height: 26px; font-size: 14px; }
 .sig-btn {
@@ -393,160 +367,57 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
     cursor: pointer;
     font-weight: 600;
     font-size: 13px;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
     transition: background-color 0.12s ease, transform 0.06s ease;
     margin-left: 0;
 }
-.sig-btn.save {
-    background: #0288D1;
-    color: #fff;
-}
-.sig-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
-.sig-btn.edit {
-    background: #039be5;
-    color: #fff;
-}
-.sig-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
+.sig-btn.save  { background: #0288D1; color: #fff; }
+.sig-btn.save:hover  { background: #2eb85c !important; transform: translateY(-1px); }
+.sig-btn.edit  { background: #039be5; color: #fff; }
+.sig-btn.edit:hover  { background: #0288d1; transform: translateY(-1px); }
 .sig-btn.add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; padding: 0;
     border-radius: 50%;
-    background: #eaf7ff;
-    border: 1px solid #cfeefc;
-    color: #0288d1;
+    background: #eaf7ff; border: 1px solid #cfeefc; color: #0288d1;
 }
 .sig-btn.add:hover { background: #b3e0fc; }
-.sig-btn.del {
-    background: #0277bd;
-    color: #fff;
-}
-.sig-btn.del:hover { background: #dc3545 !important; transform: translateY(-1px); }
-.sig-btn.manage {
-    background: #6c757d;
-    color: #fff;
-}
-.sig-btn.manage:hover { background: #5a6268; transform: translateY(-1px); }
-.sig-btn[disabled] {
-    opacity: 0.65;
-    cursor: not-allowed;
-    transform: none !important;
-}
+.sig-btn.del  { background: #0277bd; color: #fff; }
+.sig-btn.del:hover   { background: #dc3545 !important; transform: translateY(-1px); }
+.sig-btn[disabled]   { opacity: 0.65; cursor: not-allowed; transform: none !important; }
 
-/* User Management Modal Styles */
+/* User Management Modal */
 .user-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 1000;
-    justify-content: center;
-    align-items: center;
+    display: none; position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    justify-content: center; align-items: center;
 }
 .user-modal-content {
-    background: white;
-    padding: 25px;
-    border-radius: 10px;
-    max-width: 800px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
+    background: white; padding: 25px; border-radius: 10px;
+    max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
 .user-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 2px solid #e9ecef;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e9ecef;
 }
-.user-modal-header h3 {
-    margin: 0;
-    color: #07394a;
-    font-size: 20px;
-}
-.user-modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: #6c757d;
-    cursor: pointer;
-    line-height: 1;
-}
+.user-modal-header h3 { margin: 0; color: #07394a; font-size: 20px; }
+.user-modal-close { background: none; border: none; font-size: 24px; color: #6c757d; cursor: pointer; line-height: 1; }
 .user-modal-close:hover { color: #dc3545; }
-.user-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 20px;
-}
-.user-table th, .user-table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #dee2e6;
-}
-.user-table th {
-    background: #eaf7ff;
-    color: #0288d1;
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-}
+.user-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.user-table th, .user-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6; }
+.user-table th { background: #eaf7ff; color: #0288d1; font-weight: 600; position: sticky; top: 0; }
 .user-table tr:hover { background: #f8f9fa; }
-.user-status-active { color: #28a745; font-weight: 500; }
+.user-status-active   { color: #28a745; font-weight: 500; }
 .user-status-inactive { color: #dc3545; font-weight: 500; }
-.user-actions {
-    display: flex;
-    gap: 5px;
-}
-.user-form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 20px;
-}
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-.form-group label {
-    font-weight: 500;
-    color: #495057;
-    margin-bottom: 5px;
-    font-size: 14px;
-}
-.form-group input, .form-group select {
-    padding: 8px 12px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 14px;
-}
-.form-group input:focus, .form-group select:focus {
-    border-color: #86b7fe;
-    outline: 0;
-    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
-}
-/* Flash messages */
-.flash-success {
-    background: #d4edda;
-    color: #155724;
-    padding: 8px 12px;
-    border-radius: 4px;
-    border: 1px solid #c3e6cb;
-}
-.flash-error {
-    background: #f8d7da;
-    color: #721c24;
-    padding: 8px 12px;
-    border-radius: 4px;
-    border: 1px solid #f5c6cb;
-}
+.user-actions { display: flex; gap: 5px; }
+.user-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-weight: 500; color: #495057; margin-bottom: 5px; font-size: 14px; }
+.form-group input, .form-group select { padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; }
+.form-group input:focus, .form-group select:focus { border-color: #86b7fe; outline: 0; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
+.flash-success { background: #d4edda; color: #155724; padding: 8px 12px; border-radius: 4px; border: 1px solid #c3e6cb; }
+.flash-error   { background: #f8d7da; color: #721c24; padding: 8px 12px; border-radius: 4px; border: 1px solid #f5c6cb; }
 @media (max-width: 700px) {
     .sig-box { max-width: 100%; }
     .sig-controls, .sig-fields { flex-direction: column; align-items: stretch; }
@@ -562,7 +433,7 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
         <select id="signature_user_selector" class="sig-select">
             <option value="0">-- Select team member signature --</option>
             <?php foreach ($users as $u): ?>
-                <option value="<?= (int)$u['id'] ?>" 
+                <option value="<?= (int)$u['id'] ?>"
                     <?= ($selectedUserId == $u['id']) ? 'selected' : '' ?>>
                     <?= htmlspecialchars($u['name']) ?> (<?= htmlspecialchars($u['designation']) ?>)
                     <?= ($u['status'] == 'inactive') ? ' [Inactive]' : '' ?>
@@ -570,11 +441,12 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
             <?php endforeach; ?>
         </select>
         <button id="signature_add_btn" class="sig-btn add" type="button" title="Add new user" aria-label="Add new user">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </button>
     </div>
+
     <div class="sig-fields" id="sig_fields" style="display:none;">
         <div class="sig-field">
             <label for="sig_name">Name</label>
@@ -599,17 +471,24 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
                 <option value="inactive">Inactive</option>
             </select>
         </div>
-        <button id="sig_edit_btn" class="sig-btn edit" type="button" style="margin-top:8px;align-self:flex-start;">Edit Details</button>
-        <button id="sig_save_btn" class="sig-btn save" type="button" style="margin-top:8px;align-self:flex-start;display:none;">Save Details</button>
-        <button id="sig_cancel_btn" class="sig-btn del" type="button" style="margin-top:8px;align-self:flex-start;display:none;">Cancel</button>
+        <button id="sig_edit_btn"   class="sig-btn edit" type="button" style="margin-top:8px;align-self:flex-start;">Edit Details</button>
+        <button id="sig_save_btn"   class="sig-btn save" type="button" style="margin-top:8px;align-self:flex-start;display:none;">Save Details</button>
+        <button id="sig_cancel_btn" class="sig-btn del"  type="button" style="margin-top:8px;align-self:flex-start;display:none;">Cancel</button>
     </div>
+
+    <!--
+        IMPORTANT: name="custom_signature" — this is what email_handler.php
+        reads as $_POST['custom_signature'] to get the live textarea value
+        at send time, bypassing whatever is stored in the DB.
+    -->
     <textarea
         id="signature_block"
-        name="signature_block"
+        name="custom_signature"
         class="sig-textarea"
         data-client-id="<?= (int)$clientId ?>"
         placeholder="Enter signature here..."
     ><?= htmlspecialchars(trim($signatureBlock)) ?></textarea>
+
     <div id="signature_flash_container" class="sig-flash"></div>
 </div>
 
@@ -620,27 +499,14 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
             <h3>User Management</h3>
             <button class="user-modal-close" id="userModalClose">&times;</button>
         </div>
-        
-        <!-- Add New User Form -->
+
         <div id="addUserForm" style="margin-bottom: 25px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
             <h4 style="margin-top: 0; color: #07394a;">Add New User</h4>
             <div class="user-form-grid">
-                <div class="form-group">
-                    <label for="new_name">Full Name *</label>
-                    <input type="text" id="new_name" placeholder="Enter full name">
-                </div>
-                <div class="form-group">
-                    <label for="new_username">Username *</label>
-                    <input type="text" id="new_username" placeholder="Enter username">
-                </div>
-                <div class="form-group">
-                    <label for="new_email">Email *</label>
-                    <input type="email" id="new_email" placeholder="Enter email">
-                </div>
-                <div class="form-group">
-                    <label for="new_mobile">Mobile *</label>
-                    <input type="text" id="new_mobile" placeholder="Enter mobile number">
-                </div>
+                <div class="form-group"><label for="new_name">Full Name *</label><input type="text" id="new_name" placeholder="Enter full name"></div>
+                <div class="form-group"><label for="new_username">Username *</label><input type="text" id="new_username" placeholder="Enter username"></div>
+                <div class="form-group"><label for="new_email">Email *</label><input type="email" id="new_email" placeholder="Enter email"></div>
+                <div class="form-group"><label for="new_mobile">Mobile *</label><input type="text" id="new_mobile" placeholder="Enter mobile number"></div>
                 <div class="form-group">
                     <label for="new_designation">Designation *</label>
                     <select id="new_designation">
@@ -661,20 +527,12 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
             <button id="addUserBtn" class="sig-btn save" style="margin-top: 10px;">Add User</button>
             <div id="addUserMessage" style="margin-top: 10px;"></div>
         </div>
-        
-        <!-- Users Table -->
+
         <table class="user-table" id="usersTable">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Mobile</th>
-                    <th>Designation</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th>ID</th><th>Name</th><th>Username</th><th>Email</th>
+                    <th>Mobile</th><th>Designation</th><th>Status</th><th>Created</th><th>Actions</th>
                 </tr>
             </thead>
             <tbody id="usersTableBody">
@@ -692,10 +550,8 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
                     <td><?= $user['created_date'] ?></td>
                     <td class="user-actions">
                         <button class="sig-btn edit btn-sm edit-user" data-id="<?= $user['id'] ?>">Edit</button>
-                        <button class="sig-btn del btn-sm delete-user" data-id="<?= $user['id'] ?>" 
-                                <?= $user['status'] === 'active' ? '' : 'style="display:none;"' ?>>
-                            Delete
-                        </button>
+                        <button class="sig-btn del btn-sm delete-user" data-id="<?= $user['id'] ?>"
+                                <?= $user['status'] === 'active' ? '' : 'style="display:none;"' ?>>Delete</button>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -706,53 +562,49 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
 
 <script>
 (function () {
-    const selector = document.getElementById('signature_user_selector');
-    const textarea = document.getElementById('signature_block');
-    const flash    = document.getElementById('signature_flash_container');
-    const fieldsDiv = document.getElementById('sig_fields');
-    const inputName = document.getElementById('sig_name');
-    const inputDesg = document.getElementById('sig_designation');
-    const inputMobile = document.getElementById('sig_mobile');
-    const inputEmail = document.getElementById('sig_email');
-    const inputStatus = document.getElementById('sig_status');
+    const selector       = document.getElementById('signature_user_selector');
+    const textarea       = document.getElementById('signature_block');
+    const flash          = document.getElementById('signature_flash_container');
+    const fieldsDiv      = document.getElementById('sig_fields');
+    const inputName      = document.getElementById('sig_name');
+    const inputDesg      = document.getElementById('sig_designation');
+    const inputMobile    = document.getElementById('sig_mobile');
+    const inputEmail     = document.getElementById('sig_email');
+    const inputStatus    = document.getElementById('sig_status');
     const editDetailsBtn = document.getElementById('sig_edit_btn');
     const saveDetailsBtn = document.getElementById('sig_save_btn');
-    const cancelDetailsBtn = document.getElementById('sig_cancel_btn');
-    const addBtn = document.getElementById('signature_add_btn');
-    
-    // User Management Modal elements
-    const userModal = document.getElementById('userManagementModal');
+    const cancelBtn      = document.getElementById('sig_cancel_btn');
+    const addBtn         = document.getElementById('signature_add_btn');
+    const userModal      = document.getElementById('userManagementModal');
     const userModalClose = document.getElementById('userModalClose');
     const usersTableBody = document.getElementById('usersTableBody');
-    const addUserBtn = document.getElementById('addUserBtn');
+    const addUserBtn     = document.getElementById('addUserBtn');
     const addUserMessage = document.getElementById('addUserMessage');
 
-    // User signatures and details from PHP
+    // Maps injected from PHP
     const userSignatures = <?php echo json_encode($signaturesMap); ?>;
-    
-    const userDetails = <?php
+    const userDetails    = <?php
         $details = [];
         foreach ($users as $u) {
             $details[$u['id']] = [
-                'name' => $u['name'],
+                'name'        => $u['name'],
                 'designation' => $u['designation'],
-                'mobile' => $u['mobile'],
-                'email' => $u['email'],
-                'status' => $u['status']
+                'mobile'      => $u['mobile'],
+                'email'       => $u['email'],
+                'status'      => $u['status']
             ];
         }
         echo json_encode($details);
     ?>;
 
     let originalDetails = {};
-    let autoSaving = false;
-    const clientId = <?= $clientId ?>;
+    let autoSaving      = false;
+    const clientId      = <?= $clientId ?>;
 
+    /* ── Helpers ── */
     function showFlash(type, msg) {
-        flash.innerHTML =
-            '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
-            (type === 'success' ? '✓ ' : '✗ ') + msg +
-            '</div>';
+        flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">'
+            + (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
         setTimeout(() => flash.innerHTML = '', 3000);
     }
 
@@ -765,276 +617,173 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
     textarea.addEventListener('input', () => autoGrow(textarea));
     textarea.addEventListener('paste', () => setTimeout(() => autoGrow(textarea), 0));
 
-    // Helper: build signature from fields
-    function buildSignatureFromFields(name, designation, mobile, email) {
-        return "Regards,\n\n" +
-            name + ",\n" +
-            designation + ",\n" +
-            "Finance Doctor Private Limited.\n\n" +
-            "Mobile - " + mobile + "\n" +
-            "Email - " + email + "\n" +
-            "Url: www.financedoctor.in";
+    /* Build plain-text signature (mirrors PHP build_signature) */
+    function buildSig(name, designation, mobile, email) {
+        return "Regards,\n\n"
+            + name        + ",\n"
+            + designation + ",\n"
+            + "Finance Doctor Private Limited.\n\n"
+            + "Mobile - " + mobile + "\n"
+            + "Email - "  + email  + "\n"
+            + "Url: www.financedoctor.in";
     }
 
-    // Save signature to database
-    function saveSignatureToDatabase(userId, signatureText) {
+    /* Save plain-text signature to DB */
+    function saveToDb(userId, signatureText) {
         if (autoSaving || clientId <= 0) return;
-        
         autoSaving = true;
-        
+
         fetch('signature.php', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
             body: new URLSearchParams({
-                ajax: 'save_signature',
-                client_id: clientId,
-                user_id: userId,
+                ajax:           'save_signature',
+                client_id:      clientId,
+                user_id:        userId,
                 signature_text: signatureText
             })
         })
         .then(r => r.json())
         .then(res => {
             autoSaving = false;
-            if (res.success) {
-                showFlash('success', 'Signature saved');
-                console.log('Signature saved to database for client:', clientId);
-            } else {
-                showFlash('error', res.error || 'Save failed');
-            }
+            if (res.success) showFlash('success', 'Signature saved');
+            else showFlash('error', res.error || 'Save failed');
         })
-        .catch(() => {
-            autoSaving = false;
-            showFlash('error', 'Network error while saving');
-        });
+        .catch(() => { autoSaving = false; showFlash('error', 'Network error while saving'); });
     }
 
-    // Load selected user's signature and details
+    /* ── Dropdown change: load selected user's signature ── */
     selector.addEventListener('change', function () {
         const uid = this.value;
-        
+
         if (uid === '0' || !userSignatures[uid]) {
             fieldsDiv.style.display = 'none';
-            inputName.readOnly = true;
-            inputDesg.readOnly = true;
-            inputMobile.readOnly = true;
-            inputEmail.readOnly = true;
+            [inputName, inputDesg, inputMobile, inputEmail].forEach(el => el.readOnly = true);
             inputStatus.disabled = true;
-            editDetailsBtn.style.display = 'none';
-            saveDetailsBtn.style.display = 'none';
-            cancelDetailsBtn.style.display = 'none';
+            [editDetailsBtn, saveDetailsBtn, cancelBtn].forEach(el => el.style.display = 'none');
             return;
         }
-        
-        // Fill fields with user details
-        inputName.value = userDetails[uid].name || '';
-        inputDesg.value = userDetails[uid].designation || '';
-        inputMobile.value = userDetails[uid].mobile || '';
-        inputEmail.value = userDetails[uid].email || '';
-        inputStatus.value = userDetails[uid].status || 'active';
-        
+
+        inputName.value   = userDetails[uid].name        || '';
+        inputDesg.value   = userDetails[uid].designation || '';
+        inputMobile.value = userDetails[uid].mobile      || '';
+        inputEmail.value  = userDetails[uid].email       || '';
+        inputStatus.value = userDetails[uid].status      || 'active';
+
         fieldsDiv.style.display = '';
-        inputName.readOnly = true;
-        inputDesg.readOnly = true;
-        inputMobile.readOnly = true;
-        inputEmail.readOnly = true;
-        inputStatus.disabled = true;
+        [inputName, inputDesg, inputMobile, inputEmail].forEach(el => el.readOnly = true);
+        inputStatus.disabled   = true;
         editDetailsBtn.style.display = '';
         saveDetailsBtn.style.display = 'none';
-        cancelDetailsBtn.style.display = 'none';
-        
-        // Fill signature textarea with user's signature
-        const userSignature = userSignatures[uid];
-        textarea.value = userSignature;
+        cancelBtn.style.display      = 'none';
+
+        textarea.value = userSignatures[uid];
         autoGrow(textarea);
-        
         showFlash('success', 'Signature loaded from ' + userDetails[uid].name);
-        
-        // Immediately save to database
-        saveSignatureToDatabase(uid, userSignature);
+        saveToDb(uid, userSignatures[uid]);
     });
 
-    // Handle manual edits to signature textarea
+    /* ── Blur auto-save ── */
     textarea.addEventListener('blur', function () {
-        const signatureText = textarea.value.trim();
+        const text   = textarea.value.trim();
         const userId = selector.value;
-        
-        if (signatureText && clientId > 0) {
-            saveSignatureToDatabase(userId, signatureText);
-        }
+        if (text && clientId > 0) saveToDb(userId, text);
     });
 
-    // Also save on Enter key (while not in textarea)
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && document.activeElement !== textarea) {
-            textarea.dispatchEvent(new Event('blur'));
-        }
-    });
-
-    // Edit details: make fields editable, show save/cancel
-    editDetailsBtn.addEventListener('click', function() {
-        inputName.readOnly = false;
-        inputDesg.readOnly = false;
-        inputMobile.readOnly = false;
-        inputEmail.readOnly = false;
-        inputStatus.disabled = false;
+    /* ── Edit / Save / Cancel details ── */
+    editDetailsBtn.addEventListener('click', function () {
+        [inputName, inputDesg, inputMobile, inputEmail].forEach(el => el.readOnly = false);
+        inputStatus.disabled         = false;
         saveDetailsBtn.style.display = '';
-        cancelDetailsBtn.style.display = '';
+        cancelBtn.style.display      = '';
         editDetailsBtn.style.display = 'none';
-        
-        // Save original values for cancel
+
         const uid = selector.value;
         originalDetails = {
-            name: inputName.value,
-            designation: inputDesg.value,
-            mobile: inputMobile.value,
-            email: inputEmail.value,
-            status: inputStatus.value
+            name: inputName.value, designation: inputDesg.value,
+            mobile: inputMobile.value, email: inputEmail.value, status: inputStatus.value
         };
     });
 
-    // Cancel details: revert fields, disable editing
-    cancelDetailsBtn.addEventListener('click', function() {
-        inputName.value = originalDetails.name;
-        inputDesg.value = originalDetails.designation;
+    cancelBtn.addEventListener('click', function () {
+        inputName.value   = originalDetails.name;
+        inputDesg.value   = originalDetails.designation;
         inputMobile.value = originalDetails.mobile;
-        inputEmail.value = originalDetails.email;
+        inputEmail.value  = originalDetails.email;
         inputStatus.value = originalDetails.status;
-        inputName.readOnly = true;
-        inputDesg.readOnly = true;
-        inputMobile.readOnly = true;
-        inputEmail.readOnly = true;
-        inputStatus.disabled = true;
+        [inputName, inputDesg, inputMobile, inputEmail].forEach(el => el.readOnly = true);
+        inputStatus.disabled         = true;
         saveDetailsBtn.style.display = 'none';
-        cancelDetailsBtn.style.display = 'none';
+        cancelBtn.style.display      = 'none';
         editDetailsBtn.style.display = '';
     });
 
-    // Save details: update DB, update UI, disable editing
-    saveDetailsBtn.addEventListener('click', function() {
+    saveDetailsBtn.addEventListener('click', function () {
         const uid = selector.value;
         if (uid === '0' || !userDetails[uid]) return;
-        
+
         const newDetails = {
-            name: inputName.value.trim(),
+            name:        inputName.value.trim(),
             designation: inputDesg.value.trim(),
-            mobile: inputMobile.value.trim(),
-            email: inputEmail.value.trim(),
-            status: inputStatus.value
+            mobile:      inputMobile.value.trim(),
+            email:       inputEmail.value.trim(),
+            status:      inputStatus.value
         };
-        
-        // Validate
+
         for (let key in newDetails) {
-            if (!newDetails[key]) {
-                showFlash('error', `${key} cannot be empty`);
-                return;
-            }
+            if (!newDetails[key]) { showFlash('error', key + ' cannot be empty'); return; }
         }
-        
-        // Save to DB
-        const data = new URLSearchParams();
-        data.append('ajax', 'user_update');
-        data.append('user_id', uid);
-        for (let key in newDetails) {
-            data.append(key, newDetails[key]);
-        }
-        
+
+        const data = new URLSearchParams({ ajax: 'user_update', user_id: uid });
+        for (let key in newDetails) data.append(key, newDetails[key]);
+
         saveDetailsBtn.disabled = true;
-        fetch('signature.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: data
-        })
+        fetch('signature.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: data })
         .then(r => r.json())
         .then(res => {
             saveDetailsBtn.disabled = false;
             if (res.success) {
-                // Update local user details
-                userDetails[uid] = {...newDetails};
-                
-                // Rebuild and update signature
-                const newSignature = buildSignatureFromFields(
-                    newDetails.name, newDetails.designation, newDetails.mobile, newDetails.email
-                );
-                userSignatures[uid] = newSignature;
-                textarea.value = newSignature;
+                userDetails[uid]    = { ...newDetails };
+                const newSig        = buildSig(newDetails.name, newDetails.designation, newDetails.mobile, newDetails.email);
+                userSignatures[uid] = newSig;
+                textarea.value      = newSig;
                 autoGrow(textarea);
-                
                 showFlash('success', 'User details updated.');
-                
-                // Save updated signature to database
-                saveSignatureToDatabase(uid, newSignature);
-                
-                // Disable editing mode
-                inputName.readOnly = true;
-                inputDesg.readOnly = true;
-                inputMobile.readOnly = true;
-                inputEmail.readOnly = true;
-                inputStatus.disabled = true;
+                saveToDb(uid, newSig);
+
+                [inputName, inputDesg, inputMobile, inputEmail].forEach(el => el.readOnly = true);
+                inputStatus.disabled         = true;
                 saveDetailsBtn.style.display = 'none';
-                cancelDetailsBtn.style.display = 'none';
+                cancelBtn.style.display      = 'none';
                 editDetailsBtn.style.display = '';
-                
-                // Update selector text
-                const option = selector.querySelector(`option[value="${uid}"]`);
-                if (option) {
-                    option.textContent = `${newDetails.name} (${newDetails.designation})`;
-                    if (newDetails.status === 'inactive') {
-                        option.textContent += ' [Inactive]';
-                    }
+
+                const opt = selector.querySelector(`option[value="${uid}"]`);
+                if (opt) {
+                    opt.textContent = newDetails.name + ' (' + newDetails.designation + ')'
+                        + (newDetails.status === 'inactive' ? ' [Inactive]' : '');
                 }
-                
-                // Refresh user management table
                 loadAllUsers();
             } else {
                 showFlash('error', res.error || 'Update failed');
             }
         })
-        .catch(() => {
-            saveDetailsBtn.disabled = false;
-            showFlash('error', 'Network error while updating user');
-        });
+        .catch(() => { saveDetailsBtn.disabled = false; showFlash('error', 'Network error while updating user'); });
     });
 
-    // Add new user button
-    addBtn.addEventListener('click', function() {
-        userModal.style.display = 'flex';
-        document.getElementById('new_name').focus();
-    });
+    /* ── Modal: open / close ── */
+    addBtn.addEventListener('click', () => { userModal.style.display = 'flex'; document.getElementById('new_name').focus(); });
+    userModalClose.addEventListener('click', () => userModal.style.display = 'none');
+    window.addEventListener('click', e => { if (e.target === userModal) userModal.style.display = 'none'; });
 
-    // Close modal
-    userModalClose.addEventListener('click', function() {
-        userModal.style.display = 'none';
-    });
-
-    // Close modal when clicking outside
-    window.addEventListener('click', function(event) {
-        if (event.target === userModal) {
-            userModal.style.display = 'none';
-        }
-    });
-
-    // Load all users for management table
+    /* ── Load all users table ── */
     function loadAllUsers() {
-        const data = new URLSearchParams();
-        data.append('ajax', 'get_all_users');
-        
-        fetch('signature.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: data
-        })
+        fetch('signature.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: new URLSearchParams({ ajax: 'get_all_users' }) })
         .then(r => r.json())
-        .then(res => {
-            if (res.success) {
-                updateUsersTable(res.users);
-            }
-        })
+        .then(res => { if (res.success) updateUsersTable(res.users); })
         .catch(console.error);
     }
 
-    // Update users table
     function updateUsersTable(users) {
         usersTableBody.innerHTML = '';
         users.forEach(user => {
@@ -1042,235 +791,125 @@ error_log("Stored signature length: " . strlen($signatureStored ?? ''));
             row.dataset.id = user.id;
             row.innerHTML = `
                 <td>${user.id}</td>
-                <td>${escapeHtml(user.name)}</td>
-                <td>${escapeHtml(user.username)}</td>
-                <td>${escapeHtml(user.email)}</td>
-                <td>${escapeHtml(user.mobile)}</td>
-                <td>${escapeHtml(user.designation)}</td>
+                <td>${esc(user.name)}</td><td>${esc(user.username)}</td>
+                <td>${esc(user.email)}</td><td>${esc(user.mobile)}</td>
+                <td>${esc(user.designation)}</td>
                 <td class="${user.status === 'active' ? 'user-status-active' : 'user-status-inactive'}">
                     ${user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                 </td>
                 <td>${user.created_date}</td>
                 <td class="user-actions">
                     <button class="sig-btn edit btn-sm edit-user" data-id="${user.id}">Edit</button>
-                    <button class="sig-btn del btn-sm delete-user" data-id="${user.id}" 
-                            ${user.status === 'active' ? '' : 'style="display:none;"'}>
-                        Delete
-                    </button>
-                </td>
-            `;
+                    <button class="sig-btn del btn-sm delete-user" data-id="${user.id}"
+                            ${user.status === 'active' ? '' : 'style="display:none;"'}>Delete</button>
+                </td>`;
             usersTableBody.appendChild(row);
         });
-        
-        // Attach event listeners to new buttons
-        attachTableEventListeners();
+        attachTableListeners();
     }
 
-    // Add new user
-    addUserBtn.addEventListener('click', function() {
+    /* ── Add new user ── */
+    addUserBtn.addEventListener('click', function () {
         const newUser = {
-            name: document.getElementById('new_name').value.trim(),
-            username: document.getElementById('new_username').value.trim(),
-            email: document.getElementById('new_email').value.trim(),
-            mobile: document.getElementById('new_mobile').value.trim(),
+            name:        document.getElementById('new_name').value.trim(),
+            username:    document.getElementById('new_username').value.trim(),
+            email:       document.getElementById('new_email').value.trim(),
+            mobile:      document.getElementById('new_mobile').value.trim(),
             designation: document.getElementById('new_designation').value,
-            status: document.getElementById('new_status').value
+            status:      document.getElementById('new_status').value
         };
-        
-        // Validate
+
         for (let key in newUser) {
-            if (!newUser[key]) {
-                showAddMessage('error', `Please fill all required fields`);
-                return;
-            }
+            if (!newUser[key]) { showAddMsg('error', 'Please fill all required fields'); return; }
         }
-        
-        // Email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(newUser.email)) {
-            showAddMessage('error', 'Please enter a valid email address');
-            return;
-        }
-        
-        // Mobile validation
-        const mobileRegex = /^[0-9]{10}$/;
-        if (!mobileRegex.test(newUser.mobile)) {
-            showAddMessage('error', 'Please enter a valid 10-digit mobile number');
-            return;
-        }
-        
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) { showAddMsg('error', 'Invalid email'); return; }
+        if (!/^[0-9]{10}$/.test(newUser.mobile)) { showAddMsg('error', 'Mobile must be 10 digits'); return; }
+
         addUserBtn.disabled = true;
-        const data = new URLSearchParams();
-        data.append('ajax', 'user_add');
-        for (let key in newUser) {
-            data.append(key, newUser[key]);
-        }
-        
-        fetch('signature.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: data
-        })
+        const data = new URLSearchParams({ ajax: 'user_add' });
+        for (let key in newUser) data.append(key, newUser[key]);
+
+        fetch('signature.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: data })
         .then(r => r.json())
         .then(res => {
             addUserBtn.disabled = false;
             if (res.success) {
-                showAddMessage('success', 'User added successfully');
-                // Clear form
-                document.getElementById('new_name').value = '';
-                document.getElementById('new_username').value = '';
-                document.getElementById('new_email').value = '';
-                document.getElementById('new_mobile').value = '';
+                showAddMsg('success', 'User added successfully');
+                ['new_name','new_username','new_email','new_mobile'].forEach(id => document.getElementById(id).value = '');
                 document.getElementById('new_designation').value = '';
                 document.getElementById('new_status').value = 'active';
-                
-                // Refresh table
                 loadAllUsers();
-                
-                // Add to selector if active and appropriate designation
-                if (newUser.status === 'active' && 
-                    (newUser.designation === 'Relationship Manager' || 
-                     newUser.designation === 'Associate Relationship Manager')) {
-                    const option = document.createElement('option');
-                    option.value = res.id;
-                    option.textContent = `${newUser.name} (${newUser.designation})`;
-                    selector.appendChild(option);
-                    
-                    // Add to local arrays
-                    userDetails[res.id] = {
-                        name: newUser.name,
-                        designation: newUser.designation,
-                        mobile: newUser.mobile,
-                        email: newUser.email,
-                        status: newUser.status
-                    };
-                    userSignatures[res.id] = buildSignatureFromFields(
-                        newUser.name, newUser.designation, newUser.mobile, newUser.email
-                    );
+
+                if (newUser.status === 'active' &&
+                    ['Relationship Manager','Associate Relationship Manager'].includes(newUser.designation)) {
+                    const opt = document.createElement('option');
+                    opt.value       = res.id;
+                    opt.textContent = `${newUser.name} (${newUser.designation})`;
+                    selector.appendChild(opt);
+                    userDetails[res.id]    = { ...newUser };
+                    userSignatures[res.id] = buildSig(newUser.name, newUser.designation, newUser.mobile, newUser.email);
                 }
             } else {
-                showAddMessage('error', res.error || 'Failed to add user');
+                showAddMsg('error', res.error || 'Failed to add user');
             }
         })
-        .catch(() => {
-            addUserBtn.disabled = false;
-            showAddMessage('error', 'Network error');
-        });
+        .catch(() => { addUserBtn.disabled = false; showAddMsg('error', 'Network error'); });
     });
 
-    function showAddMessage(type, msg) {
-        addUserMessage.innerHTML = `<div class="${type === 'success' ? 'flash-success' : 'flash-error'}" style="margin-top: 10px;">
-            ${msg}
-        </div>`;
+    function showAddMsg(type, msg) {
+        addUserMessage.innerHTML = `<div class="${type === 'success' ? 'flash-success' : 'flash-error'}">${msg}</div>`;
         setTimeout(() => addUserMessage.innerHTML = '', 3000);
     }
 
-    // Attach event listeners to table buttons
-    function attachTableEventListeners() {
-        // Edit user buttons
-        document.querySelectorAll('.edit-user').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const userId = this.dataset.id;
-                editUser(userId);
-            });
-        });
-        
-        // Delete user buttons
-        document.querySelectorAll('.delete-user').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const userId = this.dataset.id;
-                deleteUser(userId);
-            });
-        });
+    function attachTableListeners() {
+        document.querySelectorAll('.edit-user').forEach(btn =>
+            btn.addEventListener('click', function () { editUser(this.dataset.id); }));
+        document.querySelectorAll('.delete-user').forEach(btn =>
+            btn.addEventListener('click', function () { deleteUser(this.dataset.id); }));
     }
 
     function editUser(userId) {
-        const row = document.querySelector(`tr[data-id="${userId}"]`);
-        if (!row) return;
-        
-        const cells = row.querySelectorAll('td');
-        const name = cells[1].textContent;
-        const username = cells[2].textContent;
-        const email = cells[3].textContent;
-        const mobile = cells[4].textContent;
-        const designation = cells[5].textContent;
-        const status = cells[6].textContent.toLowerCase();
-        
-        // Populate signature fields and selector
         selector.value = userId;
-        
-        // If this user is in the selector, trigger change
         if (userDetails[userId]) {
             selector.dispatchEvent(new Event('change'));
-            // Switch to edit mode
             setTimeout(() => editDetailsBtn.click(), 100);
         } else {
-            alert('This user is not available in the signature selector. You can still edit in the database.');
+            alert('User not in signature selector. Edit via database.');
         }
-        
-        // Close modal
         userModal.style.display = 'none';
     }
 
     function deleteUser(userId) {
-        if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-            return;
-        }
-        
-        const data = new URLSearchParams();
-        data.append('ajax', 'user_delete');
-        data.append('user_id', userId);
-        
-        fetch('signature.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: data
-        })
+        if (!confirm('Delete this user? This cannot be undone.')) return;
+
+        fetch('signature.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: new URLSearchParams({ ajax: 'user_delete', user_id: userId }) })
         .then(r => r.json())
         .then(res => {
             if (res.success) {
-                // Remove from table
-                const row = document.querySelector(`tr[data-id="${userId}"]`);
-                if (row) row.remove();
-                
-                // Remove from selector if present
-                const option = selector.querySelector(`option[value="${userId}"]`);
-                if (option) option.remove();
-                
-                // Remove from local arrays
+                document.querySelector(`tr[data-id="${userId}"]`)?.remove();
+                selector.querySelector(`option[value="${userId}"]`)?.remove();
                 delete userDetails[userId];
                 delete userSignatures[userId];
-                
-                showAddMessage('success', 'User deleted successfully');
+                showAddMsg('success', 'User deleted successfully');
             } else {
-                showAddMessage('error', res.error || 'Failed to delete user');
+                showAddMsg('error', res.error || 'Failed to delete user');
             }
         })
-        .catch(() => {
-            showAddMessage('error', 'Network error');
-        });
+        .catch(() => showAddMsg('error', 'Network error'));
     }
 
-    // Helper function to escape HTML
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    function esc(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
     }
 
-    // Initial attachment of event listeners
-    attachTableEventListeners();
-    
-    // Trigger change event on page load to populate fields
+    attachTableListeners();
+
+    // On page load, trigger change to populate fields if a user is already selected
     setTimeout(() => {
-        if (selector.value !== '0') {
-            selector.dispatchEvent(new Event('change'));
-        }
+        if (selector.value !== '0') selector.dispatchEvent(new Event('change'));
     }, 100);
-    
-    // Log initial state for debugging
-    console.log('Client ID:', clientId);
-    console.log('Selected User ID:', selector.value);
-    console.log('Signature in textarea:', textarea.value.substring(0, 100));
 })();
 </script>

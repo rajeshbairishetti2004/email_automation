@@ -576,6 +576,13 @@ if (!$client) {
                 color: #0056b3;
             }
         </style>
+        <script>
+    if (history.scrollRestoration) {
+        history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+</script>
+
     </head>
 
     <body>
@@ -745,6 +752,11 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
             overflow: visible;
         }
     </style>
+        <script>
+        if (history.scrollRestoration) {
+            history.scrollRestoration = 'manual';
+        }
+    </script>
 </head>
 
 <body>
@@ -1247,7 +1259,12 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
         }
 
         // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
-        document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
+     window.scrollTo(0, 0);
+     // Delayed scroll to override any editor initialization auto-scrolling
+     setTimeout(function() { window.scrollTo(0, 0); }, 200);
+     setTimeout(function() { window.scrollTo(0, 0); }, 500);
+     setTimeout(function() { window.scrollTo(0, 0); }, 1000);
 
                     const resizableTextareas = document.querySelectorAll('.large-textarea, .seamless-input, .rat-main-textarea');
                     resizableTextareas.forEach(textarea => {
@@ -1310,7 +1327,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
                                         showContextualFlash('success', `Template "${templateName}" deleted. Reloading...`, `${templateSection}_flash_container`);
 
                                         // FIX: Use window.location.href to force a non-cached reload
-                                        window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1#rationale_module';
+                                       window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1';
 
                                     } else {
                                         showContextualFlash('error', `❌ Failed to delete template: ${data.error}`, `${templateSection}_flash_container`);

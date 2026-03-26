@@ -280,8 +280,8 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
 
     .comm-quill-wrap .ql-editor {
         min-height: 100px;
-        max-height: 360px;
-        overflow-y: auto;
+        height: auto;
+        overflow-y: hidden;
         font-family: Inter, Arial, sans-serif;
         font-size: 14px;
         color: #052b36;
@@ -458,6 +458,19 @@ foreach ($sections as $sec => $data):
 
     quill.on('text-change', syncToHidden);
 
+    /* ── AUTO-RESIZE: grow editor with content, no scrollbar ── */
+function autoResize() {
+    const editor = document.querySelector('#' + SEC + '_quill_editor .ql-editor');
+    if (!editor) return;
+    editor.style.height = 'auto';
+    editor.style.height = editor.scrollHeight + 'px';
+}
+quill.on('text-change', autoResize);
+// Run once on load so initial content sets the right height
+setTimeout(autoResize, 150);
+
+
+
     /* ── HELPERS ── */
     function showFlash(type, msg) {
         flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">'
@@ -531,17 +544,21 @@ foreach ($sections as $sec => $data):
         return frag.innerHTML;
     }
 
-    /* ── LOAD STORED HTML into Quill ── */
+/* ── LOAD STORED HTML into Quill (no-scroll init) ── */
     (function loadStoredContent() {
+        quill.root.setAttribute('contenteditable', 'false');
         const stored = hiddenTA.value.trim();
         if (stored) {
             quill.clipboard.dangerouslyPasteHTML(stored);
+            syncToHidden();
         }
+        setTimeout(function() {
+            if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+        }, 100);
     })();
 
     /* ── AUTO-SAVE greeting on first visit if name was missing ── */
     if (GREETING_NEEDS_SAVE && !IS_LOCKED) {
-        // Give Quill a tick to fully render before reading innerHTML
         setTimeout(function () {
             const html = quill.root.innerHTML;
             saveToServer(html, true /* silent */);
@@ -558,6 +575,7 @@ foreach ($sections as $sec => $data):
         const isStoredEmpty  = !hiddenTA.value || hiddenTA.value === '<p><br></p>';
 
         if (isEditorEmpty && isStoredEmpty) {
+            quill.root.setAttribute('contenteditable', 'false');
             let decoded = selectedOption.getAttribute('data-content') || '';
             const tmp = document.createElement('div');
             tmp.innerHTML = decoded;
@@ -570,12 +588,15 @@ foreach ($sections as $sec => $data):
             quill.clipboard.dangerouslyPasteHTML(decoded);
             syncToHidden();
 
+            setTimeout(function() {
+                if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+            }, 100);
+
             if (!IS_LOCKED) {
                 saveToServer(quill.root.innerHTML, true /* silent */);
             }
         }
     })();
-
     /* ── Tracking for auto-save ── */
     let lastSaved = '';
     setTimeout(() => { lastSaved = quill.root.innerHTML; }, 0);

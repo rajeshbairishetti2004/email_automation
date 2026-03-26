@@ -538,35 +538,36 @@ $templates     = $templates     ?? [];
             syncToHidden(); // merged
         });
 
-        (function loadStored() {
-            const stored = hiddenTA.value.trim();
-            if (stored) {
-                quill.clipboard.dangerouslyPasteHTML(stored);
-            }
-        })();
-        // AUTO LOAD DEFAULT TEMPLATE ON PAGE LOAD
-        (function loadDefaultTemplate() {
-            if (!selector) return;
+(function initEditor() {
+    // Disable focusability during load to prevent auto-scroll
+    quill.root.setAttribute('contenteditable', 'false');
 
-            const selectedOption = selector.options[selector.selectedIndex];
-            if (!selectedOption || selector.value === "0") return;
+    const stored = hiddenTA.value.trim();
 
-            const tmp = document.createElement('div');
-            tmp.innerHTML = selectedOption.getAttribute('data-content') || '';
+    if (stored) {
+        // Load saved DB content
+        quill.clipboard.dangerouslyPasteHTML(stored);
+        syncToHidden();
+    } else if (selector && selector.value !== "0") {
+        // No saved content — load default template
+        const selectedOption = selector.options[selector.selectedIndex];
+        const tmp = document.createElement('div');
+        tmp.innerHTML = selectedOption.getAttribute('data-content') || '';
+        quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
+        syncToHidden();
+        if (!IS_LOCKED) {
+            performSave(quill.root.innerHTML);
+        }
+    }
 
-            // Only load if editor is empty (important!)
-            if (!quill.getText().trim()) {
-                quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
-                syncToHidden();
-
-                if (!IS_LOCKED && !hiddenTA.value.trim()) {
-                    performSave(quill.root.innerHTML);
-                }
-            }
-        })();
-
-
-        /* ── LOAD stored HTML into Quill ── */
+    // Re-enable editing after load, then scroll to top
+    setTimeout(function() {
+        if (!IS_LOCKED) {
+            quill.root.setAttribute('contenteditable', 'true');
+        }
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }, 100);
+})();
 
 
         /* ── SYNC Quill → hidden textarea ── */
