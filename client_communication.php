@@ -3,6 +3,8 @@
 // Complete standalone template management for greeting, intro, and closing sections
 // Also handles workflow actions and auto-save
 // UPDATED: Greeting auto-appends client first name when template is loaded or on first visit
+// UPDATED: Default templates auto-load into empty editors on page load
+// UPDATED: Falls back to first template if no is_default=1 found (mirrors rationale.php)
 
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
@@ -43,8 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             $stmt->execute([$name, $section, $content]);
             $newId = $pdo->lastInsertId();
 
-            $response = ['success' => true, 'new_id' => $newId,
-                         'template_name' => $name, 'template_content' => $content];
+            $response = [
+                'success' => true,
+                'new_id' => $newId,
+                'template_name' => $name,
+                'template_content' => $content
+            ];
         } elseif ($action === 'save_draft') {
             $clientId = (int)($_POST['client_id'] ?? 0);
             if ($clientId <= 0) throw new Exception("Invalid Client ID.");
@@ -123,41 +129,28 @@ if (!isset($greetingStored) || !isset($introTextStored) || !isset($closingTextSt
 }
 
 // ── Derive client first name ──────────────────────────────────────────────────
-// $name is set by view_report.php before this file is included.
-// We extract only the first word of the full name as the salutation first name.
 $clientFirstName = '';
 if (!empty($name)) {
     $clientFirstName = explode(' ', trim($name))[0];
-    // Title-case it cleanly
     $clientFirstName = ucfirst(strtolower($clientFirstName));
 }
 
 // ── Decide whether the stored greeting already contains the client name ───────
-// Strategy: if the stored greeting is plain text that equals a bare salutation
-// (no HTML, no name beyond "Mr." / "Mrs." etc.) we need to append the first name.
-// We detect "needs name" when the stripped text does NOT already contain the
-// client first name (case-insensitive).
 function _greetingNeedsName(string $stored, string $firstName): bool
 {
     if ($firstName === '') return false;
-    // Strip HTML tags to get plain text
     $plain = trim(strip_tags($stored));
-    // If empty → definitely needs name
     if ($plain === '') return true;
-    // If already contains the first name (case-insensitive) → name already there
     if (mb_stripos($plain, $firstName) !== false) return false;
-    // Bare salutation patterns: "Dear Mr.", "Dear Mrs.", "Dear", "Hello", etc.
     return true;
 }
 
 $greetingNeedsName = _greetingNeedsName($greetingStored, $clientFirstName);
 
-// If greeting is empty or bare default, build a proper initial value:
-// "<stored/default> <FirstName>,"
+// If greeting is empty or bare default, build a proper initial value
 $BARE_DEFAULTS = ['Dear Mr.', 'Dear Mrs.', 'Dear Ms.', 'Dear Dr.', 'Dear', 'Hello'];
 
 if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_DEFAULTS, true)) {
-    // Stored is literally the default constant — build a full greeting
     $salutation = trim(strip_tags($greetingStored));
     if ($salutation === '') $salutation = 'Dear Mr.';
     if ($clientFirstName !== '') {
@@ -165,19 +158,13 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
     } else {
         $greetingInitial = $salutation;
     }
-    // If it had HTML colour formatting, keep the HTML but append name in plain text after
-    // For bare default (no HTML) just use the plain string
     if (strip_tags($greetingStored) === $greetingStored) {
-        // No HTML — use plain constructed string
         $greetingForEditor = $greetingInitial;
     } else {
-        // Had HTML — append name outside HTML
         $greetingForEditor = rtrim($greetingStored, ' ,') . ' ' . $clientFirstName . ',';
     }
-    // Auto-save this back to DB so it persists without needing user interaction
     $greetingNeedsSave = true;
 } else {
-    // Stored value already has the name (or is a custom greeting)
     $greetingForEditor = $greetingStored;
     $greetingNeedsSave = false;
 }
@@ -185,7 +172,7 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
 ?>
 
 <?php if (!defined('QUILL_CSS_LOADED')): define('QUILL_CSS_LOADED', true); ?>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css" rel="stylesheet">
 <?php endif; ?>
 
 <style>
@@ -251,7 +238,8 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
     .comm-btn.del   { background: #0277bd; color: #fff; }
     .comm-btn.del:hover   { background: #dc3545 !important; transform: translateY(-1px); }
 
-    .comm-btn:focus, .comm-select:focus {
+    .comm-btn:focus,
+    .comm-select:focus {
         outline: 3px solid rgba(2, 136, 209, 0.12);
         outline-offset: 2px;
     }
@@ -295,13 +283,13 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
         font-size: 13px;
     }
 
-    .comm-quill-wrap .ql-toolbar .ql-stroke  { stroke: #4a7a92; }
-    .comm-quill-wrap .ql-toolbar .ql-fill    { fill:   #4a7a92; }
+    .comm-quill-wrap .ql-toolbar .ql-stroke { stroke: #4a7a92; }
+    .comm-quill-wrap .ql-toolbar .ql-fill   { fill: #4a7a92; }
     .comm-quill-wrap .ql-toolbar button:hover .ql-stroke { stroke: #0288d1; }
-    .comm-quill-wrap .ql-toolbar button:hover .ql-fill   { fill:   #0288d1; }
-    .comm-quill-wrap .ql-toolbar .ql-active  .ql-stroke  { stroke: #0288d1; }
-    .comm-quill-wrap .ql-toolbar .ql-active  .ql-fill    { fill:   #0288d1; }
-    .comm-quill-wrap .ql-snow .ql-picker      { color: #4a7a92; }
+    .comm-quill-wrap .ql-toolbar button:hover .ql-fill   { fill: #0288d1; }
+    .comm-quill-wrap .ql-toolbar .ql-active .ql-stroke   { stroke: #0288d1; }
+    .comm-quill-wrap .ql-toolbar .ql-active .ql-fill     { fill: #0288d1; }
+    .comm-quill-wrap .ql-snow .ql-picker { color: #4a7a92; }
     .comm-quill-wrap .ql-snow .ql-picker-options {
         background: #fff;
         border: 1px solid #dbeefb;
@@ -312,13 +300,21 @@ if ($greetingStored === '' || in_array(trim(strip_tags($greetingStored)), $BARE_
     .comm-quill-wrap.is-locked .ql-toolbar { display: none; }
     .comm-quill-wrap.is-locked .ql-editor  { background: #f8fbff; cursor: default; }
 
-    .comm-flash      { margin-top: 8px; min-height: 26px; font-size: 13px; }
-    .flash-success   { color: #2eb85c; background: #edf9f0; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #2eb85c; }
-    .flash-error     { color: #dc3545; background: #fef2f2; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #dc3545; }
+    .comm-flash { margin-top: 8px; min-height: 26px; font-size: 13px; }
+
+    .flash-success {
+        color: #2eb85c; background: #edf9f0;
+        padding: 6px 10px; border-radius: 4px; border-left: 3px solid #2eb85c;
+    }
+
+    .flash-error {
+        color: #dc3545; background: #fef2f2;
+        padding: 6px 10px; border-radius: 4px; border-left: 3px solid #dc3545;
+    }
 
     @media (max-width: 640px) {
-        .comm-controls  { flex-direction: column; align-items: stretch; }
-        .comm-select    { width: 100%; }
+        .comm-controls { flex-direction: column; align-items: stretch; }
+        .comm-select { width: 100%; }
         .comm-btn:not(.add) { width: 100%; text-align: center; }
     }
 </style>
@@ -340,7 +336,6 @@ if (!isset($isLocked)) {
 $sections = [
     'greeting' => [
         'title'       => 'Greeting',
-        // Use the pre-processed value that already has the first name appended
         'stored'      => $greetingForEditor,
         'db_field'    => 'greeting_prefix',
         'placeholder' => 'Enter greeting text…',
@@ -360,385 +355,379 @@ $sections = [
 ];
 
 foreach ($sections as $sec => $data):
-    $tpls      = $templates[$sec] ?? [];
-    $editorId  = $sec . '_quill_editor';
-    $wrapperId = $sec . '_quill_wrap';
+    $tpls = $templates[$sec] ?? [];
+
+    // ── Find default template for this section ────────────────────────────────
+    // Priority 1: template with is_default = 1
+    // Priority 2 (fallback): first template in list  ← mirrors rationale.php exactly
+    $defaultTemplateId      = 0;
+    $defaultTemplateContent = '';
+
+    if (!empty($tpls)) {
+        // Try explicitly-marked default first
+        foreach ($tpls as $t) {
+            if ((int)($t['is_default'] ?? 0) === 1) {
+                $defaultTemplateId      = (int)$t['id'];
+                $defaultTemplateContent = (string)($t['content'] ?? '');
+                break;
+            }
+        }
+        // Fallback: first template when none is marked default
+        if ($defaultTemplateId === 0) {
+            $defaultTemplateId      = (int)$tpls[0]['id'];
+            $defaultTemplateContent = (string)($tpls[0]['content'] ?? '');
+        }
+    }
 ?>
-<div class="comm-section" id="<?= $sec ?>_section">
-    <div class="comm-header">
-        <div class="comm-title">
-            <?= htmlspecialchars($data['title']) ?>
-            <?php if ($isLocked): ?>
-                <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
-            <?php endif; ?>
+    <div class="comm-section" id="<?= $sec ?>_section">
+        <div class="comm-header">
+            <div class="comm-title">
+                <?= htmlspecialchars($data['title']) ?>
+                <?php if ($isLocked): ?>
+                    <span title="Locked" style="margin-left:8px;color:#888;vertical-align:middle;">🔒</span>
+                <?php endif; ?>
+            </div>
         </div>
+
+        <div class="comm-controls">
+            <select id="<?= $sec ?>_template_selector" class="comm-select" <?= $isLocked ? 'disabled' : '' ?>>
+                <option value="0">-- Select saved <?= strtolower($data['title']) ?> template --</option>
+                <?php foreach ($tpls as $t):
+                    $tid        = (int)($t['id'] ?? 0);
+                    $tname      = htmlspecialchars($t['name'] ?? '');
+                    $tcontent   = htmlspecialchars($t['content'] ?? '', ENT_QUOTES);
+                    // Pre-select the default/first template in the dropdown — mirrors rationale.php
+                    $isSelected = ($tid === $defaultTemplateId) ? 'selected' : '';
+                ?>
+                    <option value="<?= $tid ?>" data-content="<?= $tcontent ?>" <?= $isSelected ?>>
+                        <?= $tname ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <!-- Quill editor -->
+        <div id="<?= $sec ?>_quill_wrap" class="comm-quill-wrap<?= $isLocked ? ' is-locked' : '' ?>">
+            <div id="<?= $sec ?>_quill_editor"></div>
+        </div>
+
+        <!-- Hidden textarea for form POST fallback -->
+        <textarea
+            id="<?= $sec ?>_textarea"
+            name="<?= $sec ?>"
+            data-client-id="<?= (int)$clientId ?>"
+            data-field="<?= $data['db_field'] ?>"
+            style="display:none;"><?= htmlspecialchars($data['stored']) ?></textarea>
+
+        <div id="<?= $sec ?>_flash_container" class="comm-flash"></div>
     </div>
 
-    <div class="comm-controls">
-        <select id="<?= $sec ?>_template_selector" class="comm-select" <?= $isLocked ? 'disabled' : '' ?>>
-            <option value="0">-- Select saved <?= strtolower($data['title']) ?> template --</option>
-            <?php
-            $defaultTemplateId = 0;
-            if (!empty($tpls)) {
-                foreach ($tpls as $t) {
-                    if ((int)($t['is_default'] ?? 0) === 1) {
-                        $defaultTemplateId = (int)$t['id'];
-                        break;
+    <?php if (!defined('QUILL_JS_LOADED')): define('QUILL_JS_LOADED', true); ?>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
+    <?php endif; ?>
+
+    <script>
+        (function() {
+            /* ── CONFIG ── */
+            const SEC               = <?= json_encode($sec) ?>;
+            const DB_FIELD          = <?= json_encode($data['db_field']) ?>;
+            const CLIENT_ID         = <?= json_encode((int)$clientId) ?>;
+            const IS_LOCKED         = <?= $isLocked ? 'true' : 'false' ?>;
+            const PLACEHOLDER       = <?= json_encode($data['placeholder']) ?>;
+            const IS_GREETING       = (SEC === 'greeting');
+            const CLIENT_FIRST_NAME = <?= json_encode($clientFirstName) ?>;
+            const GREETING_NEEDS_SAVE = <?= (!$isLocked && $sec === 'greeting' && $greetingNeedsSave) ? 'true' : 'false' ?>;
+
+            // Default template (is_default=1 wins; fallback = first template in list)
+            const DEFAULT_TEMPLATE_ID      = <?= json_encode($defaultTemplateId) ?>;
+            const DEFAULT_TEMPLATE_CONTENT = <?= json_encode($defaultTemplateContent) ?>;
+
+            /* ── DOM refs ── */
+            const selector = document.getElementById(SEC + '_template_selector');
+            const hiddenTA = document.getElementById(SEC + '_textarea');
+            const flash    = document.getElementById(SEC + '_flash_container');
+
+            /* ── INITIALISE QUILL ── */
+            const quill = new Quill('#' + SEC + '_quill_editor', {
+                theme: 'snow',
+                readOnly: IS_LOCKED,
+                placeholder: PLACEHOLDER,
+                modules: { toolbar: false }
+            });
+
+            /* ── SYNC Quill → hidden textarea ── */
+            function syncToHidden() {
+                hiddenTA.value = quill.root.innerHTML;
+            }
+            quill.on('text-change', syncToHidden);
+
+            /* ── AUTO-RESIZE ── */
+            function autoResize() {
+                const editor = document.querySelector('#' + SEC + '_quill_editor .ql-editor');
+                if (!editor) return;
+                editor.style.height = 'auto';
+                editor.style.height = editor.scrollHeight + 'px';
+            }
+            quill.on('text-change', autoResize);
+            setTimeout(autoResize, 150);
+
+            /* ── HELPERS ── */
+            function showFlash(type, msg) {
+                flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
+                    (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
+                setTimeout(() => { flash.innerHTML = ''; }, 3500);
+            }
+
+            function normalize(html) { return html.replace(/\s+/g, ' ').trim(); }
+
+            function saveToServer(html, silent) {
+                return fetch('client_communication.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({
+                        ajax_action: 'save_client_field',
+                        client_id: CLIENT_ID,
+                        field: DB_FIELD,
+                        value: html
+                    })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (!silent) {
+                        if (d.success) showFlash('success', d.message || 'Saved');
+                        else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
                     }
+                    return d;
+                })
+                .catch(() => { if (!silent) showFlash('error', 'Network error'); });
+            }
+
+            /* ── Append first name to greeting ── */
+            function appendFirstNameToGreeting(html) {
+                if (!IS_GREETING || !CLIENT_FIRST_NAME) return html;
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                const plain = tmp.textContent || tmp.innerText || '';
+                if (plain.toLowerCase().indexOf(CLIENT_FIRST_NAME.toLowerCase()) !== -1) return html;
+
+                const frag = document.createElement('div');
+                frag.innerHTML = html;
+                const lastChild = frag.lastChild;
+                if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
+                    lastChild.textContent = lastChild.textContent.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
+                } else if (lastChild) {
+                    frag.innerHTML = frag.innerHTML.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
+                } else {
+                    frag.innerHTML = html.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
                 }
-                if ($defaultTemplateId === 0) {
-                    $defaultTemplateId = (int)$tpls[0]['id'];
+                return frag.innerHTML;
+            }
+
+            /* ── INIT EDITOR on page load ── */
+            (function initEditor() {
+                // Suppress scroll-jump during programmatic load
+                quill.root.setAttribute('contenteditable', 'false');
+
+                const stored     = hiddenTA.value.trim();
+                const storedText = stored.replace(/<[^>]*>/g, '').trim();
+
+                // Values treated as "no real stored content"
+                const EMPTY_VALUES = ['', 'Introduction', 'Closing remarks', 'Rationale for recommendations'];
+                const isStoredEmpty = EMPTY_VALUES.includes(storedText);
+
+                if (stored && !isStoredEmpty) {
+                    // ── Case 1: Previously saved client content — load it ──
+                    quill.clipboard.dangerouslyPasteHTML(stored);
+                    syncToHidden();
+                    setTimeout(() => {
+                        if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+                        autoResize();
+                    }, 100);
+                    // Greeting: auto-save if first name was just appended
+                    if (IS_GREETING && GREETING_NEEDS_SAVE && !IS_LOCKED) {
+                        setTimeout(() => saveToServer(quill.root.innerHTML, true), 300);
+                    }
+
+                } else if (DEFAULT_TEMPLATE_ID > 0 && DEFAULT_TEMPLATE_CONTENT) {
+                    // ── Case 2: No saved content — load default/first template ──
+                    // (Matches rationale.php behaviour exactly)
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = DEFAULT_TEMPLATE_CONTENT;
+                    let decoded = tmp.innerHTML;
+
+                    if (IS_GREETING) decoded = appendFirstNameToGreeting(decoded);
+
+                    quill.clipboard.dangerouslyPasteHTML(decoded);
+                    syncToHidden();
+
+                    // Sync dropdown selection (PHP already set `selected` but enforce via JS too)
+                    if (selector) selector.value = String(DEFAULT_TEMPLATE_ID);
+
+                    setTimeout(() => {
+                        if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+                        autoResize();
+                    }, 100);
+
+                    // Persist to DB so next load hits Case 1 directly
+                    if (!IS_LOCKED) {
+                        setTimeout(() => saveToServer(quill.root.innerHTML, true), 300);
+                    }
+
+                } else {
+                    // ── Case 3: No templates at all — show placeholder ──
+                    setTimeout(() => {
+                        if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+                    }, 100);
                 }
-                foreach ($tpls as $t):
-                    $tid      = (int)($t['id'] ?? 0);
-                    $tname    = htmlspecialchars($t['name'] ?? '');
-                    $tcontent = htmlspecialchars($t['content'] ?? '', ENT_QUOTES);
-            ?>
-                <option
-                    value="<?= $tid ?>"
-                    data-content="<?= $tcontent ?>"
-                    <?= ($tid === $defaultTemplateId) ? 'selected' : '' ?>>
-                    <?= $tname ?>
-                </option>
-            <?php endforeach; } ?>
-        </select>
-    </div>
+            })();
 
-    <!-- Quill editor -->
-    <div id="<?= $wrapperId ?>" class="comm-quill-wrap<?= $isLocked ? ' is-locked' : '' ?>">
-        <div id="<?= $editorId ?>"></div>
-    </div>
+            /* ── Auto-save tracking ── */
+            let lastSaved = '';
+            setTimeout(() => { lastSaved = quill.root.innerHTML; }, 0);
+            let isSaving = false;
 
-    <!-- Hidden textarea for form POST fallback -->
-    <textarea
-        id="<?= $sec ?>_textarea"
-        name="<?= $sec ?>"
-        data-client-id="<?= (int)$clientId ?>"
-        data-field="<?= $data['db_field'] ?>"
-        style="display:none;"><?= htmlspecialchars($data['stored']) ?></textarea>
+            /* ── AUTO-SAVE on blur ── */
+            quill.root.addEventListener('blur', function() {
+                if (IS_LOCKED || isSaving) return;
+                const html = quill.root.innerHTML;
+                if (normalize(html) === normalize(lastSaved)) return;
+                isSaving = true;
+                saveToServer(html, false)
+                    .then(() => { lastSaved = html; })
+                    .finally(() => { isSaving = false; });
+            });
 
-    <div id="<?= $sec ?>_flash_container" class="comm-flash"></div>
-</div>
+            /* ── PERIODIC AUTO-SAVE (every 15 s) ── */
+            setInterval(function() {
+                if (IS_LOCKED || isSaving) return;
+                const html = quill.root.innerHTML;
+                if (normalize(html) !== normalize(lastSaved)) {
+                    isSaving = true;
+                    saveToServer(html, true)
+                        .then(() => { lastSaved = html; })
+                        .finally(() => { isSaving = false; });
+                }
+            }, 15000);
 
-<?php if (!defined('QUILL_JS_LOADED')): define('QUILL_JS_LOADED', true); ?>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.min.js"></script>
-<?php endif; ?>
-
-<script>
-(function () {
-    /* ── CONFIG ── */
-    const SEC         = <?= json_encode($sec) ?>;
-    const DB_FIELD    = <?= json_encode($data['db_field']) ?>;
-    const CLIENT_ID   = <?= json_encode((int)$clientId) ?>;
-    const IS_LOCKED   = <?= $isLocked ? 'true' : 'false' ?>;
-    const PLACEHOLDER = <?= json_encode($data['placeholder']) ?>;
-
-    // For greeting only: the client first name and whether we need to auto-save
-    const IS_GREETING       = (SEC === 'greeting');
-    const CLIENT_FIRST_NAME = <?= json_encode($clientFirstName) ?>;
-    const GREETING_NEEDS_SAVE = <?= (!$isLocked && $sec === 'greeting' && $greetingNeedsSave) ? 'true' : 'false' ?>;
-
-    /* ── DOM refs ── */
-    const selector = document.getElementById(SEC + '_template_selector');
-    const hiddenTA = document.getElementById(SEC + '_textarea');
-    const flash    = document.getElementById(SEC + '_flash_container');
-
-    /* ── INITIALISE QUILL ── */
-    const quill = new Quill('#' + SEC + '_quill_editor', {
-        theme: 'snow',
-        readOnly: IS_LOCKED,
-        placeholder: PLACEHOLDER,
-        modules: { toolbar: false }
-    });
-
-    /* ── SYNC Quill → hidden textarea ── */
-    function syncToHidden() {
-        hiddenTA.value = quill.root.innerHTML;
-    }
-
-    quill.on('text-change', syncToHidden);
-
-    /* ── AUTO-RESIZE: grow editor with content, no scrollbar ── */
-function autoResize() {
-    const editor = document.querySelector('#' + SEC + '_quill_editor .ql-editor');
-    if (!editor) return;
-    editor.style.height = 'auto';
-    editor.style.height = editor.scrollHeight + 'px';
-}
-quill.on('text-change', autoResize);
-// Run once on load so initial content sets the right height
-setTimeout(autoResize, 150);
-
-
-
-    /* ── HELPERS ── */
-    function showFlash(type, msg) {
-        flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">'
-            + (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
-        setTimeout(() => { flash.innerHTML = ''; }, 3500);
-    }
-
-    function normalize(html) {
-        return html.replace(/\s+/g, ' ').trim();
-    }
-
-    function saveToServer(html, silent) {
-        return fetch('client_communication.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: new URLSearchParams({
-                ajax_action: 'save_client_field',
-                client_id:   CLIENT_ID,
-                field:       DB_FIELD,
-                value:       html
-            })
-        })
-        .then(r => r.json())
-        .then(d => {
-            if (!silent) {
-                if (d.success) showFlash('success', d.message || 'Saved');
-                else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
-            }
-            return d;
-        })
-        .catch(() => { if (!silent) showFlash('error', 'Network error'); });
-    }
-
-    /* ── Append first name to greeting text ─────────────────────────────────
-       Called when a template is loaded from the dropdown for the greeting
-       section. Strips any trailing comma/space, then appends " FirstName,"
-       unless the name is already present.
-    ── */
-    function appendFirstNameToGreeting(html) {
-        if (!IS_GREETING || !CLIENT_FIRST_NAME) return html;
-
-        // Check if name already present (plain-text comparison)
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        const plain = tmp.textContent || tmp.innerText || '';
-
-        if (plain.toLowerCase().indexOf(CLIENT_FIRST_NAME.toLowerCase()) !== -1) {
-            // Name already in there
-            return html;
-        }
-
-        // Append to the end of the HTML: strip trailing whitespace/comma then add name
-        // We work on the plain text approach: rebuild as "<template text> FirstName,"
-        const trimmedPlain = plain.replace(/[,\s]+$/, '');
-        // Rebuild: keep original HTML but replace its text content
-        // Simple approach: append a text node after existing content
-        const frag = document.createElement('div');
-        frag.innerHTML = html;
-
-        // Find the last text node or last element
-        const lastChild = frag.lastChild;
-        if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
-            lastChild.textContent = lastChild.textContent.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
-        } else if (lastChild) {
-            // Append as a text node
-            const existing = frag.innerHTML.replace(/[,\s]+$/, '');
-            frag.innerHTML = existing + ' ' + CLIENT_FIRST_NAME + ',';
-        } else {
-            frag.innerHTML = html.replace(/[,\s]+$/, '') + ' ' + CLIENT_FIRST_NAME + ',';
-        }
-        return frag.innerHTML;
-    }
-
-/* ── LOAD STORED HTML into Quill (no-scroll init) ── */
-    (function loadStoredContent() {
-        quill.root.setAttribute('contenteditable', 'false');
-        const stored = hiddenTA.value.trim();
-        if (stored) {
-            quill.clipboard.dangerouslyPasteHTML(stored);
-            syncToHidden();
-        }
-        setTimeout(function() {
-            if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
-        }, 100);
-    })();
-
-    /* ── AUTO-SAVE greeting on first visit if name was missing ── */
-    if (GREETING_NEEDS_SAVE && !IS_LOCKED) {
-        setTimeout(function () {
-            const html = quill.root.innerHTML;
-            saveToServer(html, true /* silent */);
-        }, 300);
-    }
-
-    /* ── Load default template if editor is empty ── */
-    (function loadDefaultTemplate() {
-        if (!selector) return;
-        const selectedOption = selector.options[selector.selectedIndex];
-        if (!selectedOption || selector.value === '0') return;
-
-        const isEditorEmpty  = quill.getLength() <= 1;
-        const isStoredEmpty  = !hiddenTA.value || hiddenTA.value === '<p><br></p>';
-
-        if (isEditorEmpty && isStoredEmpty) {
-            quill.root.setAttribute('contenteditable', 'false');
-            let decoded = selectedOption.getAttribute('data-content') || '';
-            const tmp = document.createElement('div');
-            tmp.innerHTML = decoded;
-            decoded = tmp.innerHTML;
-
-            if (IS_GREETING) {
-                decoded = appendFirstNameToGreeting(decoded);
+            /* ── TEMPLATE SELECTOR: load on change ── */
+            if (selector) {
+                selector.addEventListener('change', function() {
+                    const id = selector.value;
+                    if (!id || id === '0') return;
+                    const opt = selector.options[selector.selectedIndex];
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = opt.getAttribute('data-content') || '';
+                    let decoded = tmp.innerHTML;
+                    if (IS_GREETING) decoded = appendFirstNameToGreeting(decoded);
+                    quill.clipboard.dangerouslyPasteHTML(decoded);
+                    syncToHidden();
+                    showFlash('success', 'Template loaded' + (IS_GREETING && CLIENT_FIRST_NAME ? ' — name added' : '') + '.');
+                    if (!IS_LOCKED) saveToServer(quill.root.innerHTML, true);
+                });
             }
 
-            quill.clipboard.dangerouslyPasteHTML(decoded);
-            syncToHidden();
-
-            setTimeout(function() {
-                if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
-            }, 100);
-
-            if (!IS_LOCKED) {
-                saveToServer(quill.root.innerHTML, true /* silent */);
-            }
-        }
-    })();
-    /* ── Tracking for auto-save ── */
-    let lastSaved = '';
-    setTimeout(() => { lastSaved = quill.root.innerHTML; }, 0);
-
-    let isSaving = false;
-
-    /* ── AUTO-SAVE on blur ── */
-    quill.root.addEventListener('blur', function () {
-        if (IS_LOCKED || isSaving) return;
-
-        const html = quill.root.innerHTML;
-        if (normalize(html) === normalize(lastSaved)) return;
-
-        isSaving = true;
-        saveToServer(html, false)
-            .then(() => { lastSaved = html; })
-            .finally(() => { isSaving = false; });
-    });
-
-    /* ── PERIODIC AUTO-SAVE (every 15 s) ── */
-    setInterval(function () {
-        if (IS_LOCKED || isSaving) return;
-        const html = quill.root.innerHTML;
-        if (normalize(html) !== normalize(lastSaved)) {
-            isSaving = true;
-            saveToServer(html, true)
-                .then(() => { lastSaved = html; })
-                .finally(() => { isSaving = false; });
-        }
-    }, 15000);
-
-    /* ── TEMPLATE SELECTOR: load on change ── */
-    if (selector) {
-        selector.addEventListener('change', function () {
-            const id = selector.value;
-            if (!id || id === '0') return;
-
-            const opt = selector.options[selector.selectedIndex];
-            const tmp = document.createElement('div');
-            tmp.innerHTML = opt.getAttribute('data-content') || '';
-            let decoded = tmp.innerHTML;
-
-            // For greeting: append the client first name after the template text
-            if (IS_GREETING) {
-                decoded = appendFirstNameToGreeting(decoded);
+            /* ── Option helpers ── */
+            function findOption(id) {
+                const v = String(id);
+                for (const o of selector.options) if (o.value === v) return o;
+                return null;
             }
 
-            quill.clipboard.dangerouslyPasteHTML(decoded);
-            syncToHidden();
-            showFlash('success', 'Template loaded' + (IS_GREETING && CLIENT_FIRST_NAME ? ' — name added' : '') + '.');
-
-            if (!IS_LOCKED) {
-                saveToServer(quill.root.innerHTML, true /* silent */);
+            function upsertOption(id, name, htmlContent) {
+                let opt = findOption(id);
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = String(id);
+                    selector.appendChild(opt);
+                }
+                opt.textContent = name;
+                opt.setAttribute('data-content', htmlContent);
+                return opt;
             }
-        });
-    }
 
-    /* ── Option helpers (for save/edit/delete buttons if present) ── */
-    function findOption(id) {
-        const v = String(id);
-        for (const o of selector.options) if (o.value === v) return o;
-        return null;
-    }
+            function removeOption(id) {
+                const o = findOption(id);
+                if (o) o.remove();
+            }
 
-    function upsertOption(id, name, htmlContent) {
-        let opt = findOption(id);
-        if (!opt) { opt = document.createElement('option'); opt.value = String(id); selector.appendChild(opt); }
-        opt.textContent = name;
-        opt.setAttribute('data-content', htmlContent);
-        return opt;
-    }
+            /* ── SAVE button (if present) ── */
+            const saveBtn = document.getElementById(SEC + '_save_btn');
+            saveBtn && saveBtn.addEventListener('click', function() {
+                if (IS_LOCKED) return;
+                const id   = selector.value;
+                const html = quill.root.innerHTML;
+                if (!quill.getText().trim()) { showFlash('error', 'Content cannot be empty.'); return; }
 
-    function removeOption(id) { const o = findOption(id); if (o) o.remove(); }
+                let tplName;
+                if (id && id !== '0') {
+                    tplName = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
+                } else {
+                    tplName = prompt('Enter a name for this new ' + SEC + ' template:');
+                    if (!tplName || !tplName.trim()) { showFlash('error', 'Template name is required.'); return; }
+                }
 
-    /* ── SAVE button (if present) ── */
-    const saveBtn = document.getElementById(SEC + '_save_btn');
-    saveBtn && saveBtn.addEventListener('click', function () {
-        if (IS_LOCKED) return;
-        const id   = selector.value;
-        const html = quill.root.innerHTML;
-        if (!quill.getText().trim()) { showFlash('error', 'Content cannot be empty.'); return; }
+                const body = new URLSearchParams({
+                    ajax_action:      id && id !== '0' ? 'edit_template' : 'save_template',
+                    template_name:    tplName.trim(),
+                    template_content: html,
+                    section_type:     SEC
+                });
+                if (id && id !== '0') body.append('template_id', id);
 
-        let tplName;
-        if (id && id !== '0') {
-            tplName = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
-        } else {
-            tplName = prompt('Enter a name for this new ' + SEC + ' template:');
-            if (!tplName || !tplName.trim()) { showFlash('error', 'Template name is required.'); return; }
-        }
+                fetch('client_communication.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (d && d.success) {
+                        const tid = d.new_id || id;
+                        if (tid) { upsertOption(tid, tplName.trim(), html); selector.value = String(tid); }
+                        showFlash('success', 'Template saved successfully.');
+                    } else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
+                })
+                .catch(() => showFlash('error', 'Network error while saving template.'));
+            });
 
-        const body = new URLSearchParams({
-            ajax_action:      id && id !== '0' ? 'edit_template' : 'save_template',
-            template_name:    tplName.trim(),
-            template_content: html,
-            section_type:     SEC
-        });
-        if (id && id !== '0') body.append('template_id', id);
+            /* ── EDIT button (if present) ── */
+            const editBtn = document.getElementById(SEC + '_edit_btn');
+            editBtn && editBtn.addEventListener('click', function() {
+                if (IS_LOCKED) return;
+                const id = selector.value;
+                if (!id || id === '0') { showFlash('error', 'Please select a template to edit.'); return; }
+                const opt = selector.options[selector.selectedIndex];
+                const tmp = document.createElement('div');
+                tmp.innerHTML = opt.getAttribute('data-content') || '';
+                quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
+                syncToHidden();
+                quill.focus();
+            });
 
-        fetch('client_communication.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body })
-            .then(r => r.json())
-            .then(d => {
-                if (d && d.success) {
-                    const tid = d.new_id || id;
-                    if (tid) { upsertOption(tid, tplName.trim(), html); selector.value = String(tid); }
-                    showFlash('success', 'Template saved successfully.');
-                } else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
-            })
-            .catch(() => showFlash('error', 'Network error while saving template.'));
-    });
+            /* ── DELETE button (if present) ── */
+            const delBtn = document.getElementById(SEC + '_delete_btn');
+            delBtn && delBtn.addEventListener('click', function() {
+                if (IS_LOCKED) return;
+                const id = selector.value;
+                if (!id || id === '0') { showFlash('error', 'Please select a template to delete.'); return; }
+                if (!confirm('Delete selected template? This cannot be undone.')) return;
 
-    /* ── EDIT button (if present) ── */
-    const editBtn = document.getElementById(SEC + '_edit_btn');
-    editBtn && editBtn.addEventListener('click', function () {
-        if (IS_LOCKED) return;
-        const id = selector.value;
-        if (!id || id === '0') { showFlash('error', 'Please select a template to edit.'); return; }
-        const opt = selector.options[selector.selectedIndex];
-        const tmp = document.createElement('div');
-        tmp.innerHTML = opt.getAttribute('data-content') || '';
-        quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
-        syncToHidden();
-        quill.focus();
-    });
+                fetch('client_communication.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({ ajax_action: 'delete_template', template_id: id })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (d && d.success) {
+                        removeOption(id);
+                        selector.value = '0';
+                        showFlash('success', 'Template deleted.');
+                    } else showFlash('error', 'Delete failed: ' + (d.error || 'Unknown'));
+                })
+                .catch(() => showFlash('error', 'Network error while deleting.'));
+            });
 
-    /* ── DELETE button (if present) ── */
-    const delBtn = document.getElementById(SEC + '_delete_btn');
-    delBtn && delBtn.addEventListener('click', function () {
-        if (IS_LOCKED) return;
-        const id = selector.value;
-        if (!id || id === '0') { showFlash('error', 'Please select a template to delete.'); return; }
-        if (!confirm('Delete selected template? This cannot be undone.')) return;
-
-        fetch('client_communication.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: new URLSearchParams({ ajax_action: 'delete_template', template_id: id }) })
-            .then(r => r.json())
-            .then(d => {
-                if (d && d.success) { removeOption(id); selector.value = '0'; showFlash('success', 'Template deleted.'); }
-                else showFlash('error', 'Delete failed: ' + (d.error || 'Unknown'));
-            })
-            .catch(() => showFlash('error', 'Network error while deleting.'));
-    });
-
-})();
-</script>
+        })();
+    </script>
 <?php endforeach; ?>

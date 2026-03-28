@@ -548,17 +548,15 @@ $templates     = $templates     ?? [];
         // Load saved DB content
         quill.clipboard.dangerouslyPasteHTML(stored);
         syncToHidden();
-    } else if (selector && selector.value !== "0") {
-        // No saved content — load default template
-        const selectedOption = selector.options[selector.selectedIndex];
-        const tmp = document.createElement('div');
-        tmp.innerHTML = selectedOption.getAttribute('data-content') || '';
-        quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
-        syncToHidden();
-        if (!IS_LOCKED) {
-            performSave(quill.root.innerHTML);
-        }
-    }
+} else if (selector && selector.value !== "0") {
+    const selectedOption = selector.options[selector.selectedIndex];
+    const tmp = document.createElement('div');
+    tmp.innerHTML = selectedOption.getAttribute('data-content') || '';
+    quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
+    syncToHidden();
+    // Removed: performSave() — don't auto-save template placeholder to DB
+}
+    
 
     // Re-enable editing after load, then scroll to top
     setTimeout(function() {

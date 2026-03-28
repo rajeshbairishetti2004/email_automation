@@ -194,8 +194,11 @@ function handleEmailSending($clientId)
     $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
     $signatureStored   = trim((string)($client['signature_block'] ?? ''));
 
-    $rationaleText = $rationaleStored;
-    $rationaleStripped = trim(strip_tags($rationaleText));
+$rationaleText = $rationaleStored;
+// Exclude empty Quill state AND default placeholder text
+$rationaleStripped = trim(strip_tags($rationaleText));
+$rationaleHasContent = $rationaleStripped !== '' 
+    && $rationaleStripped !== 'Rationale for recommendations';
 
     /* ---------------------------------------------------------------
        SIGNATURE PRIORITY:
@@ -644,7 +647,7 @@ function handleEmailSending($clientId)
         }
         ?>
 
-        <?php if (trim(strip_tags($rationaleText)) !== ''): ?>
+        <?php if ($rationaleHasContent): ?>
             <table width="70%" cellpadding="0" cellspacing="0"
                 style="margin: 20px 0 20px 30px; border: 1px solid #29B6F6; border-collapse: collapse; display: block; clear: both;">
                 <tr>
