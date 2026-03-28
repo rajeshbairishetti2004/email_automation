@@ -6,9 +6,6 @@ require_once 'env_loader.php';
 require_once 'followup_email_handler.php';
 
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
 function handleEmailSending($clientId)
 {
     $pdo = getPdo();
@@ -58,14 +55,12 @@ function handleEmailSending($clientId)
     }
 
     // Get email configuration from environment variables
-    $smtpHost     = $_ENV['SMTP_HOST']     ?? 'smtp.gmail.com';
-    $smtpPort     = $_ENV['SMTP_PORT']     ?? 587;
-    $smtpUsername = $_ENV['SMTP_USERNAME'] ?? '';
-    $smtpPassword = $_ENV['SMTP_PASSWORD'] ?? '';
+    // Get Brevo API key from environment
+    $brevoApiKey = $_ENV['BREVO_API_KEY'] ?? '';
 
-    if (empty($smtpUsername) || empty($smtpPassword)) {
-        error_log("SMTP credentials missing in environment variables");
-        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode('SMTP configuration is missing. Please contact administrator.'));
+    if (empty($brevoApiKey)) {
+        error_log("Brevo API key missing in environment variables");
+        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode('Email configuration is missing. Please contact administrator.'));
         exit;
     }
 
@@ -200,6 +195,7 @@ function handleEmailSending($clientId)
     $signatureStored   = trim((string)($client['signature_block'] ?? ''));
 
     $rationaleText = $rationaleStored;
+    $rationaleStripped = trim(strip_tags($rationaleText));
 
     /* ---------------------------------------------------------------
        SIGNATURE PRIORITY:
@@ -294,37 +290,121 @@ function handleEmailSending($clientId)
                 font-size: 12px;
             }
 
-            .compact-text  { line-height: 1.4; margin-bottom: 10px; }
-            .text-center   { text-align: center; }
-            .text-right    { text-align: right; }
-            .font-bold     { font-weight: bold; }
+            .compact-text {
+                line-height: 1.4;
+                margin-bottom: 10px;
+            }
+
+            .text-center {
+                text-align: center;
+            }
+
+            .text-right {
+                text-align: right;
+            }
+
+            .font-bold {
+                font-weight: bold;
+            }
 
             .status-off {
-                background-color: #F44336; color: white; font-weight: bold;
-                text-align: center; padding: 4px 6px !important;
-                border-radius: 3px; font-size: 11px; white-space: nowrap;
+                background-color: #F44336;
+                color: white;
+                font-weight: bold;
+                text-align: center;
+                padding: 4px 6px !important;
+                border-radius: 3px;
+                font-size: 11px;
+                white-space: nowrap;
             }
+
             .status-on {
-                background-color: #4CAF50; color: white; font-weight: bold;
-                text-align: center; padding: 4px 6px !important;
-                border-radius: 3px; font-size: 11px; white-space: nowrap;
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                text-align: center;
+                padding: 4px 6px !important;
+                border-radius: 3px;
+                font-size: 11px;
+                white-space: nowrap;
             }
 
-            .action-continue    { background-color: #C8E6C9; color: #256029;  text-align: center; font-weight: bold; border-radius: 3px; padding: 4px 6px !important; font-size: 11px; }
-            .action-drop        { background-color: #FFCDD2; color: #C62828;  text-align: center; font-weight: bold; border-radius: 3px; padding: 4px 6px !important; font-size: 11px; }
-            .action-switch      { background-color: #FFF9C4; color: #FBC02D;  text-align: center; font-weight: bold; border-radius: 3px; padding: 4px 6px !important; font-size: 11px; }
-            .action-redeem      { background-color: #F5F5F5; color: #616161;  text-align: center; font-weight: bold; border-radius: 3px; padding: 4px 6px !important; font-size: 11px; }
-            .action-observation { background-color: #E3F2FD; color: #0288D1;  text-align: center; font-weight: bold; border-radius: 3px; padding: 4px 6px !important; font-size: 11px; }
+            .action-continue {
+                background-color: #C8E6C9;
+                color: #256029;
+                text-align: center;
+                font-weight: bold;
+                border-radius: 3px;
+                padding: 4px 6px !important;
+                font-size: 11px;
+            }
 
-            .chart-container     { text-align: center; margin: 15px auto; max-width: 500px; }
-            .chart-container img { max-width: 100%; height: auto; border: none; border-radius: 4px; }
+            .action-drop {
+                background-color: #FFCDD2;
+                color: #C62828;
+                text-align: center;
+                font-weight: bold;
+                border-radius: 3px;
+                padding: 4px 6px !important;
+                font-size: 11px;
+            }
+
+            .action-switch {
+                background-color: #FFF9C4;
+                color: #FBC02D;
+                text-align: center;
+                font-weight: bold;
+                border-radius: 3px;
+                padding: 4px 6px !important;
+                font-size: 11px;
+            }
+
+            .action-redeem {
+                background-color: #F5F5F5;
+                color: #616161;
+                text-align: center;
+                font-weight: bold;
+                border-radius: 3px;
+                padding: 4px 6px !important;
+                font-size: 11px;
+            }
+
+            .action-observation {
+                background-color: #E3F2FD;
+                color: #0288D1;
+                text-align: center;
+                font-weight: bold;
+                border-radius: 3px;
+                padding: 4px 6px !important;
+                font-size: 11px;
+            }
+
+            .chart-container {
+                text-align: center;
+                margin: 15px auto;
+                max-width: 500px;
+            }
+
+            .chart-container img {
+                max-width: 100%;
+                height: auto;
+                border: none;
+                border-radius: 4px;
+            }
 
             .rationale-box {
-                margin-top: 15px; border: 1px solid #29B6F6; border-radius: 4px;
-                overflow: hidden; max-width: 580px; margin-left: auto; margin-right: auto;
+                margin-top: 15px;
+                border: 1px solid #29B6F6;
+                border-radius: 4px;
+                overflow: hidden;
+                max-width: 580px;
+                margin-left: auto;
+                margin-right: auto;
             }
 
-            .section-spacing { margin-bottom: 15px !important; }
+            .section-spacing {
+                margin-bottom: 15px !important;
+            }
         </style>
     </head>
 
@@ -444,7 +524,10 @@ function handleEmailSending($clientId)
         <?php
         $hasGold = false;
         foreach ($allocations as $a) {
-            if (stripos($a['asset'], 'Gold') !== false) { $hasGold = true; break; }
+            if (stripos($a['asset'], 'Gold') !== false) {
+                $hasGold = true;
+                break;
+            }
         }
         if (!$hasGold) {
             $allocations[] = ['asset' => 'Gold', 'share_pct' => 0];
@@ -459,9 +542,9 @@ function handleEmailSending($clientId)
             if ($share <= 0 && stripos($assetName, 'Gold') === false) continue;
             $chartLabels[] = $assetName . ' (' . number_format($share, 2) . '%)';
             $chartValues[] = $share;
-            if      (stripos($assetName, 'Equity') !== false) $chartColors[] = '#36A2EB';
-            elseif  (stripos($assetName, 'Debt')   !== false) $chartColors[] = '#2eb85c';
-            elseif  (stripos($assetName, 'Gold')   !== false) $chartColors[] = '#f9b115';
+            if (stripos($assetName, 'Equity') !== false) $chartColors[] = '#36A2EB';
+            elseif (stripos($assetName, 'Debt')   !== false) $chartColors[] = '#2eb85c';
+            elseif (stripos($assetName, 'Gold')   !== false) $chartColors[] = '#f9b115';
             else                                               $chartColors[] = '#e55353';
         }
 
@@ -509,11 +592,11 @@ function handleEmailSending($clientId)
                 <?php foreach ($schemes as $s):
                     $act    = strtolower(trim($s['action_step'] ?? ''));
                     $aClass = '';
-                    if      ($act == 'continue')                    $aClass = 'action-continue';
-                    elseif  ($act == 'drop')                        $aClass = 'action-drop';
-                    elseif  ($act == 'switch')                      $aClass = 'action-switch';
-                    elseif  (strpos($act, 'redeem') !== false)      $aClass = 'action-redeem';
-                    elseif  (strpos($act, 'observation') !== false) $aClass = 'action-observation';
+                    if ($act == 'continue')                    $aClass = 'action-continue';
+                    elseif ($act == 'drop')                        $aClass = 'action-drop';
+                    elseif ($act == 'switch')                      $aClass = 'action-switch';
+                    elseif (strpos($act, 'redeem') !== false)      $aClass = 'action-redeem';
+                    elseif (strpos($act, 'observation') !== false) $aClass = 'action-observation';
                 ?>
                     <tr>
                         <td><?php echo htmlspecialchars($s['scheme_name']); ?></td>
@@ -522,13 +605,13 @@ function handleEmailSending($clientId)
                         <td class="<?php echo $aClass; ?>"><?php echo htmlspecialchars($s['action_step'] ?? 'Continue'); ?></td>
                         <td><?php echo htmlspecialchars($s['recommended_scheme'] ?? ''); ?></td>
                         <td class="text-center"><?php
-                            $recAmt = trim($s['recommended_amount'] ?? '');
-                            if ($recAmt !== '' && is_numeric($recAmt)) {
-                                echo formatAmount((float)$recAmt);
-                            } else {
-                                echo htmlspecialchars($recAmt);
-                            }
-                        ?></td>
+                                                $recAmt = trim($s['recommended_amount'] ?? '');
+                                                if ($recAmt !== '' && is_numeric($recAmt)) {
+                                                    echo formatAmount((float)$recAmt);
+                                                } else {
+                                                    echo htmlspecialchars($recAmt);
+                                                }
+                                                ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -561,7 +644,7 @@ function handleEmailSending($clientId)
         }
         ?>
 
-        <?php if (trim($rationaleText) !== ''): ?>
+        <?php if (trim(strip_tags($rationaleText)) !== ''): ?>
             <table width="70%" cellpadding="0" cellspacing="0"
                 style="margin: 20px 0 20px 30px; border: 1px solid #29B6F6; border-collapse: collapse; display: block; clear: both;">
                 <tr>
@@ -619,101 +702,106 @@ function handleEmailSending($clientId)
 
     $dynamicSubject = "$clientName - Quarterly Review $month $year";
 
-    $mail = new PHPMailer(true);
+    // Build recipients
+$toRecipients  = [['email' => $toEmail, 'name' => $clientName]];
+$ccRecipients  = array_map(fn($e) => ['email' => $e], $ccList);
 
-    try {
-        // SMTP CONFIG
-        $mail->isSMTP();
-        $mail->Host       = $smtpHost;
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $smtpUsername;
-        $mail->Password   = $smtpPassword;
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = $smtpPort;
-        $mail->CharSet    = 'UTF-8';
-
-        $mail->setFrom($fromEmailSender, $selectedFromName);
-
-        // RECIPIENTS
-        foreach ($emailList as $email) {
-            if ($email === $toEmail) {
-                $mail->addAddress($email);
-            } else {
-                $mail->addCC($email);
-            }
-        }
-
-        // CONTENT
-        $mail->Subject = $dynamicSubject;
-        $mail->isHTML(true);
-        $mail->Body    = $emailHtml;
-
-        // ATTACHMENTS
-        foreach ($attachmentPaths as $index => $file) {
-            if (is_file($file)) {
-                $displayName = $attachmentNames[$index] ?? basename($file);
-                $mail->addAttachment($file, $displayName);
-            }
-        }
-
-        $mail->send();
-
-        // FOLLOW-UP EMAIL
-        if (!empty($_POST['send_followup']) && !empty($_POST['followup_message'])) {
-            sendFollowupEmail(
-                $client,
-                $toEmail,
-                $ccList,
-                $fromEmailSender,
-                $selectedFromName,
-                $pdo,
-                $_POST['followup_message']
-            );
-        }
-
-        // UPDATE REPORT STATUS
-        $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :client_id")
-            ->execute([':client_id' => $clientId]);
-
-        // LOG EMAIL
-        $ccEmailsString = !empty($ccList) ? implode(', ', $ccList) : '';
-
-        $pdo->prepare("
-            INSERT INTO email_logs
-            (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type, followup_sent)
-            VALUES
-            (:client_id, :from_email, :from_name, :to_email, :to_name, :cc_emails, :email_body, 'primary', 0)
-        ")->execute([
-            ':client_id'  => $clientId,
-            ':from_email' => $fromEmailSender,
-            ':from_name'  => $selectedFromName,
-            ':to_email'   => $toEmail,
-            ':to_name'    => $name,
-            ':cc_emails'  => $ccEmailsString,
-            ':email_body' => $emailHtml
-        ]);
-
-        // CLEANUP TEMP FILES
-        foreach ($attachmentPaths as $file) {
-            if (is_file($file) && strpos($file, '/attachments/client_') === false) {
-                @unlink($file);
-            }
-        }
-
-        header('Location: view_report.php?id=' . $clientId . '&sent=1');
-        exit;
-
-    } catch (Exception $e) {
-
-        foreach ($attachmentPaths as $file) {
-            if (is_file($file) && strpos($file, '/attachments/client_') === false) {
-                @unlink($file);
-            }
-        }
-
-        error_log("Email sending failed for client ID {$clientId}: " . $e->getMessage());
-
-        header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($e->getMessage()));
-        exit;
+// Build attachments for Brevo
+$brevoAttachments = [];
+foreach ($attachmentPaths as $index => $file) {
+    if (is_file($file)) {
+        $displayName          = $attachmentNames[$index] ?? basename($file);
+        $brevoAttachments[]   = [
+            'name'    => $displayName,
+            'content' => base64_encode(file_get_contents($file))
+        ];
     }
+}
+
+// Build Brevo API payload
+$payload = [
+    'sender'      => ['name' => $selectedFromName, 'email' => $fromEmailSender],
+    'to'          => $toRecipients,
+    'subject'     => $dynamicSubject,
+    'htmlContent' => $emailHtml,
+];
+
+if (!empty($ccRecipients))      $payload['cc']          = $ccRecipients;
+if (!empty($brevoAttachments))  $payload['attachment']  = $brevoAttachments;
+
+// Send via Brevo API
+$ch = curl_init('https://api.brevo.com/v3/smtp/email');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    'Content-Type: application/json',
+    'api-key: ' . $brevoApiKey
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($httpCode === 201) {
+
+    // FOLLOW-UP EMAIL
+    if (!empty($_POST['send_followup']) && !empty($_POST['followup_message'])) {
+        sendFollowupEmail(
+            $client,
+            $toEmail,
+            $ccList,
+            $fromEmailSender,
+            $selectedFromName,
+            $pdo,
+            $_POST['followup_message']
+        );
+    }
+
+    // UPDATE REPORT STATUS
+    $pdo->prepare("UPDATE clients SET report_state = 'sent', sent_at = NOW() WHERE id = :client_id")
+        ->execute([':client_id' => $clientId]);
+
+    // LOG EMAIL
+    $ccEmailsString = !empty($ccList) ? implode(', ', $ccList) : '';
+
+    $pdo->prepare("
+        INSERT INTO email_logs
+        (client_id, from_email, from_name, sent_to_email, sent_to_name, cc_emails, email_body, email_type, followup_sent)
+        VALUES
+        (:client_id, :from_email, :from_name, :to_email, :to_name, :cc_emails, :email_body, 'primary', 0)
+    ")->execute([
+        ':client_id'  => $clientId,
+        ':from_email' => $fromEmailSender,
+        ':from_name'  => $selectedFromName,
+        ':to_email'   => $toEmail,
+        ':to_name'    => $clientName,
+        ':cc_emails'  => $ccEmailsString,
+        ':email_body' => $emailHtml
+    ]);
+
+    // CLEANUP TEMP FILES
+    foreach ($attachmentPaths as $file) {
+        if (is_file($file) && strpos($file, '/attachments/client_') === false) {
+            @unlink($file);
+        }
+    }
+
+    header('Location: view_report.php?id=' . $clientId . '&sent=1');
+    exit;
+
+} else {
+    $errorDetail = json_decode($response, true)['message'] ?? 'Unknown error';
+    error_log("Brevo API error for client ID {$clientId}: HTTP $httpCode - $errorDetail");
+
+    // CLEANUP TEMP FILES
+    foreach ($attachmentPaths as $file) {
+        if (is_file($file) && strpos($file, '/attachments/client_') === false) {
+            @unlink($file);
+        }
+    }
+
+    header('Location: view_report.php?id=' . $clientId . '&sent_error=1&msg=' . urlencode($errorDetail));
+    exit;
+} 
 }
