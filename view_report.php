@@ -230,10 +230,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
             echo json_encode(['success' => true, 'message' => 'Template deleted successfully.']);
             exit;
+        
+        } elseif ($action === 'save_client_field') {
+            $fieldClientId = (int)($_POST['client_id'] ?? 0);
+            $field         = trim($_POST['field'] ?? '');
+            $value         = $_POST['value'] ?? '';
+            $allowedFields = ['greeting_prefix', 'intro_text', 'closing_text'];
+
+            if ($fieldClientId <= 0) {
+                echo json_encode(['success' => false, 'error' => 'Invalid Client ID.']);
+                exit;
+            }
+            if (!in_array($field, $allowedFields)) {
+                echo json_encode(['success' => false, 'error' => 'Invalid field name.']);
+                exit;
+            }
+
+            $pdo->prepare("UPDATE clients SET $field = ? WHERE id = ?")
+                ->execute([$value, $fieldClientId]);
+            echo json_encode(['success' => true, 'message' => ucfirst(str_replace('_', ' ', $field)) . ' saved successfully.']);
+            exit;
+
+        } elseif ($action === 'save_template') {
+            $section = $_POST['section_type'] ?? '';
+            $name    = trim($_POST['template_name'] ?? '');
+            $content = $_POST['template_content'] ?? '';
+
+            if ($name === '' || $content === '') {
+                echo json_encode(['success' => false, 'error' => 'Template name and content are required.']);
+                exit;
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO report_templates (name, section_type, content) VALUES (?, ?, ?)");
+            $stmt->execute([$name, $section, $content]);
+            $newId = $pdo->lastInsertId();
+
+            echo json_encode([
+                'success'          => true,
+                'new_id'           => (int)$newId,
+                'template_name'    => $name,
+                'template_content' => $content
+            ]);
+            exit;
+
+        } elseif ($action === 'edit_template') {
+            $name      = $_POST['template_name'] ?? '';
+            $content   = $_POST['template_content'] ?? '';
+            $tplId     = (int)($_POST['template_id'] ?? 0);
+
+            if ($tplId <= 0) {
+                echo json_encode(['success' => false, 'error' => 'Invalid template ID.']);
+                exit;
+            }
+
+            $pdo->prepare("UPDATE report_templates SET name = ?, content = ? WHERE id = ?")
+                ->execute([$name, $content, $tplId]);
+            echo json_encode(['success' => true]);
+            exit;
+
+        } elseif ($action === 'delete_template') {
+            $tplId = (int)($_POST['template_id'] ?? 0);
+
+            if ($tplId <= 0) {
+                echo json_encode(['success' => false, 'error' => 'Invalid template ID.']);
+                exit;
+            }
+
+            $pdo->prepare("DELETE FROM report_templates WHERE id = ?")
+                ->execute([$tplId]);
+            echo json_encode(['success' => true, 'deleted_id' => $tplId]);
+            exit;
+
         } else {
             echo json_encode(['success' => false, 'error' => 'Unknown ajax_action.']);
             exit;
         }
+        
     } catch (Exception $e) {
         error_log("User Rationale Template AJAX Error: " . $e->getMessage());
         http_response_code(500);
@@ -577,11 +649,11 @@ if (!$client) {
             }
         </style>
         <script>
-    if (history.scrollRestoration) {
-        history.scrollRestoration = 'manual';
-    }
-    window.scrollTo(0, 0);
-</script>
+            if (history.scrollRestoration) {
+                history.scrollRestoration = 'manual';
+            }
+            window.scrollTo(0, 0);
+        </script>
 
     </head>
 
@@ -686,47 +758,6 @@ $totalGoalCurrent  = (float)($client['total_goal_current'] ?? 0);
 $totalGoalTarget   = (float)($client['total_goal_target'] ?? 0);
 $totalSip          = (float)($client['total_sip'] ?? 0);
 
-// $greetingStored    = trim((string)($client['greeting_prefix'] ?? ''));
-// $introTextStored   = trim((string)($client['intro_text'] ?? ''));
-// $closingTextStored = trim((string)($client['closing_text'] ?? ''));
-// $rationaleStored   = trim((string)($client['rationale_text'] ?? ''));
-// $signatureStored   = trim((string)($client['signature_block'] ?? ''));
-
-// $DEFAULT_GREETING  = 'Dear Mr.';
-// $DEFAULT_INTRO     = 'Introduction';
-// $DEFAULT_CLOSING   = 'Closing remarks';
-// $DEFAULT_RATIONALE = 'Rationale for recommendations';
-
-
-// // MERGED: Combine greeting, intro, and closing into ONE message
-// $clientMessageParts = [];
-
-// // Add greeting
-// if ($greetingStored !== '') {
-//     $clientMessageParts[] = $greetingStored;
-// } else {
-//     $clientMessageParts[] = $DEFAULT_GREETING . ' ' . $name . ',';
-// }
-
-// // Add intro
-// if ($introTextStored !== '') {
-//     $clientMessageParts[] = $introTextStored;
-// } else {
-//     $clientMessageParts[] = "I am sure that all of you are safe and fine. I am pleased to send your quarterly portfolio review. The portfolio is doing well, and the scheme selection is good. Almost all schemes are showing good comparative performance and can be continued.";
-// }
-
-// // Add closing
-// if ($closingTextStored !== '') {
-//     $clientMessageParts[] = $closingTextStored;
-// } else {
-//     $clientMessageParts[] = "We are very keen to have a portfolio discussion meeting with you to discuss the portfolio. Please let us know at your convenience.";
-// }
-
-// $clientMessage = implode("\n\n", $clientMessageParts);
-
-// $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
-
-
 ?>
 
 <!DOCTYPE html>
@@ -752,7 +783,7 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
             overflow: visible;
         }
     </style>
-        <script>
+    <script>
         if (history.scrollRestoration) {
             history.scrollRestoration = 'manual';
         }
@@ -1072,7 +1103,14 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
                     </div>
                 </div>
 
-                <?php require_once 'client_communication.php'; ?>
+                <?php
+                // ── Pass stored communication fields to client_communication.php ──────────
+                $greetingStored    = $client['greeting_prefix'] ?? '';
+                $introTextStored   = $client['intro_text']      ?? '';
+                $closingTextStored = $client['closing_text']    ?? '';
+                // $client is already loaded above via getClientById($clientId)
+                require_once 'client_communication.php';
+                ?>
                 <?php
                 // Logic to determine if editing is allowed (Draft, Ready for Review, or Rejected)
                 $canEditAttachments = ($reportState === 'draft' || $reportState === 'ready' || $reviewNotOk == 1);
@@ -1259,663 +1297,669 @@ $totalSip          = (float)($client['total_sip'] ?? 0);
         }
 
         // --- GLOBAL LISTENERS (Attached to window, includes modular listeners) ---
-document.addEventListener('DOMContentLoaded', function() {
-     window.scrollTo(0, 0);
-     // Delayed scroll to override any editor initialization auto-scrolling
-     setTimeout(function() { window.scrollTo(0, 0); }, 200);
-     setTimeout(function() { window.scrollTo(0, 0); }, 500);
-     setTimeout(function() { window.scrollTo(0, 0); }, 1000);
+        document.addEventListener('DOMContentLoaded', function() {
+            window.scrollTo(0, 0);
+            // Delayed scroll to override any editor initialization auto-scrolling
+            setTimeout(function() {
+                window.scrollTo(0, 0);
+            }, 200);
+            setTimeout(function() {
+                window.scrollTo(0, 0);
+            }, 500);
+            setTimeout(function() {
+                window.scrollTo(0, 0);
+            }, 1000);
 
-                    const resizableTextareas = document.querySelectorAll('.large-textarea, .seamless-input, .rat-main-textarea');
-                    resizableTextareas.forEach(textarea => {
-                        autoResizeTextarea(textarea);
-                        textarea.addEventListener('input', function() {
-                            autoResizeTextarea(this);
+            const resizableTextareas = document.querySelectorAll('.large-textarea, .seamless-input, .rat-main-textarea');
+            resizableTextareas.forEach(textarea => {
+                autoResizeTextarea(textarea);
+                textarea.addEventListener('input', function() {
+                    autoResizeTextarea(this);
+                });
+                window.addEventListener('resize', function() {
+                    autoResizeTextarea(textarea);
+                });
+            });
+            // Handle disappearing flash messages (Existing logic remains)
+            const flashMessages = document.querySelectorAll('.flash-message');
+            flashMessages.forEach(function(message) {
+                setTimeout(() => {
+                    message.style.opacity = '0';
+                    message.style.marginTop = '-50px';
+                }, 3000);
+                setTimeout(() => {
+                    message.remove();
+                }, 3500);
+            });
+
+            // --- ATTACH LISTENERS FOR AUTOSAVE AND AJAX ---
+
+            // DELETE TEMPLATE LOGIC (Consolidated for all modules)
+            document.querySelectorAll('.delete-template-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    const selectorId = this.getAttribute('data-template-id-attr');
+                    const templateSection = this.getAttribute('data-template-section');
+
+                    const selector = document.getElementById(selectorId);
+                    const templateId = selector.value;
+
+                    if (templateId === '0' || templateId === 0) {
+                        showContextualFlash('error', '❌ Please select a template name to delete.', `${templateSection}_flash_container`);
+                        return;
+                    }
+
+                    const templateName = selector.options[selector.selectedIndex].text;
+                    const clientId = document.querySelector('input[name="client_id"]').value;
+
+                    if (!confirm(`Are you sure you want to delete the template "${templateName}"?`)) return;
+
+                    fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                            },
+                            body: new URLSearchParams({
+                                ajax_action: 'delete_user_template',
+                                template_id: templateId
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                showContextualFlash('success', `Template "${templateName}" deleted. Reloading...`, `${templateSection}_flash_container`);
+
+                                // FIX: Use window.location.href to force a non-cached reload
+                                window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1';
+
+                            } else {
+                                showContextualFlash('error', `❌ Failed to delete template: ${data.error}`, `${templateSection}_flash_container`);
+                            }
+                        })
+                        .catch(err => {
+                            showContextualFlash('error', 'Network error during template deletion.', `${templateSection}_flash_container`);
                         });
-                        window.addEventListener('resize', function() {
-                            autoResizeTextarea(textarea);
-                        });
+                });
+            });
+
+            // NOTE: RM logic has been stripped out of this general JS block.
+
+            // Auto-save textareas on blur
+            // document.querySelectorAll('.large-textarea').forEach(function(textarea) {
+            //     textarea.addEventListener('blur', function() {
+            //         const clientId = textarea.getAttribute('data-client-id');
+            //         const field = textarea.getAttribute('data-field');
+            //         const value = textarea.value.trim();
+
+            //         if (clientId && field) {
+            //             fetch('view_report.php', {
+            //                 method: 'POST',
+            //                 headers: {
+            //                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            //                 },
+            //                 body: new URLSearchParams({
+            //                     ajax: '1',
+            //                     client_id: clientId,
+            //                     field: field,
+            //                     value: value
+            //                 })
+            //             })
+
+            //         }
+            //     });
+            // });
+
+            // LOCK CHECK: Pass lock status from PHP to JS
+            const reportLocked = <?php echo json_encode($isLocked); ?>;
+
+            // --- GOAL STATUS DROPDOWN LOGIC ---
+            if (!reportLocked) {
+                document.querySelectorAll('.goal-status-dropdown').forEach(function(select) {
+                    select.addEventListener('change', function() {
+                        const goalId = this.getAttribute('data-goal-id');
+                        const newStatus = this.value;
+                        const self = this;
+
+                        // Update visual style immediately
+                        if (newStatus === 'On Track') {
+                            self.classList.remove('status-off');
+                            self.classList.add('status-on');
+                        } else {
+                            self.classList.remove('status-on');
+                            self.classList.add('status-off');
+                        }
+
+                        // Save to DB
+                        fetch('view_report.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                },
+                                body: new URLSearchParams({
+                                    ajax_goal_status: '1',
+                                    goal_id: goalId,
+                                    status: newStatus
+                                })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.success) {
+                                    showToast('Status updated');
+                                } else {
+                                    alert(data.message || 'Failed to save status.');
+                                }
+                            })
+                            .catch(err => console.error(err));
                     });
-                    // Handle disappearing flash messages (Existing logic remains)
-                    const flashMessages = document.querySelectorAll('.flash-message');
-                    flashMessages.forEach(function(message) {
-                        setTimeout(() => {
-                            message.style.opacity = '0';
-                            message.style.marginTop = '-50px';
-                        }, 3000);
-                        setTimeout(() => {
-                            message.remove();
-                        }, 3500);
+                });
+            }
+
+            // Track if goals have been modified
+            let goalsDirty = false;
+
+            // Parse shorthand number formats (30k, 1lakh, 2cr)
+            function parseShorthandNumber(value) {
+                if (!value) return 0;
+                value = value.toString().toLowerCase().trim();
+
+                // Remove common prefixes
+                value = value.replace(/^rs\.?\s*/i, '').replace(/^₹\s*/i, '');
+
+                // Handle shorthand formats
+                if (value.match(/k$/)) {
+                    return parseFloat(value.replace(/k$/, '')) * 1000;
+                } else if (value.match(/lakh?s?$/)) {
+                    return parseFloat(value.replace(/lakh?s?$/, '')) * 100000;
+                } else if (value.match(/cr?s?$/)) {
+                    return parseFloat(value.replace(/cr?s?$/, '')) * 10000000;
+                }
+
+                // Remove commas and parse as regular number
+                return parseFloat(value.replace(/,/g, '')) || 0;
+            }
+
+            // Format number to Indian format for display
+            function formatIndianNumber(num) {
+                if (num >= 10000000) {
+                    return 'Rs ' + (num / 10000000).toFixed(2) + ' Cr';
+                } else if (num >= 100000) {
+                    return 'Rs ' + (num / 100000).toFixed(2) + ' lakhs';
+                } else if (num >= 1000) {
+                    return 'Rs ' + (num / 1000).toFixed(2) + ' thousand';
+                }
+                return 'Rs ' + num.toFixed(0);
+            }
+
+            // Update totals based on current input values
+            function updateTotals() {
+                let totalSip = 0;
+                let totalCurrent = 0;
+
+                document.querySelectorAll('.goal-input').forEach(function(input) {
+                    const field = input.getAttribute('data-field');
+                    const value = parseShorthandNumber(input.value);
+
+                    if (field === 'current_amount') {
+                        totalCurrent += value;
+                    } else if (field === 'sip_swp') {
+                        totalSip += value;
+                    }
+                });
+
+                // Update total row (no Target Amount total by request)
+                const totalCurrentEl = document.getElementById('total-current-amount');
+                const totalSipEl = document.getElementById('total-sip-wp');
+
+                if (totalCurrentEl) totalCurrentEl.textContent = formatIndianNumber(totalCurrent);
+                if (totalSipEl) totalSipEl.textContent = formatIndianNumber(totalSip);
+            }
+
+            // Auto-save Goal Inputs (Current Amount, SIP/SWP, Target Amount)
+            document.querySelectorAll('.goal-input').forEach(function(input) {
+                // Update totals on input change
+                input.addEventListener('input', function() {
+                    updateTotals();
+                    if (!reportLocked) goalsDirty = true;
+                });
+
+                if (!reportLocked) {
+                    input.addEventListener('blur', function() {
+                        const goalId = this.getAttribute('data-goal-id');
+                        const field = this.getAttribute('data-field');
+                        const value = this.value;
+
+                        fetch('view_report.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                },
+                                body: new URLSearchParams({
+                                    ajax_goal_update: '1',
+                                    goal_id: goalId,
+                                    [field]: value
+                                })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.success) {
+                                    // Visual feedback
+                                    input.style.backgroundColor = "#e8f5e9"; // Light green
+                                    setTimeout(() => input.style.backgroundColor = "transparent", 500);
+                                    // Update totals after successful save
+                                    updateTotals();
+                                    goalsDirty = false;
+                                } else if (data.message) {
+                                    alert(data.message);
+                                }
+                            });
+                    });
+                }
+            });
+
+            // Initialize totals on page load
+            updateTotals();
+
+            // Save Goals button handler
+            const saveGoalsBtn = document.getElementById('saveGoalsBtn');
+            if (saveGoalsBtn && !reportLocked) {
+                saveGoalsBtn.addEventListener('click', function() {
+                    const btn = this;
+                    const statusSpan = document.getElementById('saveGoalsStatus');
+
+                    btn.disabled = true;
+                    btn.textContent = '💾 Saving...';
+
+
+                    const savePromises = [];
+                    document.querySelectorAll('.goal-input').forEach(function(input) {
+                        const goalId = input.getAttribute('data-goal-id');
+                        const field = input.getAttribute('data-field');
+                        const value = input.value;
+
+                        const promise = fetch('view_report.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                },
+                                body: new URLSearchParams({
+                                    ajax_goal_update: '1',
+                                    goal_id: goalId,
+                                    [field]: value
+                                })
+                            })
+                            .then(res => {
+                                if (!res.ok) {
+                                    throw new Error('HTTP ' + res.status + ': ' + res.statusText);
+                                }
+                                return res.text();
+                            })
+                            .then(text => {
+                                console.log('Response text:', text);
+                                try {
+                                    return JSON.parse(text);
+                                } catch (e) {
+                                    console.error('JSON parse error:', e, 'Response:', text);
+                                    throw new Error('Invalid JSON response');
+                                }
+                            })
+                            .then(data => {
+                                console.log('Saved:', field, 'for goal', goalId, ':', data);
+                                return data;
+                            })
+                            .catch(err => {
+                                console.error('Error saving', field, 'for goal', goalId, ':', err);
+                                return {
+                                    success: false,
+                                    error: err.message,
+                                    field: field,
+                                    goalId: goalId
+                                };
+                            });
+
+                        savePromises.push(promise);
                     });
 
-                    // --- ATTACH LISTENERS FOR AUTOSAVE AND AJAX ---
+                    Promise.all(savePromises)
+                        .then((results) => {
+                            btn.textContent = '💾 Save Goals';
+                            btn.disabled = false;
 
-                    // DELETE TEMPLATE LOGIC (Consolidated for all modules)
-                    document.querySelectorAll('.delete-template-btn').forEach(btn => {
-                        btn.addEventListener('click', function(e) {
-                            e.preventDefault();
+                            const allSuccess = results.every(r => r && r.success);
+                            const failedResults = results.filter(r => !r || !r.success);
 
-                            const selectorId = this.getAttribute('data-template-id-attr');
-                            const templateSection = this.getAttribute('data-template-section');
+                            if (allSuccess) {
+                                statusSpan.textContent = '✓ All goals saved to database';
+                                statusSpan.style.color = '#28a745';
+                                statusSpan.style.display = 'inline';
+                                console.log('All goals saved successfully:', results);
+                                goalsDirty = false;
 
-                            const selector = document.getElementById(selectorId);
-                            const templateId = selector.value;
+                                // Green flash on all inputs
+                                document.querySelectorAll('.goal-input').forEach(input => {
+                                    input.style.backgroundColor = "#e8f5e9";
+                                    setTimeout(() => input.style.backgroundColor = "transparent", 1000);
+                                });
+                            } else {
+                                statusSpan.textContent = '⚠ ' + failedResults.length + ' field(s) failed - see red borders';
+                                statusSpan.style.color = '#dc3545';
+                                statusSpan.style.display = 'inline';
+                                console.error('Failed saves:', failedResults);
+                                console.log('All results:', results);
 
-                            if (templateId === '0' || templateId === 0) {
-                                showContextualFlash('error', '❌ Please select a template name to delete.', `${templateSection}_flash_container`);
-                                return;
+                                // Mark failed inputs with red border
+                                results.forEach((result, index) => {
+                                    const inputs = document.querySelectorAll('.goal-input');
+                                    if (inputs[index]) {
+
+
+
+                                        if (result && result.success) {
+                                            inputs[index].style.backgroundColor = "#e8f5e9";
+                                            setTimeout(() => inputs[index].style.backgroundColor = "transparent", 1000);
+                                        } else {
+                                            inputs[index].style.border = "2px solid #dc3545";
+                                            inputs[index].style.backgroundColor = "#ffe6e6";
+                                        }
+                                    }
+                                });
+
+                                alert('Some fields failed to save. Fields with red borders had errors.\nError details logged to console (F12).');
                             }
 
-                            const templateName = selector.options[selector.selectedIndex].text;
-                            const clientId = document.querySelector('input[name="client_id"]').value;
+                            setTimeout(() => {
+                                statusSpan.style.display = 'none';
+                            }, 5000);
+                            updateTotals();
+                        })
+                        .catch(err => {
+                            console.error('Error saving goals:', err);
+                            btn.textContent = '💾 Save Goals';
+                            btn.disabled = false;
+                            statusSpan.textContent = '❌ Error: ' + err.message;
+                            statusSpan.style.color = '#dc3545';
+                            statusSpan.style.display = 'inline';
+                            alert('Error saving goals: ' + err.message + '\nCheck console for details.');
+                        });
+                });
+            }
 
-                            if (!confirm(`Are you sure you want to delete the template "${templateName}"?`)) return;
+            // Function to save all goal inputs synchronously
+            function saveAllGoalsSync() {
+                if (reportLocked) return; // Don't save if locked
+                const inputs = document.querySelectorAll('.goal-input');
+                if (inputs.length === 0) return;
 
-                            fetch('view_report.php?id=' + encodeURIComponent(clientId), {
+                // Use synchronous XMLHttpRequest for beforeunload
+                inputs.forEach(function(input) {
+                    const goalId = input.getAttribute('data-goal-id');
+                    const field = input.getAttribute('data-field');
+                    const value = input.value;
+
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'view_report.php', false); // false = synchronous
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send(`ajax_goal_update=1&goal_id=${goalId}&${field}=${encodeURIComponent(value)}`);
+                });
+            }
+
+            // Save goals before page unload (only if not locked)
+            if (!reportLocked) {
+                window.addEventListener('beforeunload', function(e) {
+                    if (goalsDirty) {
+                        saveAllGoalsSync();
+                    }
+                });
+            }
+
+            // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
+            if (!reportLocked) {
+                document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
+                    const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
+
+                    element.addEventListener(eventType, function() {
+                        if (element.getAttribute('data-t4-managed') === 'true') return;
+                        const schemeId = element.getAttribute('data-scheme-id');
+                        const field = element.getAttribute('data-field') || 'action_step'; // Default to action_step for dropdown
+                        const value = element.value.trim();
+
+                        if (schemeId) {
+                            const postBody = {
+                                ajax_scheme: '1',
+                                scheme_id: schemeId,
+                            };
+                            postBody[field] = value;
+
+                            fetch('view_report.php', {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
                                     },
-                                    body: new URLSearchParams({
-                                        ajax_action: 'delete_user_template',
-                                        template_id: templateId
-                                    })
+                                    body: new URLSearchParams(postBody)
                                 })
                                 .then(response => response.json())
                                 .then(data => {
-                                    if (data.success) {
-                                        showContextualFlash('success', `Template "${templateName}" deleted. Reloading...`, `${templateSection}_flash_container`);
-
-                                        // FIX: Use window.location.href to force a non-cached reload
-                                       window.location.href = window.location.href.split('?')[0] + '?id=' + clientId + '&deleted=1';
-
+                                    if (data && data.success) {
+                                        showToast('Saved ' + (field === 'action_step' ? 'action step' : field.replace('_', ' ')));
                                     } else {
-                                        showContextualFlash('error', `❌ Failed to delete template: ${data.error}`, `${templateSection}_flash_container`);
+                                        alert((data && data.message) || (data && data.error) || 'Unknown error');
                                     }
                                 })
-                                .catch(err => {
-                                    showContextualFlash('error', 'Network error during template deletion.', `${templateSection}_flash_container`);
-                                });
-                        });
+                                .catch(err => console.error(err));
+                        }
                     });
+                });
+            }
 
-                    // NOTE: RM logic has been stripped out of this general JS block.
+            // Immediately-responding Portfolio Tenure handler (improved: swaps label and value)
+            (function() {
+                const returnLabel = document.getElementById('returnLabel');
+                const returnValueCell = document.getElementById('returnValueCell');
+                const xirrRow = document.getElementById('xirrRow');
+                const xirrValue = <?php echo json_encode((float)$xirr); ?>;
 
-                    // Auto-save textareas on blur
-                    // document.querySelectorAll('.large-textarea').forEach(function(textarea) {
-                    //     textarea.addEventListener('blur', function() {
-                    //         const clientId = textarea.getAttribute('data-client-id');
-                    //         const field = textarea.getAttribute('data-field');
-                    //         const value = textarea.value.trim();
+                // Preformatted server-side strings to avoid client-side number formatting differences
+                const cagrText = <?php echo json_encode(formatPercent($cagr)); ?>;
+                const absoluteReturnText = <?php
+                                            // Format as percentage when available, fallback to N/A
+                                            $absVal = ($absoluteReturn !== null) ? (float)$absoluteReturn : null;
+                                            echo json_encode($absVal !== null ? formatPercent($absVal) : 'N/A');
+                                            ?>;
 
-                    //         if (clientId && field) {
-                    //             fetch('view_report.php', {
-                    //                 method: 'POST',
-                    //                 headers: {
-                    //                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    //                 },
-                    //                 body: new URLSearchParams({
-                    //                     ajax: '1',
-                    //                     client_id: clientId,
-                    //                     field: field,
-                    //                     value: value
-                    //                 })
-                    //             })
+                window.updateCurrentSituation = function() {
+                    try {
+                        const selected = document.querySelector('input[name="is_older_than_1_year"]:checked');
+                        if (!selected) return;
 
-                    //         }
-                    //     });
-                    // });
+                        const val = selected.value;
+                        const returnLabel = document.getElementById('returnLabel');
+                        const returnValueCell = document.getElementById('returnValueCell');
+                        const xirrRow = document.getElementById('xirrRow');
 
-                    // LOCK CHECK: Pass lock status from PHP to JS
-                    const reportLocked = <?php echo json_encode($isLocked); ?>;
-
-                    // --- GOAL STATUS DROPDOWN LOGIC ---
-                    if (!reportLocked) {
-                        document.querySelectorAll('.goal-status-dropdown').forEach(function(select) {
-                            select.addEventListener('change', function() {
-                                const goalId = this.getAttribute('data-goal-id');
-                                const newStatus = this.value;
-                                const self = this;
-
-                                // Update visual style immediately
-                                if (newStatus === 'On Track') {
-                                    self.classList.remove('status-off');
-                                    self.classList.add('status-on');
+                        if (val === '0') {
+                            // --- Less than 1 year: Show Absolute Return ---
+                            if (returnLabel) returnLabel.textContent = 'Absolute Return of schemes';
+                            if (returnValueCell) {
+                                // Update the visible value and the metadata for AJAX saving
+                                returnValueCell.value = absoluteReturnText;
+                                returnValueCell.setAttribute('data-field', 'absolute_return');
+                                returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$absoluteReturn); ?>);
+                            }
+                            if (xirrRow) xirrRow.style.display = 'none';
+                        } else {
+                            // --- More than 1 year: Show CAGR ---
+                            if (returnLabel) returnLabel.textContent = 'CAGR of current schemes';
+                            if (returnValueCell) {
+                                // Update the visible value and the metadata for AJAX saving
+                                returnValueCell.value = cagrText;
+                                returnValueCell.setAttribute('data-field', 'cagr');
+                                returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$cagr); ?>);
+                            }
+                            if (xirrRow) {
+                                if (xirrValue && !isNaN(xirrValue) && Number(xirrValue) !== 0) {
+                                    xirrRow.style.display = '';
                                 } else {
-                                    self.classList.remove('status-on');
-                                    self.classList.add('status-off');
+                                    xirrRow.style.display = 'none';
                                 }
-
-                                // Save to DB
-                                fetch('view_report.php', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                                        },
-                                        body: new URLSearchParams({
-                                            ajax_goal_status: '1',
-                                            goal_id: goalId,
-                                            status: newStatus
-                                        })
-                                    })
-                                    .then(res => res.json())
-                                    .then(data => {
-                                        if (data.success) {
-                                            showToast('Status updated');
-                                        } else {
-                                            alert(data.message || 'Failed to save status.');
-                                        }
-                                    })
-                                    .catch(err => console.error(err));
-                            });
-                        });
-                    }
-
-                    // Track if goals have been modified
-                    let goalsDirty = false;
-
-                    // Parse shorthand number formats (30k, 1lakh, 2cr)
-                    function parseShorthandNumber(value) {
-                        if (!value) return 0;
-                        value = value.toString().toLowerCase().trim();
-
-                        // Remove common prefixes
-                        value = value.replace(/^rs\.?\s*/i, '').replace(/^₹\s*/i, '');
-
-                        // Handle shorthand formats
-                        if (value.match(/k$/)) {
-                            return parseFloat(value.replace(/k$/, '')) * 1000;
-                        } else if (value.match(/lakh?s?$/)) {
-                            return parseFloat(value.replace(/lakh?s?$/, '')) * 100000;
-                        } else if (value.match(/cr?s?$/)) {
-                            return parseFloat(value.replace(/cr?s?$/, '')) * 10000000;
-                        }
-
-                        // Remove commas and parse as regular number
-                        return parseFloat(value.replace(/,/g, '')) || 0;
-                    }
-
-                    // Format number to Indian format for display
-                    function formatIndianNumber(num) {
-                        if (num >= 10000000) {
-                            return 'Rs ' + (num / 10000000).toFixed(2) + ' Cr';
-                        } else if (num >= 100000) {
-                            return 'Rs ' + (num / 100000).toFixed(2) + ' lakhs';
-                        } else if (num >= 1000) {
-                            return 'Rs ' + (num / 1000).toFixed(2) + ' thousand';
-                        }
-                        return 'Rs ' + num.toFixed(0);
-                    }
-
-                    // Update totals based on current input values
-                    function updateTotals() {
-                        let totalSip = 0;
-                        let totalCurrent = 0;
-
-                        document.querySelectorAll('.goal-input').forEach(function(input) {
-                            const field = input.getAttribute('data-field');
-                            const value = parseShorthandNumber(input.value);
-
-                            if (field === 'current_amount') {
-                                totalCurrent += value;
-                            } else if (field === 'sip_swp') {
-                                totalSip += value;
                             }
-                        });
-
-                        // Update total row (no Target Amount total by request)
-                        const totalCurrentEl = document.getElementById('total-current-amount');
-                        const totalSipEl = document.getElementById('total-sip-wp');
-
-                        if (totalCurrentEl) totalCurrentEl.textContent = formatIndianNumber(totalCurrent);
-                        if (totalSipEl) totalSipEl.textContent = formatIndianNumber(totalSip);
-                    }
-
-                    // Auto-save Goal Inputs (Current Amount, SIP/SWP, Target Amount)
-                    document.querySelectorAll('.goal-input').forEach(function(input) {
-                        // Update totals on input change
-                        input.addEventListener('input', function() {
-                            updateTotals();
-                            if (!reportLocked) goalsDirty = true;
-                        });
-
-                        if (!reportLocked) {
-                            input.addEventListener('blur', function() {
-                                const goalId = this.getAttribute('data-goal-id');
-                                const field = this.getAttribute('data-field');
-                                const value = this.value;
-
-                                fetch('view_report.php', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                                        },
-                                        body: new URLSearchParams({
-                                            ajax_goal_update: '1',
-                                            goal_id: goalId,
-                                            [field]: value
-                                        })
-                                    })
-                                    .then(res => res.json())
-                                    .then(data => {
-                                        if (data.success) {
-                                            // Visual feedback
-                                            input.style.backgroundColor = "#e8f5e9"; // Light green
-                                            setTimeout(() => input.style.backgroundColor = "transparent", 500);
-                                            // Update totals after successful save
-                                            updateTotals();
-                                            goalsDirty = false;
-                                        } else if (data.message) {
-                                            alert(data.message);
-                                        }
-                                    });
-                            });
                         }
+                    } catch (e) {
+                        console.error('updateCurrentSituation error', e);
+                    }
+                };
+
+                // Attach listeners to radio inputs and via delegated change to capture dynamic changes
+                document.querySelectorAll('input[name="is_older_than_1_year"]').forEach(function(r) {
+                    r.addEventListener('change', window.updateCurrentSituation);
+                });
+                document.addEventListener('change', function(e) {
+                    if (e.target && e.target.name === 'is_older_than_1_year') window.updateCurrentSituation();
+                });
+
+                // Initialize UI once
+                window.updateCurrentSituation();
+            })();
+        });
+
+        // --- WORKFLOW JS FUNCTIONS ---
+        function submitWorkflow(action) {
+            // Handle modals for compliance and rejection
+            if (action === 'ready_for_review') {
+                openComplianceModal();
+                return;
+            }
+            if (action === 'review_not_ok') {
+                openRejectModal();
+                return;
+            }
+            if (!confirm("Are you sure you want to perform this action?")) return;
+
+            // Show loading state
+            const workflowActions = document.querySelector('.workflow-actions');
+            if (workflowActions) {
+                workflowActions.innerHTML = '<div style="padding: 10px; text-align: center; color: #666;">⏳ Processing...</div>';
+            }
+            showLoading();
+
+            // Set the workflow action
+            document.getElementById('workflowActionInput').value = action;
+
+            // Add save_report flag to ensure content is saved
+            let saveReportInput = document.getElementById('saveReportInput');
+            if (!saveReportInput) {
+                saveReportInput = document.createElement('input');
+                saveReportInput.type = 'hidden';
+                saveReportInput.name = 'save_report';
+                saveReportInput.value = '1';
+                saveReportInput.id = 'saveReportInput';
+                document.getElementById('reportForm').appendChild(saveReportInput);
+            }
+
+            // Submit the form
+            document.getElementById('reportForm').submit();
+        }
+
+        // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
+        function openComplianceModal() {
+            document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById('confirmComplianceBtn').disabled = true;
+            document.getElementById('complianceModal').style.display = 'flex';
+        }
+
+        function closeComplianceModal() {
+            document.getElementById('complianceModal').style.display = 'none';
+        }
+
+        function confirmCompliance() {
+            if (!confirm("Are you sure you want to mark this report as ready for review?")) return;
+            closeComplianceModal();
+            showLoading();
+            document.getElementById('workflowActionInput').value = 'ready_for_review';
+            let saveReportInput = document.getElementById('saveReportInput');
+            if (!saveReportInput) {
+                saveReportInput = document.createElement('input');
+                saveReportInput.type = 'hidden';
+                saveReportInput.name = 'save_report';
+                saveReportInput.value = '1';
+                saveReportInput.id = 'saveReportInput';
+                document.getElementById('reportForm').appendChild(saveReportInput);
+            }
+            document.getElementById('reportForm').submit();
+        }
+
+        // --- REJECTION MODAL FUNCTIONS ---
+        function openRejectModal() {
+            document.getElementById('rejectComment').value = '';
+            document.getElementById('rejectModal').style.display = 'flex';
+        }
+
+        function closeRejectModal() {
+            document.getElementById('rejectModal').style.display = 'none';
+        }
+
+        function submitRejection() {
+            const comment = document.getElementById('rejectComment').value.trim();
+            if (!comment) {
+                alert("Comment is required for rejection.");
+                return;
+            }
+            if (!confirm("Are you sure you want to reject this report?")) return;
+            closeRejectModal();
+            showLoading();
+            document.getElementById('workflowActionInput').value = 'review_not_ok';
+            document.getElementById('reviewCommentInput').value = comment;
+            let saveReportInput = document.getElementById('saveReportInput');
+            if (!saveReportInput) {
+                saveReportInput = document.createElement('input');
+                saveReportInput.type = 'hidden';
+                saveReportInput.name = 'save_report';
+                saveReportInput.value = '1';
+                saveReportInput.id = 'saveReportInput';
+                document.getElementById('reportForm').appendChild(saveReportInput);
+            }
+            document.getElementById('reportForm').submit();
+        }
+
+        // --- LOADING OVERLAY FUNCTIONS ---
+        function showLoading() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'flex';
+            }
+        }
+
+        function hideLoading() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
+        }
+
+        // --- INITIALIZE COMPLIANCE CHECKLIST ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkboxes = document.querySelectorAll('.compliance-checkbox');
+            const confirmBtn = document.getElementById('confirmComplianceBtn');
+            if (checkboxes.length > 0 && confirmBtn) {
+                checkboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', function() {
+                        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                        confirmBtn.disabled = !allChecked;
                     });
+                });
+            }
+            hideLoading();
+        });
 
-                    // Initialize totals on page load
-                    updateTotals();
-
-                    // Save Goals button handler
-                    const saveGoalsBtn = document.getElementById('saveGoalsBtn');
-                    if (saveGoalsBtn && !reportLocked) {
-                        saveGoalsBtn.addEventListener('click', function() {
-                            const btn = this;
-                            const statusSpan = document.getElementById('saveGoalsStatus');
-
-                            btn.disabled = true;
-                            btn.textContent = '💾 Saving...';
-
-
-                            const savePromises = [];
-                            document.querySelectorAll('.goal-input').forEach(function(input) {
-                                const goalId = input.getAttribute('data-goal-id');
-                                const field = input.getAttribute('data-field');
-                                const value = input.value;
-
-                                const promise = fetch('view_report.php', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                                        },
-                                        body: new URLSearchParams({
-                                            ajax_goal_update: '1',
-                                            goal_id: goalId,
-                                            [field]: value
-                                        })
-                                    })
-                                    .then(res => {
-                                        if (!res.ok) {
-                                            throw new Error('HTTP ' + res.status + ': ' + res.statusText);
-                                        }
-                                        return res.text();
-                                    })
-                                    .then(text => {
-                                        console.log('Response text:', text);
-                                        try {
-                                            return JSON.parse(text);
-                                        } catch (e) {
-                                            console.error('JSON parse error:', e, 'Response:', text);
-                                            throw new Error('Invalid JSON response');
-                                        }
-                                    })
-                                    .then(data => {
-                                        console.log('Saved:', field, 'for goal', goalId, ':', data);
-                                        return data;
-                                    })
-                                    .catch(err => {
-                                        console.error('Error saving', field, 'for goal', goalId, ':', err);
-                                        return {
-                                            success: false,
-                                            error: err.message,
-                                            field: field,
-                                            goalId: goalId
-                                        };
-                                    });
-
-                                savePromises.push(promise);
-                            });
-
-                            Promise.all(savePromises)
-                                .then((results) => {
-                                    btn.textContent = '💾 Save Goals';
-                                    btn.disabled = false;
-
-                                    const allSuccess = results.every(r => r && r.success);
-                                    const failedResults = results.filter(r => !r || !r.success);
-
-                                    if (allSuccess) {
-                                        statusSpan.textContent = '✓ All goals saved to database';
-                                        statusSpan.style.color = '#28a745';
-                                        statusSpan.style.display = 'inline';
-                                        console.log('All goals saved successfully:', results);
-                                        goalsDirty = false;
-
-                                        // Green flash on all inputs
-                                        document.querySelectorAll('.goal-input').forEach(input => {
-                                            input.style.backgroundColor = "#e8f5e9";
-                                            setTimeout(() => input.style.backgroundColor = "transparent", 1000);
-                                        });
-                                    } else {
-                                        statusSpan.textContent = '⚠ ' + failedResults.length + ' field(s) failed - see red borders';
-                                        statusSpan.style.color = '#dc3545';
-                                        statusSpan.style.display = 'inline';
-                                        console.error('Failed saves:', failedResults);
-                                        console.log('All results:', results);
-
-                                        // Mark failed inputs with red border
-                                        results.forEach((result, index) => {
-                                            const inputs = document.querySelectorAll('.goal-input');
-                                            if (inputs[index]) {
-
-
-
-                                                if (result && result.success) {
-                                                    inputs[index].style.backgroundColor = "#e8f5e9";
-                                                    setTimeout(() => inputs[index].style.backgroundColor = "transparent", 1000);
-                                                } else {
-                                                    inputs[index].style.border = "2px solid #dc3545";
-                                                    inputs[index].style.backgroundColor = "#ffe6e6";
-                                                }
-                                            }
-                                        });
-
-                                        alert('Some fields failed to save. Fields with red borders had errors.\nError details logged to console (F12).');
-                                    }
-
-                                    setTimeout(() => {
-                                        statusSpan.style.display = 'none';
-                                    }, 5000);
-                                    updateTotals();
-                                })
-                                .catch(err => {
-                                    console.error('Error saving goals:', err);
-                                    btn.textContent = '💾 Save Goals';
-                                    btn.disabled = false;
-                                    statusSpan.textContent = '❌ Error: ' + err.message;
-                                    statusSpan.style.color = '#dc3545';
-                                    statusSpan.style.display = 'inline';
-                                    alert('Error saving goals: ' + err.message + '\nCheck console for details.');
-                                });
-                        });
-                    }
-
-                    // Function to save all goal inputs synchronously
-                    function saveAllGoalsSync() {
-                        if (reportLocked) return; // Don't save if locked
-                        const inputs = document.querySelectorAll('.goal-input');
-                        if (inputs.length === 0) return;
-
-                        // Use synchronous XMLHttpRequest for beforeunload
-                        inputs.forEach(function(input) {
-                            const goalId = input.getAttribute('data-goal-id');
-                            const field = input.getAttribute('data-field');
-                            const value = input.value;
-
-                            const xhr = new XMLHttpRequest();
-                            xhr.open('POST', 'view_report.php', false); // false = synchronous
-                            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                            xhr.send(`ajax_goal_update=1&goal_id=${goalId}&${field}=${encodeURIComponent(value)}`);
-                        });
-                    }
-
-                    // Save goals before page unload (only if not locked)
-                    if (!reportLocked) {
-                        window.addEventListener('beforeunload', function(e) {
-                            if (goalsDirty) {
-                                saveAllGoalsSync();
-                            }
-                        });
-                    }
-
-                    // Auto-save dropdowns and inputs for schemes (Action Step, Recommended Scheme/Amount)
-                    if (!reportLocked) {
-                        document.querySelectorAll('.action-dropdown, .scheme-input').forEach(function(element) {
-                            const eventType = element.classList.contains('action-dropdown') ? 'change' : 'blur';
-
-                            element.addEventListener(eventType, function() {
-                                if (element.getAttribute('data-t4-managed') === 'true') return;
-                                const schemeId = element.getAttribute('data-scheme-id');
-                                const field = element.getAttribute('data-field') || 'action_step'; // Default to action_step for dropdown
-                                const value = element.value.trim();
-
-                                if (schemeId) {
-                                    const postBody = {
-                                        ajax_scheme: '1',
-                                        scheme_id: schemeId,
-                                    };
-                                    postBody[field] = value;
-
-                                    fetch('view_report.php', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                                            },
-                                            body: new URLSearchParams(postBody)
-                                        })
-                                        .then(response => response.json())
-                                        .then(data => {
-                                            if (data && data.success) {
-                                                showToast('Saved ' + (field === 'action_step' ? 'action step' : field.replace('_', ' ')));
-                                            } else {
-                                                alert((data && data.message) || (data && data.error) || 'Unknown error');
-                                            }
-                                        })
-                                        .catch(err => console.error(err));
-                                }
-                            });
-                        });
-                    }
-
-                    // Immediately-responding Portfolio Tenure handler (improved: swaps label and value)
-                    (function() {
-                                    const returnLabel = document.getElementById('returnLabel');
-                                    const returnValueCell = document.getElementById('returnValueCell');
-                                    const xirrRow = document.getElementById('xirrRow');
-                                    const xirrValue = <?php echo json_encode((float)$xirr); ?>;
-    
-                                    // Preformatted server-side strings to avoid client-side number formatting differences
-                                    const cagrText = <?php echo json_encode(formatPercent($cagr)); ?>;
-                                    const absoluteReturnText = <?php
-                                                                // Format as percentage when available, fallback to N/A
-                                                                $absVal = ($absoluteReturn !== null) ? (float)$absoluteReturn : null;
-                                                                echo json_encode($absVal !== null ? formatPercent($absVal) : 'N/A');
-                                                                ?>;
-    
-                                    window.updateCurrentSituation = function() {
-                                        try {
-                                            const selected = document.querySelector('input[name="is_older_than_1_year"]:checked');
-                                            if (!selected) return;
-    
-                                            const val = selected.value;
-                                            const returnLabel = document.getElementById('returnLabel');
-                                            const returnValueCell = document.getElementById('returnValueCell');
-                                            const xirrRow = document.getElementById('xirrRow');
-    
-                                            if (val === '0') {
-                                                // --- Less than 1 year: Show Absolute Return ---
-                                                if (returnLabel) returnLabel.textContent = 'Absolute Return of schemes';
-                                                if (returnValueCell) {
-                                                    // Update the visible value and the metadata for AJAX saving
-                                                    returnValueCell.value = absoluteReturnText;
-                                                    returnValueCell.setAttribute('data-field', 'absolute_return');
-                                                    returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$absoluteReturn); ?>);
-                                                }
-                                                if (xirrRow) xirrRow.style.display = 'none';
-                                            } else {
-                                                // --- More than 1 year: Show CAGR ---
-                                                if (returnLabel) returnLabel.textContent = 'CAGR of current schemes';
-                                                if (returnValueCell) {
-                                                    // Update the visible value and the metadata for AJAX saving
-                                                    returnValueCell.value = cagrText;
-                                                    returnValueCell.setAttribute('data-field', 'cagr');
-                                                    returnValueCell.setAttribute('data-raw', <?php echo json_encode((float)$cagr); ?>);
-                                                }
-                                                if (xirrRow) {
-                                                    if (xirrValue && !isNaN(xirrValue) && Number(xirrValue) !== 0) {
-                                                        xirrRow.style.display = '';
-                                                    } else {
-                                                        xirrRow.style.display = 'none';
-                                                    }
-                                                }
-                                            }
-                                        } catch (e) {
-                                            console.error('updateCurrentSituation error', e);
-                                        }
-                                    };
-    
-                                    // Attach listeners to radio inputs and via delegated change to capture dynamic changes
-                                    document.querySelectorAll('input[name="is_older_than_1_year"]').forEach(function(r) {
-                                        r.addEventListener('change', window.updateCurrentSituation);
-                                    });
-                                    document.addEventListener('change', function(e) {
-                                        if (e.target && e.target.name === 'is_older_than_1_year') window.updateCurrentSituation();
-                                    });
-    
-                                    // Initialize UI once
-                                    window.updateCurrentSituation();
-                                })();
-                            });
-                    
-                        // --- WORKFLOW JS FUNCTIONS ---
-                    function submitWorkflow(action) {
-                        // Handle modals for compliance and rejection
-                        if (action === 'ready_for_review') {
-                            openComplianceModal();
-                            return;
-                        }
-                        if (action === 'review_not_ok') {
-                            openRejectModal();
-                            return;
-                        }
-                        if (!confirm("Are you sure you want to perform this action?")) return;
-
-                        // Show loading state
-                        const workflowActions = document.querySelector('.workflow-actions');
-                        if (workflowActions) {
-                            workflowActions.innerHTML = '<div style="padding: 10px; text-align: center; color: #666;">⏳ Processing...</div>';
-                        }
-                        showLoading();
-
-                        // Set the workflow action
-                        document.getElementById('workflowActionInput').value = action;
-
-                        // Add save_report flag to ensure content is saved
-                        let saveReportInput = document.getElementById('saveReportInput');
-                        if (!saveReportInput) {
-                            saveReportInput = document.createElement('input');
-                            saveReportInput.type = 'hidden';
-                            saveReportInput.name = 'save_report';
-                            saveReportInput.value = '1';
-                            saveReportInput.id = 'saveReportInput';
-                            document.getElementById('reportForm').appendChild(saveReportInput);
-                        }
-
-                        // Submit the form
-                        document.getElementById('reportForm').submit();
-                    }
-
-                    // --- COMPLIANCE CHECKLIST MODAL FUNCTIONS ---
-                    function openComplianceModal() {
-                        document.querySelectorAll('.compliance-checkbox').forEach(cb => cb.checked = false);
-                        document.getElementById('confirmComplianceBtn').disabled = true;
-                        document.getElementById('complianceModal').style.display = 'flex';
-                    }
-
-                    function closeComplianceModal() {
-                        document.getElementById('complianceModal').style.display = 'none';
-                    }
-
-                    function confirmCompliance() {
-                        if (!confirm("Are you sure you want to mark this report as ready for review?")) return;
-                        closeComplianceModal();
-                        showLoading();
-                        document.getElementById('workflowActionInput').value = 'ready_for_review';
-                        let saveReportInput = document.getElementById('saveReportInput');
-                        if (!saveReportInput) {
-                            saveReportInput = document.createElement('input');
-                            saveReportInput.type = 'hidden';
-                            saveReportInput.name = 'save_report';
-                            saveReportInput.value = '1';
-                            saveReportInput.id = 'saveReportInput';
-                            document.getElementById('reportForm').appendChild(saveReportInput);
-                        }
-                        document.getElementById('reportForm').submit();
-                    }
-
-                    // --- REJECTION MODAL FUNCTIONS ---
-                    function openRejectModal() {
-                        document.getElementById('rejectComment').value = '';
-                        document.getElementById('rejectModal').style.display = 'flex';
-                    }
-
-                    function closeRejectModal() {
-                        document.getElementById('rejectModal').style.display = 'none';
-                    }
-
-                    function submitRejection() {
-                        const comment = document.getElementById('rejectComment').value.trim();
-                        if (!comment) {
-                            alert("Comment is required for rejection.");
-                            return;
-                        }
-                        if (!confirm("Are you sure you want to reject this report?")) return;
-                        closeRejectModal();
-                        showLoading();
-                        document.getElementById('workflowActionInput').value = 'review_not_ok';
-                        document.getElementById('reviewCommentInput').value = comment;
-                        let saveReportInput = document.getElementById('saveReportInput');
-                        if (!saveReportInput) {
-                            saveReportInput = document.createElement('input');
-                            saveReportInput.type = 'hidden';
-                            saveReportInput.name = 'save_report';
-                            saveReportInput.value = '1';
-                            saveReportInput.id = 'saveReportInput';
-                            document.getElementById('reportForm').appendChild(saveReportInput);
-                        }
-                        document.getElementById('reportForm').submit();
-                    }
-
-                    // --- LOADING OVERLAY FUNCTIONS ---
-                    function showLoading() {
-                        const loadingOverlay = document.getElementById('loadingOverlay');
-                        if (loadingOverlay) {
-                            loadingOverlay.style.display = 'flex';
-                        }
-                    }
-
-                    function hideLoading() {
-                        const loadingOverlay = document.getElementById('loadingOverlay');
-                        if (loadingOverlay) {
-                            loadingOverlay.style.display = 'none';
-                        }
-                    }
-
-                    // --- INITIALIZE COMPLIANCE CHECKLIST ---
-                    document.addEventListener('DOMContentLoaded', function() {
-                        const checkboxes = document.querySelectorAll('.compliance-checkbox');
-                        const confirmBtn = document.getElementById('confirmComplianceBtn');
-                        if (checkboxes.length > 0 && confirmBtn) {
-                            checkboxes.forEach(checkbox => {
-                                checkbox.addEventListener('change', function() {
-                                    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-                                    confirmBtn.disabled = !allChecked;
-                                });
-                            });
-                        }
-                        hideLoading();
-                    });
-
-                    // Handle form submission
-                    document.getElementById('reportForm').addEventListener('submit', function(e) {
-                        const workflowAction = document.getElementById('workflowActionInput').value;
-                        if (workflowAction) {
-                            showLoading();
-                            document.querySelectorAll('.wf-btn').forEach(btn => {
-                                btn.disabled = true;
-                            });
-                        }
-                    });
+        // Handle form submission
+        document.getElementById('reportForm').addEventListener('submit', function(e) {
+            const workflowAction = document.getElementById('workflowActionInput').value;
+            if (workflowAction) {
+                showLoading();
+                document.querySelectorAll('.wf-btn').forEach(btn => {
+                    btn.disabled = true;
+                });
+            }
+        });
     </script>
 
     <!-- Loading Overlay -->

@@ -28,10 +28,6 @@ $isAdmin = (
 
 $currentUserId = (int)($_SESSION['user_id'] ?? 0);
 
-const DEFAULT_GREETING  = 'Dear Mr.';
-const DEFAULT_INTRO     = 'Introduction';
-const DEFAULT_CLOSING   = 'Closing remarks';
-const DEFAULT_RATIONALE = 'Rationale for recommendations';
 
 function safePercent($num, $den)
 {

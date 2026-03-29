@@ -15,10 +15,6 @@ function renderClientReport(
     array $annexureLines,
     int $clientId
 ) {
-    $DEFAULT_GREETING  = 'Dear Mr.';
-    $DEFAULT_INTRO     = "Introduction";
-    $DEFAULT_CLOSING   = "Closing remarks";
-    $DEFAULT_RATIONALE = "Rationale for recommendations";
 
     $name       = $clientData['name'];
     $asOn       = $clientData['as_on'] ?? '';
@@ -47,24 +43,23 @@ function renderClientReport(
     }
 
     // Build client message from parts
-    if (trim($introText) === '') $introText = $DEFAULT_INTRO;
-    if (trim($closingText) === '') $closingText = $DEFAULT_CLOSING;
-    if (trim($rationaleText) === '') $rationaleText = $DEFAULT_RATIONALE;
 
     $base = trim($greetingBase);
-    if ($base === '') $base = $DEFAULT_GREETING;
     $firstName = '';
     if (!empty($name)) {
         $firstName = explode(' ', trim($name))[0];
     }
 
+if ($base !== '') {
     if (strpos($base, '{{name}}') !== false) {
         $fullGreeting = str_replace('{{name}}', $firstName, $base);
     } else {
         $fullGreeting = rtrim($base) . ' ' . $firstName;
     }
-
     $fullGreeting .= ',';
+} else {
+    $fullGreeting = '';
+}
 
     
 

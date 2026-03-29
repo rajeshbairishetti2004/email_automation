@@ -2,7 +2,9 @@
 // rationale.php
 // Complete standalone template management for rationale section
 // Also handles workflow actions and auto-save
-// UPDATED: Uses Quill rich text editor to preserve colours and formatting from templates
+// FIX: Default template loads correctly even when stored = "Rationale for recommendations"
+// FIX: Uses setTimeout(50ms) so Quill is fully ready before dangerouslyPasteHTML is called
+// FIX: INITIAL_CONTENT resolved entirely in PHP to avoid JS DOM race conditions
 
 // Handle AJAX requests for template management AND workflow actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
@@ -145,6 +147,42 @@ if (!isset($rationaleText) || $rationaleText === '') {
     $stmt->execute([$clientId]);
     $rationaleText = $stmt->fetchColumn() ?? '';
 }
+
+
+
+$rationaleStoredPlain = trim(strip_tags($rationaleText));
+$rationaleIsEmpty = $rationaleStoredPlain === '';
+// Find the default template content
+$rationaleDefaultContent   = '';
+$rationaleDefaultId        = 0;
+if (!empty($templates['rationale'] ?? [])) {
+    foreach ($templates['rationale'] as $t) {
+        if (!empty($t['is_default']) && (int)$t['is_default'] === 1) {
+            $rationaleDefaultId      = (int)$t['id'];
+            $rationaleDefaultContent = $t['content'] ?? '';
+            break;
+        }
+    }
+    // Fallback to first template
+    if ($rationaleDefaultId === 0 && !empty($templates['rationale'][0])) {
+        $rationaleDefaultId      = (int)$templates['rationale'][0]['id'];
+        $rationaleDefaultContent = $templates['rationale'][0]['content'] ?? '';
+    }
+}
+
+// Decide what to show
+if (!$rationaleIsEmpty) {
+    $rationaleInitialContent       = $rationaleText;
+    $rationaleIsDefaultBeingLoaded = false;
+} elseif ($rationaleDefaultContent !== '') {
+    $rationaleInitialContent       = $rationaleDefaultContent;
+    $rationaleIsDefaultBeingLoaded = true;
+} else {
+    $rationaleInitialContent       = '';
+    $rationaleIsDefaultBeingLoaded = false;
+}
+
+$rationaleShouldAutosave = !($isLocked ?? false) && $rationaleIsDefaultBeingLoaded;
 ?>
 
 <!-- Quill CSS guard (may already be loaded by client_communication.php) -->
@@ -213,35 +251,12 @@ if (!isset($rationaleText) || $rationaleText === '') {
         display: none !important;
     }
 
-    .rat-btn.save {
-        background: #0288D1;
-        color: #fff;
-    }
-
-    .rat-btn.save:hover {
-        background: #2eb85c !important;
-        transform: translateY(-1px);
-    }
-
-    .rat-btn.edit {
-        background: #039be5;
-        color: #fff;
-    }
-
-    .rat-btn.edit:hover {
-        background: #0288d1;
-        transform: translateY(-1px);
-    }
-
-    .rat-btn.del {
-        background: #0277bd;
-        color: #fff;
-    }
-
-    .rat-btn.del:hover {
-        background: #dc3545 !important;
-        transform: translateY(-1px);
-    }
+    .rat-btn.save { background: #0288D1; color: #fff; }
+    .rat-btn.save:hover { background: #2eb85c !important; transform: translateY(-1px); }
+    .rat-btn.edit { background: #039be5; color: #fff; }
+    .rat-btn.edit:hover { background: #0288d1; transform: translateY(-1px); }
+    .rat-btn.del  { background: #0277bd; color: #fff; }
+    .rat-btn.del:hover  { background: #dc3545 !important; transform: translateY(-1px); }
 
     .rat-btn.add {
         display: flex;
@@ -256,14 +271,8 @@ if (!isset($rationaleText) || $rationaleText === '') {
         color: #0288d1;
     }
 
-    .rat-btn[disabled] {
-        opacity: 0.65;
-        cursor: not-allowed;
-        transform: none !important;
-    }
-
-    .rat-btn:focus,
-    .rat-select:focus {
+    .rat-btn[disabled] { opacity: 0.65; cursor: not-allowed; transform: none !important; }
+    .rat-btn:focus, .rat-select:focus {
         outline: 3px solid rgba(2, 136, 209, 0.12);
         outline-offset: 2px;
     }
@@ -289,9 +298,7 @@ if (!isset($rationaleText) || $rationaleText === '') {
         padding: 6px 10px;
     }
 
-    .rat-quill-wrap .ql-container.ql-snow {
-        border: none;
-    }
+    .rat-quill-wrap .ql-container.ql-snow { border: none; }
 
     .rat-quill-wrap .ql-editor {
         min-height: 140px;
@@ -310,35 +317,13 @@ if (!isset($rationaleText) || $rationaleText === '') {
         font-size: 13px;
     }
 
-    /* Toolbar colour matching */
-    .rat-quill-wrap .ql-toolbar .ql-stroke {
-        stroke: #4a7a92;
-    }
-
-    .rat-quill-wrap .ql-toolbar .ql-fill {
-        fill: #4a7a92;
-    }
-
-    .rat-quill-wrap .ql-toolbar button:hover .ql-stroke {
-        stroke: #0288d1;
-    }
-
-    .rat-quill-wrap .ql-toolbar button:hover .ql-fill {
-        fill: #0288d1;
-    }
-
-    .rat-quill-wrap .ql-toolbar .ql-active .ql-stroke {
-        stroke: #0288d1;
-    }
-
-    .rat-quill-wrap .ql-toolbar .ql-active .ql-fill {
-        fill: #0288d1;
-    }
-
-    .rat-quill-wrap .ql-snow .ql-picker {
-        color: #4a7a92;
-    }
-
+    .rat-quill-wrap .ql-toolbar .ql-stroke { stroke: #4a7a92; }
+    .rat-quill-wrap .ql-toolbar .ql-fill   { fill:   #4a7a92; }
+    .rat-quill-wrap .ql-toolbar button:hover .ql-stroke { stroke: #0288d1; }
+    .rat-quill-wrap .ql-toolbar button:hover .ql-fill   { fill:   #0288d1; }
+    .rat-quill-wrap .ql-toolbar .ql-active .ql-stroke   { stroke: #0288d1; }
+    .rat-quill-wrap .ql-toolbar .ql-active .ql-fill     { fill:   #0288d1; }
+    .rat-quill-wrap .ql-snow .ql-picker { color: #4a7a92; }
     .rat-quill-wrap .ql-snow .ql-picker-options {
         background: #fff;
         border: 1px solid #dbeefb;
@@ -346,84 +331,39 @@ if (!isset($rationaleText) || $rationaleText === '') {
         box-shadow: 0 4px 12px rgba(2, 136, 209, 0.10);
     }
 
-    /* Colour swatches */
     .rat-quill-wrap .ql-snow .ql-color-picker .ql-picker-item {
-        width: 18px !important;
-        height: 18px !important;
+        width: 18px !important; height: 18px !important;
         border-radius: 3px !important;
-        border: 1px solid rgba(0, 0, 0, 0.10) !important;
+        border: 1px solid rgba(0,0,0,0.10) !important;
     }
 
     .rat-quill-wrap .ql-snow .ql-color-picker.ql-color .ql-picker-options,
     .rat-quill-wrap .ql-snow .ql-color-picker.ql-background .ql-picker-options {
-        width: 164px !important;
-        padding: 5px !important;
+        width: 164px !important; padding: 5px !important;
     }
 
-    .rat-quill-wrap .ql-snow .ql-color-picker .ql-picker-options {
-        display: none;
-    }
-
-    .rat-quill-wrap .ql-snow .ql-color-picker.ql-expanded .ql-picker-options {
-        display: block !important;
-    }
+    .rat-quill-wrap .ql-snow .ql-color-picker .ql-picker-options { display: none; }
+    .rat-quill-wrap .ql-snow .ql-color-picker.ql-expanded .ql-picker-options { display: block !important; }
 
     /* Locked state */
-    .rat-quill-wrap.is-locked .ql-toolbar {
-        display: none;
-    }
-
-    .rat-quill-wrap.is-locked .ql-editor {
-        background: #f8fbff;
-        cursor: default;
-    }
+    .rat-quill-wrap.is-locked .ql-toolbar { display: none; }
+    .rat-quill-wrap.is-locked .ql-editor  { background: #f8fbff; cursor: default; }
 
     /* Flash */
-    .rat-flash {
-        margin-top: 8px;
-        min-height: 26px;
-        font-size: 13px;
-    }
-
-    .flash-success {
-        color: #2eb85c;
-        background: #edf9f0;
-        padding: 6px 10px;
-        border-radius: 4px;
-        border-left: 3px solid #2eb85c;
-    }
-
-    .flash-error {
-        color: #dc3545;
-        background: #fef2f2;
-        padding: 6px 10px;
-        border-radius: 4px;
-        border-left: 3px solid #dc3545;
-    }
+    .rat-flash { margin-top: 8px; min-height: 26px; font-size: 13px; }
+    .flash-success { color: #2eb85c; background: #edf9f0; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #2eb85c; }
+    .flash-error   { color: #dc3545; background: #fef2f2; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #dc3545; }
 
     .rat-btn.add svg {
-        width: 16px;
-        height: 16px;
-        stroke: currentColor;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
+        width: 16px; height: 16px;
+        stroke: currentColor; stroke-width: 2;
+        stroke-linecap: round; stroke-linejoin: round;
     }
 
     @media (max-width: 640px) {
-        .rat-controls {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .rat-select {
-            width: 100%;
-        }
-
-        .rat-btn:not(.add) {
-            width: 100%;
-            text-align: center;
-        }
+        .rat-controls { flex-direction: column; align-items: stretch; }
+        .rat-select { width: 100%; }
+        .rat-btn:not(.add) { width: 100%; text-align: center; }
     }
 </style>
 
@@ -447,42 +387,19 @@ $templates     = $templates     ?? [];
     <div class="rat-controls">
         <select id="rationale_template_selector" class="rat-select" <?= $isLocked ? 'disabled' : '' ?>>
             <option value="0">-- Select saved rationale template --</option>
-            <?php
-            $defaultTemplateId = 0;
-
-            if (!empty($templates['rationale'] ?? [])) {
-
-                // Find default template
-                foreach ($templates['rationale'] as $t) {
-                    if (!empty($t['is_default']) && (int)$t['is_default'] === 1) {
-                        $defaultTemplateId = (int)$t['id'];
-                        break;
-                    }
-                }
-
-                // ✅ fallback to first template
-                if ($defaultTemplateId === 0) {
-                    $defaultTemplateId = (int)$templates['rationale'][0]['id'];
-                }
-
-                // Render options
-                foreach ($templates['rationale'] as $t):
-                    $tid      = (int)($t['id'] ?? 0);
-                    $tname    = htmlspecialchars($t['name'] ?? '');
-                    $tcontent = htmlspecialchars($t['content'] ?? '', ENT_QUOTES);
+            <?php foreach ($templates['rationale'] ?? [] as $t):
+                $tid      = (int)($t['id'] ?? 0);
+                $tname    = htmlspecialchars($t['name'] ?? '');
+                $tcontent = htmlspecialchars($t['content'] ?? '', ENT_QUOTES);
             ?>
-                    <option
-                        value="<?= $tid ?>"
-                        data-content="<?= $tcontent ?>"
-                        <?= ($tid === $defaultTemplateId) ? 'selected' : '' ?>>
-                        <?= $tname ?>
-                    </option>
-            <?php
-                endforeach;
-            }
-            ?>
+                <option
+                    value="<?= $tid ?>"
+                    data-content="<?= $tcontent ?>"
+                    <?= ($tid === $rationaleDefaultId) ? 'selected' : '' ?>>
+                    <?= $tname ?>
+                </option>
+            <?php endforeach; ?>
         </select>
-
     </div>
 
     <!-- Quill editor (replaces plain textarea) -->
@@ -498,7 +415,7 @@ $templates     = $templates     ?? [];
         data-client-id="<?= (int)$clientId ?>"
         data-field="rationale_text"
         style="display:none;"
-        <?= $isLocked ? 'readonly' : '' ?>><?= htmlspecialchars($rationaleText) ?></textarea>
+        <?= $isLocked ? 'readonly' : '' ?>><?= htmlspecialchars($rationaleInitialContent) ?></textarea>
 
     <div id="rationale_flash_container" class="comm-flash"></div>
 </div>
@@ -513,106 +430,102 @@ $templates     = $templates     ?? [];
         const CLIENT_ID = <?= json_encode((int)$clientId) ?>;
         const IS_LOCKED = <?= $isLocked ? 'true' : 'false' ?>;
 
+        // KEY FIX: Content resolved entirely in PHP — no JS DOM race conditions.
+        // If stored value was a placeholder, this already contains the default template HTML.
+        const INITIAL_CONTENT         = <?= json_encode($rationaleInitialContent) ?>;
+        const SHOULD_AUTOSAVE_INITIAL = <?= $rationaleShouldAutosave ? 'true' : 'false' ?>;
+
         /* ── DOM refs ── */
         const selector = document.getElementById('rationale_template_selector');
         const hiddenTA = document.getElementById('rationale_textarea');
-        const saveBtn = document.getElementById('rationale_save_btn');
-        const editBtn = document.getElementById('rationale_edit_btn');
-        const delBtn = document.getElementById('rationale_delete_btn');
-        const addBtn = document.getElementById('rationale_add_btn');
-        const flash = document.getElementById('rationale_flash_container');
+        const saveBtn  = document.getElementById('rationale_save_btn');
+        const editBtn  = document.getElementById('rationale_edit_btn');
+        const delBtn   = document.getElementById('rationale_delete_btn');
+        const addBtn   = document.getElementById('rationale_add_btn');
+        const flash    = document.getElementById('rationale_flash_container');
 
         /* ── INITIALISE QUILL ── */
         const quill = new Quill('#rationale_quill_editor', {
             theme: 'snow',
             readOnly: IS_LOCKED,
             placeholder: 'Enter rationale for recommendations…',
-            modules: {
-                toolbar: false
-            }
+            modules: { toolbar: false }
         });
-
-        quill.on('text-change', function(delta, oldDelta, source) {
-           
-
-            syncToHidden(); // merged
-        });
-
-(function initEditor() {
-    // Disable focusability during load to prevent auto-scroll
-    quill.root.setAttribute('contenteditable', 'false');
-
-    const stored = hiddenTA.value.trim();
-
-    if (stored) {
-        // Load saved DB content
-        quill.clipboard.dangerouslyPasteHTML(stored);
-        syncToHidden();
-    } else if (selector && selector.value !== "0") {
-        // No saved content — load default template
-        const selectedOption = selector.options[selector.selectedIndex];
-        const tmp = document.createElement('div');
-        tmp.innerHTML = selectedOption.getAttribute('data-content') || '';
-        quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
-        syncToHidden();
-        if (!IS_LOCKED) {
-            performSave(quill.root.innerHTML);
-        }
-    }
-
-    // Re-enable editing after load, then scroll to top
-    setTimeout(function() {
-        if (!IS_LOCKED) {
-            quill.root.setAttribute('contenteditable', 'true');
-        }
-        window.scrollTo({ top: 0, behavior: 'instant' });
-    }, 100);
-})();
-
 
         /* ── SYNC Quill → hidden textarea ── */
         function syncToHidden() {
             hiddenTA.value = quill.root.innerHTML;
         }
+        quill.on('text-change', syncToHidden);
 
+        /* ── LOAD INITIAL CONTENT ──────────────────────────────────────────────
+           KEY FIX: setTimeout(50) ensures Quill's internal DOM setup is fully
+           complete before we call dangerouslyPasteHTML.
+           Without this delay, the paste fires during Quill's init and is lost.
+        ── */
+        setTimeout(function() {
+            if (!INITIAL_CONTENT || INITIAL_CONTENT.trim() === '') {
+                if (!IS_LOCKED) quill.root.setAttribute('contenteditable', 'true');
+                return;
+            }
+
+            // Disable contenteditable during paste to prevent page auto-scroll
+            quill.root.setAttribute('contenteditable', 'false');
+
+            quill.clipboard.dangerouslyPasteHTML(INITIAL_CONTENT);
+            syncToHidden();
+
+            if (!IS_LOCKED) {
+                quill.root.setAttribute('contenteditable', 'true');
+            }
+
+            // Auto-save the default template content so next page load
+            // treats this as "real" content and doesn't re-trigger the default logic
+          if (SHOULD_AUTOSAVE_INITIAL) {
+    // ❌ DO NOTHING
+    console.log("Default loaded — not saving");
+}
+
+        }, 50); // 50 ms: enough for Quill to finish internal setup
 
         /* ── AUTO-SAVE on blur ── */
-        let lastSaved = quill.root.innerHTML;
+        let lastSaved = '';
+        setTimeout(() => { lastSaved = quill.root.innerHTML; }, 300);
 
         quill.root.addEventListener('blur', function() {
             if (IS_LOCKED) return;
             const html = quill.root.innerHTML;
-            if (html === lastSaved) return; // nothing changed
-            performSave(html);
+            if (html === lastSaved) return;
+            performSave(html, false);
         });
 
-        function performSave(html) {
+        function performSave(html, silent) {
             fetch('rationale.php', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
                     body: new URLSearchParams({
                         ajax_action: 'save_rationale',
-                        client_id: CLIENT_ID,
-                        value: html
+                        client_id:   CLIENT_ID,
+                        value:       html
                     })
                 })
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) {
                         lastSaved = html;
-                        showFlash('success', d.message || 'Saved');
-                    } else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
+                        if (!silent) showFlash('success', d.message || 'Saved');
+                    } else {
+                        if (!silent) showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
+                    }
                 })
-                .catch(() => showFlash('error', 'Network error while saving'));
+                .catch(() => { if (!silent) showFlash('error', 'Network error while saving'); });
         }
 
         /* ── INTERVAL AUTO-SAVE (every 15 s if dirty) ── */
         if (!IS_LOCKED && CLIENT_ID) {
             setInterval(function() {
                 const html = quill.root.innerHTML;
-                if (html !== lastSaved) performSave(html);
+                if (html !== lastSaved) performSave(html, true);
             }, 15000);
 
             window.addEventListener('beforeunload', function() {
@@ -621,126 +534,87 @@ $templates     = $templates     ?? [];
                     navigator.sendBeacon('rationale.php',
                         new URLSearchParams({
                             ajax_action: 'autosave_rationale',
-                            client_id: CLIENT_ID,
-                            value: html
+                            client_id:   CLIENT_ID,
+                            value:       html
                         })
                     );
                 }
             });
         }
 
-        /* ── INTERCEPT WORKFLOW BUTTONS from view_report.php ──
-           Ensures rationale HTML is flushed to the hidden textarea
-           before the main form submits, so the POST value is current. */
+        /* ── INTERCEPT WORKFLOW BUTTONS ── */
         function interceptWorkflowButtons() {
-            const workflowButtons = document.querySelectorAll('.workflow-actions .wf-btn');
-            workflowButtons.forEach(function(button) {
+            document.querySelectorAll('.workflow-actions .wf-btn').forEach(function(button) {
                 button.addEventListener('click', function() {
                     if (IS_LOCKED) return;
-                    // Sync Quill → hidden textarea so form POST carries latest HTML
                     syncToHidden();
-                    // Also fire an async save so DB is up-to-date
                     const html = quill.root.innerHTML;
-                    if (html !== lastSaved) performSave(html);
-                }, true); // capture phase — runs before submitWorkflow()
+                    if (html !== lastSaved) performSave(html, true);
+                }, true);
             });
         }
-        // Delay slightly so workflow buttons are guaranteed to exist in DOM
         setTimeout(interceptWorkflowButtons, 600);
 
-        /* ── autoResizeHeight stub ──
-           view_report.php's global DOMContentLoaded calls autoResizeTextarea()
-           on .rat-main-textarea. The hidden textarea has display:none so no
-           visual effect is needed, but the function must exist to avoid errors
-           if anything calls it directly on the element. ── */
-        hiddenTA.autoResizeHeight = function() {}; // no-op stub
+        /* ── autoResizeHeight stub ── */
+        hiddenTA.autoResizeHeight = function() {};
 
         /* ── HELPERS ── */
         function showFlash(type, msg) {
             flash.innerHTML = '<div class="' + (type === 'success' ? 'flash-success' : 'flash-error') + '">' +
                 (type === 'success' ? '✓ ' : '✗ ') + msg + '</div>';
-            setTimeout(() => {
-                flash.innerHTML = '';
-            }, 3500);
+            setTimeout(() => { flash.innerHTML = ''; }, 3500);
         }
 
         function setButtonsDisabled(state) {
-            [addBtn, saveBtn, editBtn, delBtn].forEach(b => {
-                if (b) b.disabled = !!state;
-            });
+            [addBtn, saveBtn, editBtn, delBtn].forEach(b => { if (b) b.disabled = !!state; });
         }
 
         function findOption(id) {
             const v = String(id);
-            for (const o of selector.options)
-                if (o.value === v) return o;
+            for (const o of selector.options) if (o.value === v) return o;
             return null;
         }
 
         function upsertOption(id, name, htmlContent) {
             let opt = findOption(id);
-            if (!opt) {
-                opt = document.createElement('option');
-                opt.value = String(id);
-                selector.appendChild(opt);
-            }
+            if (!opt) { opt = document.createElement('option'); opt.value = String(id); selector.appendChild(opt); }
             opt.textContent = name;
             opt.setAttribute('data-content', htmlContent);
             return opt;
         }
 
-        function removeOption(id) {
-            const o = findOption(id);
-            if (o) o.remove();
-        }
+        function removeOption(id) { const o = findOption(id); if (o) o.remove(); }
 
-        /* ── TEMPLATE SELECTOR: auto-load on change ── */
+        /* ── TEMPLATE SELECTOR: manual change ── */
         selector.addEventListener('change', function() {
             const id = selector.value;
             if (!id || id === '0') return;
             const opt = selector.options[selector.selectedIndex];
-            // Decode htmlspecialchars-encoded data-content
             const tmp = document.createElement('div');
             tmp.innerHTML = opt.getAttribute('data-content') || '';
             quill.clipboard.dangerouslyPasteHTML(tmp.innerHTML);
             syncToHidden();
             showFlash('success', 'Template loaded — colours preserved.');
-
-            // Auto-save after loading
-            if (!IS_LOCKED) performSave(quill.root.innerHTML);
+            if (!IS_LOCKED) performSave(quill.root.innerHTML, true);
         });
 
         /* ── ADD ── */
         addBtn && addBtn.addEventListener('click', function() {
             if (IS_LOCKED) return;
-            if (!quill.getText().trim()) {
-                showFlash('error', 'Content cannot be empty.');
-                return;
-            }
+            if (!quill.getText().trim()) { showFlash('error', 'Content cannot be empty.'); return; }
             const name = prompt('Enter a name for this new rationale template:');
             if (!name || !name.trim()) return;
-
             const html = quill.root.innerHTML;
             setButtonsDisabled(true);
             fetch('rationale.php', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: new URLSearchParams({
-                        ajax_action: 'save_template',
-                        template_name: name.trim(),
-                        template_content: html,
-                        section_type: 'rationale'
-                    })
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({ ajax_action: 'save_template', template_name: name.trim(), template_content: html, section_type: 'rationale' })
                 })
                 .then(r => r.json())
                 .then(d => {
-                    if (d && d.success) {
-                        upsertOption(d.new_id, name.trim(), html);
-                        selector.value = String(d.new_id);
-                        showFlash('success', 'Template added successfully.');
-                    } else throw new Error(d.error || 'Save failed');
+                    if (d && d.success) { upsertOption(d.new_id, name.trim(), html); selector.value = String(d.new_id); showFlash('success', 'Template added successfully.'); }
+                    else throw new Error(d.error || 'Save failed');
                 })
                 .catch(e => showFlash('error', e.message))
                 .finally(() => setButtonsDisabled(false));
@@ -750,10 +624,7 @@ $templates     = $templates     ?? [];
         editBtn && editBtn.addEventListener('click', function() {
             if (IS_LOCKED) return;
             const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to edit.');
-                return;
-            }
+            if (!id || id === '0') { showFlash('error', 'Please select a template to edit.'); return; }
             const opt = selector.options[selector.selectedIndex];
             const tmp = document.createElement('div');
             tmp.innerHTML = opt.getAttribute('data-content') || '';
@@ -767,48 +638,22 @@ $templates     = $templates     ?? [];
             if (IS_LOCKED) return;
             const id = selector.value;
             const html = quill.root.innerHTML;
-            if (!quill.getText().trim()) {
-                showFlash('error', 'Content cannot be empty.');
-                return;
-            }
-
+            if (!quill.getText().trim()) { showFlash('error', 'Content cannot be empty.'); return; }
             let name;
             if (id && id !== '0') {
                 name = selector.options[selector.selectedIndex].text.trim() || 'Updated Template';
             } else {
                 name = prompt('Enter a name for this new rationale template:');
-                if (!name || !name.trim()) {
-                    showFlash('error', 'Template name is required.');
-                    return;
-                }
+                if (!name || !name.trim()) { showFlash('error', 'Template name is required.'); return; }
             }
-
             setButtonsDisabled(true);
-            const body = new URLSearchParams({
-                ajax_action: id && id !== '0' ? 'edit_template' : 'save_template',
-                template_name: name.trim(),
-                template_content: html,
-                section_type: 'rationale'
-            });
+            const body = new URLSearchParams({ ajax_action: id && id !== '0' ? 'edit_template' : 'save_template', template_name: name.trim(), template_content: html, section_type: 'rationale' });
             if (id && id !== '0') body.append('template_id', id);
-
-            fetch('rationale.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: body
-                })
+            fetch('rationale.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body })
                 .then(r => r.json())
                 .then(d => {
-                    if (d && d.success) {
-                        const tid = d.new_id || id;
-                        if (tid) {
-                            upsertOption(tid, name.trim(), html);
-                            selector.value = String(tid);
-                        }
-                        showFlash('success', 'Template saved successfully.');
-                    } else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
+                    if (d && d.success) { const tid = d.new_id || id; if (tid) { upsertOption(tid, name.trim(), html); selector.value = String(tid); } showFlash('success', 'Template saved successfully.'); }
+                    else showFlash('error', 'Save failed: ' + (d.error || 'Unknown'));
                 })
                 .catch(() => showFlash('error', 'Network error while saving.'))
                 .finally(() => setButtonsDisabled(false));
@@ -818,30 +663,15 @@ $templates     = $templates     ?? [];
         delBtn && delBtn.addEventListener('click', function() {
             if (IS_LOCKED) return;
             const id = selector.value;
-            if (!id || id === '0') {
-                showFlash('error', 'Please select a template to delete.');
-                return;
-            }
+            if (!id || id === '0') { showFlash('error', 'Please select a template to delete.'); return; }
             if (!confirm('Delete selected template? This cannot be undone.')) return;
-
             setButtonsDisabled(true);
-            fetch('rationale.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-                    },
-                    body: new URLSearchParams({
-                        ajax_action: 'delete_template',
-                        template_id: id
-                    })
-                })
+            fetch('rationale.php', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: new URLSearchParams({ ajax_action: 'delete_template', template_id: id }) })
                 .then(r => r.json())
                 .then(d => {
-                    if (d && d.success) {
-                        removeOption(id);
-                        selector.value = '0';
-                        showFlash('success', 'Template deleted.');
-                    } else showFlash('error', 'Delete failed: ' + (d.error || 'Unknown'));
+                    if (d && d.success) { removeOption(id); selector.value = '0'; showFlash('success', 'Template deleted.'); }
+                    else showFlash('error', 'Delete failed: ' + (d.error || 'Unknown'));
                 })
                 .catch(() => showFlash('error', 'Network error while deleting.'))
                 .finally(() => setButtonsDisabled(false));

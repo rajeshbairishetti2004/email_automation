@@ -30,5 +30,7 @@ RUN mkdir -p /var/www/html/uploads/attachments && \
 
 # Add ServerName to suppress the AH00558 warning
 RUN echo "ServerName Localhost" >> /etc/apache2/apache2.conf
+RUN a2enmod rewrite
+RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
 EXPOSE 80

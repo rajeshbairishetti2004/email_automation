@@ -4,16 +4,13 @@
 // ...existing code...
 
         $signatureStored   = trim((string)($client['signature_block'] ?? ''));
-
-        $DEFAULT_RATIONALE = 'Rationale for recommendations';
-        
         $clientMessage = implode("\n\n", [
             $greetingStored,
             $introTextStored,
             $closingTextStored
         ]);
 
-        $rationaleText = $rationaleStored !== '' ? $rationaleStored : $DEFAULT_RATIONALE;
+        $rationaleText = $rationaleStored !== '' ? $rationaleStored : '';
 
         /* --- FIX: PRIORITIZE DYNAMIC SIGNATURE FROM DROPDOWN --- */
         // Check if the frontend sent a custom signature based on the "Send As" selection

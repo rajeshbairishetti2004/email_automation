@@ -6,7 +6,16 @@ function showToast(msg) {
     setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+
 function saveField(cell, clientId, field, value) {
+
+    if (!value || value.trim() === '' ||
+    value === 'Dear Mr.' ||
+    value === 'Introduction' ||
+    value === 'Closing remarks' ||
+    value === 'Rationale for recommendations') {
+    return; // ❌ DO NOT SAVE DEFAULTS
+}
     const input = cell.querySelector('input, textarea');
     const displayVal = cell.querySelector('.display-val');
 
