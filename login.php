@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="login-container">
         <img src="image.png" alt="Logo" class="logo-img">
-        <h1>Client Report Portal</h1>
+        <h1>Review Automation</h1>
 
         <?php if ($error): ?>
             <div class="flash-error"><?= htmlspecialchars($error) ?></div>
