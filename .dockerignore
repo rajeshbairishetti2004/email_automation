@@ -1,0 +1,45 @@
+# Ignore git metadata
+.git
+
+# Ignore Dockerfile and compose overrides (if you build with different configs)
+.dockerignore
+
+# Ignore temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore PHPStorm / JetBrains metadata
+.idea/
+
+# Ignore Composer vendor if you install dependencies during image build
+vendor/
+
+# Ignore local environment configuration
+.env
+.env.*
+
+
+# Ignore upload directories (generated at runtime)
+uploads/
+
+# Ignore generated report outputs
+report_generation/extracted/
+report_generation/slides/
+
+# Ignore node_modules if present
+node_modules/
+
+# Ignore cache and runtime files
+cache/
+tmp/
+
+# Ignore npm and yarn lock if not needed in build
+package-lock.json
+yarn.lock

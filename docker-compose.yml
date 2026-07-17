@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php_apache_app
+    ports:
+      - "8080:80"
+    volumes:
+      - ./uploads:/var/www/html/uploads
+    env_file:
+      - ./.env
+

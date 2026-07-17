@@ -1,0 +1,745 @@
+.refresh-svg-icon {
+    display: inline-block;
+    vertical-align: middle;
+}
+.refresh-svg-icon.rotating {
+    animation: refresh-rotate 0.6s linear;
+}
+@keyframes refresh-rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Refresh icon button for upload-section */
+/* Prominent refresh icon for upload-section */
+.upload-section .refresh-icon-btn {
+    position: absolute;
+    top: 10px;
+    right: 18px;
+    background: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 4px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+    border-radius: 50%;
+    transition: background 0.15s;
+}
+.upload-section .refresh-icon-btn:hover {
+    background: rgba(2,136,209,0.08);
+}
+.upload-section .refresh-icon-btn i {
+    font-size: 26px;
+    color: #0288D1;
+    transition: color 0.15s, transform 0.2s;
+}
+.upload-section .refresh-icon-btn:hover i {
+    color: #015a8c;
+    transform: rotate(-90deg) scale(1.1);
+}
+/* Refresh icon button in upload zone */
+.refresh-icon-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 6px;
+    z-index: 2;
+    transition: background 0.15s;
+    border-radius: 50%;
+}
+.refresh-icon-btn:hover {
+    background: #e3f2fd;
+}
+.refresh-icon-btn i {
+    font-size: 20px;
+    color: #0288D1;
+    transition: color 0.15s, transform 0.2s;
+}
+.refresh-icon-btn:hover i {
+    color: #015a8c;
+    transform: rotate(-90deg) scale(1.1);
+}
+/* ==========================================
+   UPLOAD PAGE STYLES
+   ========================================== */
+
+/* --- LAYOUT --- */
+:root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #334155;
+    --text-strong: #0f172a;
+    --muted: #64748b;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --shadow: 0 4px 6px -1px rgba(99, 178, 204, 0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+}
+
+* {
+    box-sizing: border-box;
+    padding: 0;
+}
+body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color: var(--text); }
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-dark); }
+
+.wrap { max-width: 1260px; margin: 0 auto;margin-top:0px; padding: 28px 20px 60px; }
+.main-scroll-container { height: calc(100vh - 72px); overflow-y: auto; }
+p.lead { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.context-switch { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.context-switch label { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.context-select { appearance: none; padding: 10px 34px 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface) url('data:image/svg+xml,%3csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2220%22 fill=%22%234475a2%22 viewBox=%220 0 24 24%22%3e%3cpath d=%22M7 10l5 5 5-5H7z%22/%3e%3c/svg%3e') no-repeat right 10px center; font-size: 14px; color: var(--text); font-weight: 600; cursor: pointer; }
+
+select[name="cycle_filter"] {
+    padding: 12px 44px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0288D1;
+    border-radius: 14px;
+    border: 1.5px solid #b2d7f3;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px) saturate(1.2);
+    margin-left: 20px;
+    box-shadow: 0 4px 24px 0 rgba(2,136,209,0.10), 0 1.5px 6px 0 rgba(2,136,209,0.08);
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+    position: relative;
+    outline: none;
+    min-width: 170px;
+    background-image: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="12" fill="%23e3f2fd"/><path d="M8 10L12 14L16 10" stroke="%230288D1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    background-size: 32px 32px;
+    border-bottom: 3px solid #e3f2fd;
+    box-sizing: border-box;
+}
+
+select[name="cycle_filter"]:hover {
+    background: rgba(255,255,255,0.92);
+    border-color: #0288D1;
+    box-shadow: 0 6px 32px 0 rgba(2,136,209,0.13), 0 2px 8px 0 rgba(2,136,209,0.10);
+}
+
+
+select[name="cycle_filter"]:focus {
+    outline: 2px solid #0288D1;
+    border-color: #0288D1;
+    background: rgba(255,255,255,1);
+    box-shadow: 0 0 0 3px #b2e0fc, 0 6px 32px 0 rgba(2,136,209,0.13);
+}
+#monthFilter,
+#yearFilter,
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+
+    padding: 12px 44px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0288D1;
+
+    border-radius: 14px;
+    border: 1.5px solid #b2d7f3;
+
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(6px);
+
+    box-shadow: 0 4px 18px rgba(2,136,209,0.08);
+    min-width: 160px;
+
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+#monthFilter:hover,
+#yearFilter:hover,
+#prevCycleFilter:hover,
+#prevMonthFilter:hover,
+#prevYearFilter:hover {
+    border-color: #0288D1;
+    box-shadow: 0 6px 24px rgba(2,136,209,0.12);
+}
+#resetFilters,
+#prevResetFilters {
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1.5px solid #b2d7f3;
+    background: #e3f2fd;
+    color: #0288D1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#resetFilters:hover,
+#prevResetFilters:hover {
+    background: #0288D1;
+    color: white;
+}
+
+
+select[name="cycle_filter"]::-ms-expand {
+    display: none;
+}
+
+select[name="cycle_filter"] option {
+    font-weight: 600;
+    color: #0288D1;
+    background: #fafdff;
+    border-radius: 0;
+    padding: 10px 16px;
+    font-size: 16px;
+}
+
+select[name="cycle_filter"]:focus {
+    outline: none;
+    border-color: #0288D1;
+    box-shadow: 0 0 0 2px #b2e0fc;
+}
+
+select[name="cycle_filter"]::-ms-expand {
+    display: none;
+}
+
+/* Custom arrow using a pseudo-element */
+select[name="cycle_filter"] {
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%230288D1" height="20" viewBox="0 0 20 20" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7.293 8.293a1 1 0 011.414 0L10 9.586l1.293-1.293a1 1 0 111.414 1.414l-2 2a1 1 0 01-1.414 0l-2-2a1 1 0 010-1.414z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 20px 20px;
+}
+
+select[name="cycle_filter"] option {
+    font-weight: 500;
+    color: #0288D1;
+    background: #fff;
+    border-radius: 0;
+}
+.kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+@media (max-width: 1080px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stats-card { position: relative; display: block; padding: 16px 16px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); transition: transform 0.16s ease, box-shadow 0.16s ease; color: var(--text); }
+.stats-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(15,23,42,0.08); }
+.stats-card .label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.stats-card .number { margin-top: 6px; font-size: 26px; font-weight: 800; color: var(--text-strong); }
+.card-icon { position: absolute; top: 10px; right: 12px; color: var(--text); opacity: 0.15; font-size: 20px; }
+
+
+.completion-card { margin-top: 8px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.completion-title { font-weight: 700; color: var(--text-strong); font-size: 16px; margin: 0; }
+.completion-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.progress-shell { flex: 1; min-width: 240px; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%); }
+.completion-value { font-size: 22px; font-weight: 800; color: var(--text-strong); }
+
+/* --- UPLOAD SECTION --- */
+.upload-section {
+    max-width: 900px;
+    margin: 26px auto 0;
+    padding: 12px 32px;
+    background: var(--surface);
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    /* Remove fixed height so content can expand naturally */
+    /* height: 20px; */
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative; /* Added for refresh button positioning */
+}
+.upload-section h3 { margin: 0 0 6px; font-size: 18px; color: var(--text-strong); }
+.upload-section p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.upload-zone { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 20px; background: #f8fafc; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.upload-icon { font-size: 36px; color: var(--primary); opacity: 0.85; }
+.btn-primary { display: inline-block; padding: 12px 22px; background: var(--primary); color: white; border-radius: 10px; font-weight: 700; box-shadow: var(--shadow); border: none; cursor: pointer; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-ash {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-ash:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+.file-input { display: none; }
+
+.pending-alert { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; margin-bottom: 18px; }
+.pending-pill { background: #f97316; color: #fff; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; margin-top: 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+th { font-weight: 700; color: #475569; }
+.progress { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #0ea5e9, #2563eb); }
+
+/* --- HEADER STYLES --- */
+.full-width-header-bar {
+    width: 100%;
+    background-color: white; 
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.header {
+    max-width: 1200px; 
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px; 
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.header-left img {
+    width: 50px; 
+    height: 50px;
+    margin-right: 15px;
+    object-fit: contain;
+}
+
+.header-left .greeting {
+    font-size: 24px; 
+    font-weight: 700; 
+    color: #0288D1; 
+    font-family: 'Poppins', sans-serif;
+}
+
+.header-right {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.profile-pic {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background-color: #4FC3F7; 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    border: 2px solid #0288D1;
+    cursor: pointer; 
+    z-index: 20;
+    margin-right: 10px;
+}
+
+.profile-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 36px;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    min-width: 180px;
+    z-index: 100;
+    margin-right: 20px;
+}
+.profile-dropdown div {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    padding: 8px 12px 5px;
+}
+.profile-dropdown a {
+    display: block;
+    padding: 8px 12px;
+    text-align: right;
+    color: #0288D1;
+    font-weight: 600;
+}
+.profile-dropdown a.logout-link {
+    color: #e53935 !important;
+    font-weight: 700;
+    background: none;
+    transition: background 0.2s, color 0.2s;
+}
+.profile-dropdown a.logout-link:hover {
+    background: #ffebee;
+    color: #b71c1c !important;
+}
+
+/* --- MAIN CONTENT --- */
+.main-content {
+    max-width: 800px;
+    margin: 20px auto 40px auto; 
+    padding: 0 20px; 
+    text-align: center; 
+}
+/* Make heading + filters + AUM in single line */
+.page-header > div {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+/* Align right section properly */
+.page-header form {
+    margin: 0 !important;
+}
+
+/* Keep AUM aligned vertically */
+.aum-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+/* Prevent wrapping on smaller width */
+.page-header > div > div {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+/* --- ERROR PAGE STYLES --- */
+.flash-error { 
+    padding: 10px; 
+    border-radius: 4px; 
+    background: #ffe6e6; 
+    border: 1px solid #b30000; 
+}
+
+/* --- CONTEXT NAVIGATION BAR --- */
+.context-navbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+.context-link {
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: background 0.2s ease, color 0.2s ease;
+}
+.context-link:hover {
+    background: rgba(37,99,235,0.1);
+    color: var(--text-strong);
+}
+.context-link.active {
+    background: var(--primary);
+    color: white;
+}
+/* Apply same styling to previous section dropdowns */
+
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+    padding: 12px 44px 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0288D1;
+
+    border-radius: 14px;
+    border: 1.5px solid #b2d7f3;
+
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(6px);
+
+    box-shadow: 0 4px 18px rgba(2,136,209,0.08);
+    min-width: 160px;
+
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#prevCycleFilter:hover,
+#prevMonthFilter:hover,
+#prevYearFilter:hover {
+    border-color: #0288D1;
+    box-shadow: 0 6px 24px rgba(2,136,209,0.12);
+}
+#prevResetFilters {
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1.5px solid #b2d7f3;
+    background: #e3f2fd;
+    color: #0288D1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#prevResetFilters:hover {
+    background: #0288D1;
+    color: white;
+}
+
+
+/* =====================================================
+   FORCE HEADING + FILTERS + AUM IN SINGLE STRAIGHT LINE
+   (Works for BOTH current & previous sections)
+   ===================================================== */
+
+/* Header container alignment */
+.page-header > div,
+.dashboard-section > div {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    width: 100%;
+}
+
+/* Keep heading and right section aligned */
+.page-header h1 {
+    margin: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.page-header h1 {
+    font-size: 24px;
+    font-weight: 800;
+    color: #0288D1;
+    letter-spacing: -0.01em;
+    margin: 6px 0 6px;
+}
+
+/* Right side (filters + AUM) */
+.page-header > div > div,
+.dashboard-section > div > div {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: nowrap;
+}
+
+/* Remove extra form margin */
+#filterForm {
+    margin: 0 !important;
+}
+
+/* AUM styling */
+.aum-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 140px;
+}
+
+/* Make sure dropdowns don’t wrap */
+#cycleFilter,
+#monthFilter,
+#yearFilter,
+#prevCycleFilter,
+#prevMonthFilter,
+#prevYearFilter {
+    flex-shrink: 0;
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+}
+
+@media (max-width: 1080px) {
+    .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+    .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.stats-card {
+    position: relative;
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid transparent;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transition: all 0.18s ease;
+    text-decoration: none;
+    color: #334155;
+}
+
+.stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+}
+
+.stats-card .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.stats-card .number {
+    margin-top: 6px;
+    font-size: 26px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.stats-card .card-icon {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-size: 20px;
+    opacity: 0.15;
+}
+
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+/* Remove any extra margin differences */
+
+
+/* Make previous cards EXACT same as current */
+.stats-card {
+    position: relative;
+    display: block;
+    padding: 16px 16px 14px;
+    background: #ffffff;
+
+    /* IMPORTANT FIX */
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid transparent; /* allow color classes to override */
+
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+    color: #334155;
+    text-decoration: none;
+}
+
+
+
+/* Same hover effect */
+.stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(15,23,42,0.08);
+}
+
+/* Same number styling */
+.stats-card .number {
+    margin-top: 6px;
+    font-size: 26px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+/* Same label styling */
+.stats-card .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Same icon styling */
+.stats-card .card-icon {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    opacity: 0.15;
+    font-size: 20px;
+}
+
+/* Ensure dashboard-section doesn't change card layout */
+
+/* =========================
+   KPI LEFT COLORS (KEEP LAST)
+   ========================= */
+
+.card-blue { border-left-color: #2563eb !important; }
+.card-red-outline { border-left-color: #ef4444 !important; }
+.card-grey { border-left-color: #94a3b8 !important; }
+.card-yellow { border-left-color: #f59e0b !important; }
+.card-teal { border-left-color: #0ea5e9 !important; }
+.card-green { border-left-color: #22c55e !important; }
+
+
+.prev-header {
+    margin-top: 40px;
+}
+
+/* =========================
+   THIN CUSTOM SCROLLBAR
+   ========================= */
+
+/* For Chrome, Edge, Safari */
+.main-scroll-container::-webkit-scrollbar {
+    width: 6px;   /* 👈 Reduce width here (default ~16px) */
+}
+
+.main-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* For Firefox */
+.main-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+.main-scroll-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.main-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(2,136,209,0.4);
+}
